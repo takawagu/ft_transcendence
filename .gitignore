@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+.next/
+
+# environment
+.env
+transcendence_docker/.env
+
+# logs
+*.log
+npm-debug.log*
+
+# editor
+.DS_Store

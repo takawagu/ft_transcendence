@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Game Server Test</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    body { font-family: monospace; background: #1a1a2e; color: #eee; margin: 0; padding: 20px; }
+    h1 { color: #00d4ff; }
+    .players { display: flex; gap: 20px; }
+    .player {
+      flex: 1; background: #16213e; border: 1px solid #0f3460; border-radius: 8px; padding: 16px;
+    }
+    .player h2 { margin-top: 0; }
+    button {
+      padding: 8px 16px; margin: 4px; background: #0f3460; color: #fff;
+      border: 1px solid #00d4ff; border-radius: 4px; cursor: pointer;
+    }
+    button:hover { background: #00d4ff; color: #000; }
+    button:disabled { opacity: 0.3; cursor: default; }
+    .log {
+      margin-top: 12px; background: #0a0a1a; border: 1px solid #0f3460;
+      border-radius: 4px; padding: 8px; height: 200px; overflow-y: auto; font-size: 12px;
+    }
+    .log p { margin: 2px 0; }
+    .log .event-gameStart { color: #00ff88; }
+    .log .event-waitingForOpponent { color: #ffcc00; }
+    .log .event-gameState { color: #888; }
+    .log .event-gameOver { color: #ff4444; font-weight: bold; }
+    .log .event-connect { color: #00d4ff; }
+    .log .event-disconnect { color: #ff8800; }
+    .log .event-opponentDisconnected { color: #ff8800; }
+    canvas { display: block; margin-top: 20px; border: 1px solid #0f3460; border-radius: 4px; }
+    .score { text-align: center; font-size: 24px; margin: 8px 0; color: #00d4ff; }
+    .status { text-align: center; font-size: 14px; color: #888; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <h1>🎮 Game Server Test — http://localhost:3000</h1>
+
+  <div class="players">
+    <!-- Player 1 -->
+    <div class="player">
+      <h2>Player 1 (Left)</h2>
+      <button id="btn1-join">joinQueue</button>
+      <button id="btn1-leave" disabled>leaveQueue</button>
+      <button id="btn1-up" disabled>↑ up</button>
+      <button id="btn1-down" disabled>↓ down</button>
+      <div class="log" id="log1"></div>
+    </div>
+
+    <!-- Player 2 -->
+    <div class="player">
+      <h2>Player 2 (Right)</h2>
+      <button id="btn2-join">joinQueue</button>
+      <button id="btn2-leave" disabled>leaveQueue</button>
+      <button id="btn2-up" disabled>↑ up</button>
+      <button id="btn2-down" disabled>↓ down</button>
+      <div class="log" id="log2"></div>
+    </div>
+  </div>
+
+  <!-- Game canvas (shared view) -->
+  <div class="status" id="status">ゲーム待機中</div>
+  <div class="score" id="score">0 : 0</div>
+  <canvas id="canvas" width="800" height="600"></canvas>
+
+  <script>
+    const CANVAS_W = 800, CANVAS_H = 600;
+    const BALL_R = 10, P_W = 10, P_H = 100, P_MARGIN = 20;
+
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let lastState = null;
+
+    function drawGame(state) {
+      ctx.fillStyle = '#0a0a1a';
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+      // center line
+      ctx.setLineDash([10, 10]);
+      ctx.strokeStyle = '#333';
+      ctx.beginPath();
+      ctx.moveTo(CANVAS_W / 2, 0);
+      ctx.lineTo(CANVAS_W / 2, CANVAS_H);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // paddles
+      ctx.fillStyle = '#00d4ff';
+      ctx.fillRect(P_MARGIN, state.paddle1Y - P_H / 2, P_W, P_H);
+      ctx.fillRect(CANVAS_W - P_MARGIN - P_W, state.paddle2Y - P_H / 2, P_W, P_H);
+
+      // ball
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(state.ball.x, state.ball.y, BALL_R, 0, Math.PI * 2);
+      ctx.fill();
+
+      document.getElementById('score').textContent = `${state.score1} : ${state.score2}`;
+    }
+
+    function drawIdle() {
+      ctx.fillStyle = '#0a0a1a';
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      ctx.fillStyle = '#333';
+      ctx.font = '24px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('2人が joinQueue するとゲーム開始', CANVAS_W / 2, CANVAS_H / 2);
+    }
+    drawIdle();
+
+    function addLog(logId, type, msg) {
+      const log = document.getElementById(logId);
+      const p = document.createElement('p');
+      p.className = `event-${type}`;
+      p.textContent = `[${new Date().toLocaleTimeString()}] ${type}: ${msg}`;
+      log.appendChild(p);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function setupPlayer(num) {
+      const socket = io('http://localhost:3000');
+      const logId = `log${num}`;
+      const prefix = `btn${num}`;
+
+      const btnJoin  = document.getElementById(`${prefix}-join`);
+      const btnLeave = document.getElementById(`${prefix}-leave`);
+      const btnUp    = document.getElementById(`${prefix}-up`);
+      const btnDown  = document.getElementById(`${prefix}-down`);
+
+      socket.on('connect', () => {
+        addLog(logId, 'connect', `socket.id = ${socket.id}`);
+      });
+      socket.on('disconnect', () => {
+        addLog(logId, 'disconnect', '切断');
+        btnJoin.disabled = false;
+        btnLeave.disabled = true;
+        btnUp.disabled = true;
+        btnDown.disabled = true;
+      });
+      socket.on('waitingForOpponent', () => {
+        addLog(logId, 'waitingForOpponent', '対戦相手を待っています...');
+        btnJoin.disabled = true;
+        btnLeave.disabled = false;
+      });
+      socket.on('gameStart', (data) => {
+        addLog(logId, 'gameStart', JSON.stringify(data));
+        btnLeave.disabled = true;
+        btnUp.disabled = false;
+        btnDown.disabled = false;
+        document.getElementById('status').textContent = `ゲーム中 (Player${num}: ${data.side})`;
+      });
+      socket.on('gameState', (state) => {
+        lastState = state;
+        addLog(logId, 'gameState', `ball(${Math.round(state.ball.x)},${Math.round(state.ball.y)}) score ${state.score1}:${state.score2}`);
+        drawGame(state);
+      });
+      socket.on('gameOver', (data) => {
+        addLog(logId, 'gameOver', `winner: ${data.winner}`);
+        btnUp.disabled = true;
+        btnDown.disabled = true;
+        btnJoin.disabled = false;
+        document.getElementById('status').textContent = `ゲーム終了 🏆 ${data.winner}`;
+        drawIdle();
+      });
+      socket.on('opponentDisconnected', () => {
+        addLog(logId, 'opponentDisconnected', '相手が切断しました');
+        btnUp.disabled = true;
+        btnDown.disabled = true;
+        btnJoin.disabled = false;
+        document.getElementById('status').textContent = '相手が切断しました';
+        drawIdle();
+      });
+
+      btnJoin.onclick  = () => socket.emit('joinQueue');
+      btnLeave.onclick = () => { socket.emit('leaveQueue'); btnJoin.disabled = false; btnLeave.disabled = true; };
+      btnUp.onclick    = () => socket.emit('paddleMove', { direction: 'up' });
+      btnDown.onclick  = () => socket.emit('paddleMove', { direction: 'down' });
+    }
+
+    setupPlayer(1);
+    setupPlayer(2);
+  </script>
+</body>
+</html>

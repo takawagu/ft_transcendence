@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               Int       @id @default(autoincrement())
+  username         String    @unique
+  email            String    @unique
+  password         String?
+  avatar           String?
+  twoFactorEnabled Boolean   @default(false)
+  twoFactorSecret  String?
+  fortytwoId       String?   @unique
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  friendsAdded    Friendship[] @relation("FriendshipUser")
+  friendsReceived Friendship[] @relation("FriendshipFriend")
+  gamesAsPlayer1  Game[]       @relation("GamePlayer1")
+  gamesAsPlayer2  Game[]       @relation("GamePlayer2")
+
+  @@map("users")
+}
+
+model Friendship {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  friendId  Int
+  status    FriendshipStatus @default(PENDING)
+  createdAt DateTime         @default(now())
+
+  user   User @relation("FriendshipUser", fields: [userId], references: [id])
+  friend User @relation("FriendshipFriend", fields: [friendId], references: [id])
+
+  @@unique([userId, friendId])
+  @@map("friendships")
+}
+
+model Game {
+  id        Int        @id @default(autoincrement())
+  player1Id Int
+  player2Id Int
+  score1    Int        @default(0)
+  score2    Int        @default(0)
+  status    GameStatus @default(WAITING)
+  startedAt DateTime?
+  endedAt   DateTime?
+  createdAt DateTime   @default(now())
+
+  player1 User @relation("GamePlayer1", fields: [player1Id], references: [id])
+  player2 User @relation("GamePlayer2", fields: [player2Id], references: [id])
+
+  @@map("games")
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+
+enum GameStatus {
+  WAITING
+  PLAYING
+  FINISHED
+}
