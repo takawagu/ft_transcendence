@@ -7,7 +7,6 @@ dist/
 
 # environment
 .env
-transcendence_docker/.env
 
 # logs
 *.log
