@@ -35,8 +35,8 @@ services:
 
   backend:
     build:
-      context: ../backend
-      dockerfile: ../transcendence_docker/backend/Dockerfile
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: ft_backend
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
@@ -47,15 +47,15 @@ services:
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     volumes:
-      - ../backend:/app
+      - ./backend:/app
       - /app/node_modules
     networks:
       - app-network
 
   frontend:
     build:
-      context: ../frontend
-      dockerfile: ../transcendence_docker/frontend/Dockerfile
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: ft_frontend
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_PORT:-3000}
@@ -63,7 +63,7 @@ services:
     ports:
       - "${FRONTEND_PORT:-3001}:3001"
     volumes:
-      - ../frontend:/app
+      - ./frontend:/app
       - /app/node_modules
       - /app/.next
     depends_on:
