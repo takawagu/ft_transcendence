@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import type { GameState } from '@/lib/ito/types';
 import { WaitingRoom } from './_phases/WaitingRoom';
@@ -14,12 +14,14 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:300
 
 export default function RoomPage() {
   const params = useParams();
+  const router = useRouter();
   const routeRoomCode = params.roomCode as string;
   const isCreating = routeRoomCode === 'new';
   const urlUpdated = useRef(false);
 
   const socketRef = useRef<Socket | null>(null);
   const [myId, setMyId] = useState('');
+  const [dissolved, setDissolved] = useState(false);
   const [state, setState] = useState<GameState>({
     roomCode: '',
     roomPhase: 'WAITING',
@@ -127,6 +129,11 @@ export default function RoomPage() {
       setTimeout(() => setState(prev => ({ ...prev, error: undefined })), 3000);
     });
 
+    socket.on('ito:roomDissolved', () => {
+      setDissolved(true);
+      setTimeout(() => router.push('/'), 3000);
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -161,6 +168,21 @@ export default function RoomPage() {
       {state.error && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 text-sm">
           {state.error}
+        </div>
+      )}
+      {dissolved && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-zinc-800 rounded-2xl p-10 flex flex-col items-center gap-6 shadow-2xl">
+            <p className="text-4xl">🚪</p>
+            <p className="text-xl font-bold text-white">部屋が解散されました</p>
+            <p className="text-zinc-400 text-sm">まもなくトップへ戻ります...</p>
+            <button
+              onClick={() => router.push('/')}
+              className="rounded-lg bg-indigo-600 px-6 py-2 font-semibold text-white hover:bg-indigo-500 transition-colors"
+            >
+              今すぐ戻る
+            </button>
+          </div>
         </div>
       )}
       {renderPhase()}
