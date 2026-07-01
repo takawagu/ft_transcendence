@@ -59,6 +59,16 @@ export class ItoGateway
     this.itoService.joinRoom(client, payload);
   }
 
+  @SubscribeMessage(ITO_EVENTS.LEAVE_ROOM)
+  handleLeaveRoom(@ConnectedSocket() client: Socket) {
+    this.itoService.leaveRoom(client);
+  }
+
+  @SubscribeMessage(ITO_EVENTS.DISSOLVE_ROOM)
+  handleDissolveRoom(@ConnectedSocket() client: Socket) {
+    this.itoService.dissolveRoom(client);
+  }
+
   @SubscribeMessage(ITO_EVENTS.START_GAME)
   handleStartGame(
     @ConnectedSocket() client: Socket,

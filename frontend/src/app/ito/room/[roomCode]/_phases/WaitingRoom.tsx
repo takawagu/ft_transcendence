@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import type { PhaseProps } from '@/lib/ito/types';
 
 export function WaitingRoom({ state, myId, emit }: PhaseProps) {
+  const router = useRouter();
   const [theme, setTheme] = useState('');
   const me = state.players.find(p => p.id === myId);
   const isOwner = me?.isRoomOwner ?? false;
@@ -11,6 +13,15 @@ export function WaitingRoom({ state, myId, emit }: PhaseProps) {
   const handleStart = () => {
     if (!theme.trim()) return;
     emit('ito:startGame', { theme: theme.trim(), totalRounds: 1 });
+  };
+
+  const handleLeave = () => {
+    emit('ito:leaveRoom');
+    router.push('/');
+  };
+
+  const handleDissolve = () => {
+    emit('ito:dissolveRoom');
   };
 
   return (
@@ -60,9 +71,23 @@ export function WaitingRoom({ state, myId, emit }: PhaseProps) {
           {state.players.length < 2 && (
             <p className="text-xs text-zinc-600 text-center">2人以上必要です</p>
           )}
+          <button
+            onClick={handleDissolve}
+            className="w-full rounded-lg bg-zinc-800 px-4 py-3 font-semibold text-red-400 hover:bg-zinc-700 border border-red-900 transition-colors"
+          >
+            部屋を解散する
+          </button>
         </div>
       ) : (
-        <p className="text-zinc-500 text-sm">オーナーがゲームを開始するまでお待ちください...</p>
+        <div className="w-full max-w-sm space-y-3">
+          <p className="text-zinc-500 text-sm text-center">オーナーがゲームを開始するまでお待ちください...</p>
+          <button
+            onClick={handleLeave}
+            className="w-full rounded-lg bg-zinc-800 px-4 py-3 font-semibold text-zinc-300 hover:bg-zinc-700 transition-colors"
+          >
+            退室する
+          </button>
+        </div>
       )}
     </div>
   );

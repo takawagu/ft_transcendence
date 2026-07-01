@@ -282,6 +282,45 @@ export class ItoService {
     } as ChatMessagePayload);
   }
 
+  leaveRoom(client: Socket) {
+    const room = this.getRoom(client.id);
+    if (!room) return;
+
+    room.players = room.players.filter(p => p.socketId !== client.id);
+    this.socketToRoomId.delete(client.id);
+    client.leave(room.id);
+
+    if (room.players.length === 0) {
+      this.roomCodeToId.delete(room.roomCode);
+      this.rooms.delete(room.id);
+      return;
+    }
+
+    if (!room.players.some(p => p.isRoomOwner)) {
+      room.players[0].isRoomOwner = true;
+    }
+
+    this.broadcastRoomState(room);
+    console.log(`[ITO] player ${client.id} left room ${room.roomCode}`);
+  }
+
+  dissolveRoom(client: Socket) {
+    const room = this.getRoom(client.id);
+    if (!room) return;
+
+    const player = room.players.find(p => p.socketId === client.id);
+    if (!player?.isRoomOwner) return;
+
+    this.server.to(room.id).emit(ITO_EVENTS.ROOM_DISSOLVED, {});
+
+    for (const p of room.players) {
+      this.socketToRoomId.delete(p.socketId);
+    }
+    this.roomCodeToId.delete(room.roomCode);
+    this.rooms.delete(room.id);
+    console.log(`[ITO] room ${room.roomCode} dissolved by ${player.name}`);
+  }
+
   handleDisconnect(socketId: string) {
     const room = this.getRoom(socketId);
     if (!room) return;

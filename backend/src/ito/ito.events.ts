@@ -40,6 +40,9 @@ export const ITO_EVENTS = {
   /** ルームから退出する */
   LEAVE_ROOM: 'ito:leaveRoom',
 
+  /** ルームを解散する（ルームオーナーのみ） */
+  DISSOLVE_ROOM: 'ito:dissolveRoom',
+
   /** ゲームを開始する（ルームオーナーのみ） */
   START_GAME: 'ito:startGame',
 
@@ -92,6 +95,9 @@ export const ITO_EVENTS = {
 
   /** カードを一斉公開（REVEALフェーズ） */
   CARDS_REVEALED: 'ito:cardsRevealed',
+
+  /** ルームが解散された（全員にブロードキャスト） */
+  ROOM_DISSOLVED: 'ito:roomDissolved',
 } as const;
 
 // ===== ペイロード型（Client → Server） =====
