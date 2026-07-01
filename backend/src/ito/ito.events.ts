@@ -21,9 +21,9 @@ export interface PlayerInfo {
 }
 
 export interface PlayerInGameInfo extends PlayerInfo {
-  playerPhase?: PlayerPhase;    // INPUT_GENERATING中のみ有効
-  hasSubmittedPrompt: boolean;  // 他プレイヤーから見える（プロンプト内容は非公開）
-  imageUrl?: string;            // SPEAKING以降で全員に公開
+  playerPhase?: PlayerPhase; // INPUT_GENERATING中のみ有効
+  hasSubmittedPrompt: boolean; // 他プレイヤーから見える（プロンプト内容は非公開）
+  imageUrl?: string; // SPEAKING以降で全員に公開
 }
 
 // ===== イベント名定数 =====
@@ -196,7 +196,7 @@ export interface ChatMessagePayload {
 
 export interface CardsRevealedPayload {
   revealedCards: { playerId: string; cardNumber: number }[];
-  submittedOrder: string[];   // 提出した並び順（プレイヤーID）
-  correctOrder: string[];     // 正解の並び順（プレイヤーID）
+  submittedOrder: string[]; // 提出した並び順（プレイヤーID）
+  correctOrder: string[]; // 正解の並び順（プレイヤーID）
   success: boolean;
 }
