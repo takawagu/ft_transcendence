@@ -9,7 +9,9 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { ItoService } from './ito.service';
+import { RoomService } from './service/room.service';
+import { GameService } from './service/game.service';
+import { BroadcastService } from './service/broadcast.service';
 import {
   ITO_EVENTS,
   CreateRoomPayload,
@@ -28,10 +30,14 @@ export class ItoGateway
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly itoService: ItoService) {}
+  constructor(
+    private readonly roomService: RoomService,
+    private readonly gameService: GameService,
+    private readonly broadcastService: BroadcastService,
+  ) {}
 
   afterInit(server: Server) {
-    this.itoService.setServer(server);
+    this.broadcastService.setServer(server);
   }
 
   handleConnection(client: Socket) {
@@ -40,7 +46,7 @@ export class ItoGateway
 
   handleDisconnect(client: Socket) {
     console.log(`[ITO] disconnected: ${client.id}`);
-    this.itoService.handleDisconnect(client.id);
+    this.roomService.handleDisconnect(client.id);
   }
 
   @SubscribeMessage(ITO_EVENTS.CREATE_ROOM)
@@ -48,7 +54,7 @@ export class ItoGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: CreateRoomPayload,
   ) {
-    this.itoService.createRoom(client, payload.playerName);
+    this.roomService.createRoom(client, payload.playerName);
   }
 
   @SubscribeMessage(ITO_EVENTS.JOIN_ROOM)
@@ -56,17 +62,17 @@ export class ItoGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: JoinRoomPayload,
   ) {
-    this.itoService.joinRoom(client, payload);
+    this.roomService.joinRoom(client, payload);
   }
 
   @SubscribeMessage(ITO_EVENTS.LEAVE_ROOM)
   handleLeaveRoom(@ConnectedSocket() client: Socket) {
-    this.itoService.leaveRoom(client);
+    this.roomService.leaveRoom(client);
   }
 
   @SubscribeMessage(ITO_EVENTS.DISSOLVE_ROOM)
   handleDissolveRoom(@ConnectedSocket() client: Socket) {
-    this.itoService.dissolveRoom(client);
+    this.roomService.dissolveRoom(client);
   }
 
   @SubscribeMessage(ITO_EVENTS.START_GAME)
@@ -74,7 +80,7 @@ export class ItoGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: StartGamePayload,
   ) {
-    this.itoService.startGame(client, payload);
+    this.gameService.startGame(client, payload);
   }
 
   @SubscribeMessage(ITO_EVENTS.SUBMIT_PROMPT)
@@ -82,7 +88,7 @@ export class ItoGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SubmitPromptPayload,
   ) {
-    this.itoService.submitPrompt(client, payload);
+    this.gameService.submitPrompt(client, payload);
   }
 
   @SubscribeMessage(ITO_EVENTS.PLACE_CARD)
@@ -90,7 +96,7 @@ export class ItoGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: PlaceCardPayload,
   ) {
-    this.itoService.placeCard(client, payload);
+    this.gameService.placeCard(client, payload);
   }
 
   @SubscribeMessage(ITO_EVENTS.REORDER_CARDS)
@@ -98,12 +104,12 @@ export class ItoGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: ReorderCardsPayload,
   ) {
-    this.itoService.reorderCards(client, payload);
+    this.gameService.reorderCards(client, payload);
   }
 
   @SubscribeMessage(ITO_EVENTS.CONFIRM_ORDER)
   handleConfirmOrder(@ConnectedSocket() client: Socket) {
-    this.itoService.confirmOrder(client);
+    this.gameService.confirmOrder(client);
   }
 
   @SubscribeMessage(ITO_EVENTS.SEND_CHAT)
@@ -111,6 +117,6 @@ export class ItoGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SendChatPayload,
   ) {
-    this.itoService.sendChat(client, payload);
+    this.gameService.sendChat(client, payload);
   }
 }

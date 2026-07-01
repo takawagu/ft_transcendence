@@ -1,0 +1,251 @@
+import { Injectable } from '@nestjs/common';
+import { Socket } from 'socket.io';
+import {
+  ITO_EVENTS,
+  PlaceCardPayload,
+  ReorderCardsPayload,
+  SendChatPayload,
+  StartGamePayload,
+  SubmitPromptPayload,
+  DealtCardPayload,
+} from '../ito.events';
+import { ItoRoom } from '../types';
+import { RoomStore } from './room.store';
+import { BroadcastService } from './broadcast.service';
+
+@Injectable()
+export class GameService {
+  constructor(
+    private readonly store: RoomStore,
+    private readonly broadcast: BroadcastService,
+  ) {}
+
+  startGame(client: Socket, payload: StartGamePayload) {
+    const room = this.store.getRoomBySocketId(client.id);
+    if (!room) return;
+
+    const owner = room.players.find((p) => p.socketId === client.id);
+    if (!owner?.isRoomOwner || room.roomPhase !== 'WAITING') return;
+    if (room.players.length < 2) {
+      client.emit('ito:error', { message: '2人以上必要です' });
+      return;
+    }
+
+    room.theme = payload.theme;
+    room.totalRounds = payload.totalRounds ?? 1;
+    room.currentRound = 1;
+    room.roomPhase = 'DEALING';
+
+    const cards = this.dealCards(room.players.length);
+    room.players.forEach((p, i) => {
+      p.cardNumber = cards[i];
+      p.playerPhase = 'INPUT';
+      p.hasSubmittedPrompt = false;
+      p.imageUrl = undefined;
+      p.prompt = undefined;
+    });
+
+    room.players.forEach((p) => {
+      const dealt: DealtCardPayload = {
+        cardNumber: p.cardNumber!,
+        theme: room.theme,
+      };
+      this.broadcast.emitToSocket(p.socketId, ITO_EVENTS.DEALT_CARD, dealt);
+    });
+
+    room.roomPhase = 'INPUT_GENERATING';
+    this.broadcast.broadcastPhaseChange(room);
+    this.broadcast.broadcastRoomState(room);
+    console.log(
+      `[ITO] game started in room ${room.roomCode}, theme: ${room.theme}`,
+    );
+  }
+
+  submitPrompt(client: Socket, payload: SubmitPromptPayload) {
+    const room = this.store.getRoomBySocketId(client.id);
+    if (!room || room.roomPhase !== 'INPUT_GENERATING') return;
+
+    const player = room.players.find((p) => p.socketId === client.id);
+    if (!player || player.playerPhase !== 'INPUT') return;
+
+    player.prompt = payload.prompt;
+    player.hasSubmittedPrompt = true;
+    player.playerPhase = 'GENERATING';
+
+    this.broadcast.emitPlayerPhaseChange(room.id, client.id, 'GENERATING');
+
+    const submittedCount = room.players.filter(
+      (p) => p.hasSubmittedPrompt,
+    ).length;
+    this.broadcast.emitToRoom(room.id, ITO_EVENTS.PROMPT_SUBMITTED, {
+      submittedCount,
+      totalCount: room.players.length,
+    });
+
+    this.stubGenerateImage(room, client.id);
+  }
+
+  placeCard(client: Socket, payload: PlaceCardPayload) {
+    const room = this.store.getRoomBySocketId(client.id);
+    if (!room || room.roomPhase !== 'SPEAKING') return;
+
+    if (room.turnOrder[room.currentTurnIndex] !== client.id) return;
+
+    const pos = Math.max(0, Math.min(payload.position, room.boardOrder.length));
+    room.boardOrder.splice(pos, 0, client.id);
+    room.currentTurnIndex++;
+
+    this.broadcast.emitToRoom(room.id, ITO_EVENTS.CARD_PLACED, {
+      playerId: client.id,
+      boardOrder: [...room.boardOrder],
+    });
+
+    if (room.currentTurnIndex >= room.turnOrder.length) {
+      room.roomPhase = 'ORDERING';
+      this.broadcast.broadcastPhaseChange(room);
+      this.broadcast.broadcastRoomState(room);
+    } else {
+      this.broadcast.emitToRoom(room.id, ITO_EVENTS.TURN_CHANGED, {
+        currentTurnPlayerId: room.turnOrder[room.currentTurnIndex],
+      });
+    }
+  }
+
+  reorderCards(client: Socket, payload: ReorderCardsPayload) {
+    const room = this.store.getRoomBySocketId(client.id);
+    if (!room || room.roomPhase !== 'ORDERING') return;
+    if (room.roundHostId !== client.id) return;
+
+    room.boardOrder = payload.orderedPlayerIds;
+
+    this.broadcast.emitToRoom(room.id, ITO_EVENTS.ORDER_CHANGED, {
+      orderedPlayerIds: [...room.boardOrder],
+    });
+  }
+
+  confirmOrder(client: Socket) {
+    const room = this.store.getRoomBySocketId(client.id);
+    if (!room || room.roomPhase !== 'ORDERING') return;
+    if (room.roundHostId !== client.id) return;
+
+    const correctOrder = [...room.players]
+      .sort((a, b) => a.cardNumber! - b.cardNumber!)
+      .map((p) => p.socketId);
+
+    const success = room.boardOrder.every((id, i) => id === correctOrder[i]);
+
+    room.roomPhase = 'REVEAL';
+    this.broadcast.emitToRoom(room.id, ITO_EVENTS.CARDS_REVEALED, {
+      revealedCards: room.players.map((p) => ({
+        playerId: p.socketId,
+        cardNumber: p.cardNumber!,
+      })),
+      submittedOrder: [...room.boardOrder],
+      correctOrder,
+      success,
+    });
+
+    room.roomPhase = 'ROUND_RESULT';
+    this.broadcast.broadcastPhaseChange(room);
+    this.broadcast.broadcastRoomState(room);
+    console.log(
+      `[ITO] round ${room.currentRound} result: ${success ? 'SUCCESS' : 'FAIL'}`,
+    );
+
+    if (room.currentRound >= room.totalRounds) {
+      setTimeout(() => {
+        if (!this.store.hasRoom(room.id)) return;
+        room.roomPhase = 'GAME_OVER';
+        this.broadcast.broadcastPhaseChange(room);
+        this.broadcast.broadcastRoomState(room);
+      }, 3000);
+    }
+  }
+
+  sendChat(client: Socket, payload: SendChatPayload) {
+    const room = this.store.getRoomBySocketId(client.id);
+    if (!room || room.roomPhase !== 'ORDERING') return;
+
+    const player = room.players.find((p) => p.socketId === client.id);
+    if (!player) return;
+
+    this.broadcast.emitToRoom(room.id, ITO_EVENTS.CHAT_MESSAGE, {
+      playerId: client.id,
+      playerName: player.name,
+      message: payload.message,
+      timestamp: Date.now(),
+    });
+  }
+
+  // ===== private =====
+
+  private stubGenerateImage(room: ItoRoom, socketId: string) {
+    const delay = 1000 + Math.random() * 2000;
+    setTimeout(() => {
+      if (!this.store.hasRoom(room.id)) return;
+      const player = room.players.find((p) => p.socketId === socketId);
+      if (!player || player.playerPhase !== 'GENERATING') return;
+
+      player.imageUrl = `https://placehold.co/300x300/1a1a2e/00d4ff?text=${encodeURIComponent(player.name)}`;
+      player.playerPhase = 'DONE';
+
+      const generatedCount = room.players.filter(
+        (p) => p.playerPhase === 'DONE',
+      ).length;
+
+      this.broadcast.emitPlayerPhaseChange(room.id, socketId, 'DONE');
+
+      this.broadcast.emitToRoom(room.id, ITO_EVENTS.IMAGE_GENERATED, {
+        playerId: socketId,
+        imageUrl: player.imageUrl,
+        generatedCount,
+        totalCount: room.players.length,
+      });
+
+      if (generatedCount === room.players.length) {
+        this.transitionToSpeaking(room);
+      }
+    }, delay);
+  }
+
+  private transitionToSpeaking(room: ItoRoom) {
+    room.roomPhase = 'SPEAKING';
+    room.turnOrder = this.buildTurnOrder(room);
+    room.roundHostId = room.turnOrder[0];
+    room.currentTurnIndex = 0;
+    room.boardOrder = [];
+
+    this.broadcast.emitToRoom(room.id, ITO_EVENTS.PHASE_CHANGE, {
+      roomPhase: 'SPEAKING',
+      turnOrder: [...room.turnOrder],
+      roundHostId: room.roundHostId,
+    });
+
+    this.broadcast.emitToRoom(room.id, ITO_EVENTS.TURN_CHANGED, {
+      currentTurnPlayerId: room.turnOrder[0],
+    });
+
+    this.broadcast.broadcastRoomState(room);
+  }
+
+  private dealCards(count: number): number[] {
+    const pool = Array.from({ length: 100 }, (_, i) => i + 1);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, count);
+  }
+
+  private buildTurnOrder(room: ItoRoom): string[] {
+    const ids = room.players.map((p) => p.socketId);
+    if (room.currentRound === 1) {
+      for (let i = ids.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [ids[i], ids[j]] = [ids[j], ids[i]];
+      }
+      return ids;
+    }
+    return [...room.turnOrder.slice(1), room.turnOrder[0]];
+  }
+}
