@@ -10,7 +10,7 @@ import { Speaking } from './_phases/Speaking';
 import { Ordering } from './_phases/Ordering';
 import { RevealResult } from './_phases/RevealResult';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3000';
+const BACKEND_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'http://localhost:3000';
 
 export default function RoomPage() {
   const params = useParams();
