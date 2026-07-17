@@ -10,7 +10,10 @@ import { Speaking } from './_phases/Speaking';
 import { Ordering } from './_phases/Ordering';
 import { RevealResult } from './_phases/RevealResult';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'http://localhost:3000';
+// nginx がリバースプロキシで同一オリジンに統合するため、
+// 未設定（空文字）の場合は相対パスで接続する（= 今アクセスしているホストと同じ宛先）。
+// nginx を経由しないローカル開発時のみ .env.local で明示的にURLを指定する。
+const BACKEND_URL = process.env.NEXT_PUBLIC_WS_URL ?? '';
 
 export default function RoomPage() {
   const params = useParams();

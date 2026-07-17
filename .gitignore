@@ -8,6 +8,9 @@ dist/
 # environment
 .env
 
+# TLS certificates
+nginx/certs/*.pem
+
 # logs
 *.log
 npm-debug.log*
