@@ -58,6 +58,7 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: ""
       NEXT_PUBLIC_WS_URL: ""
+      ALLOWED_DEV_ORIGIN: ${LAN_IP:-}
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -81,6 +82,12 @@ services:
       - backend
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "--no-check-certificate", "https://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
 volumes:
   postgres_data:
