@@ -86,11 +86,7 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
       <div className="text-center pt-4">
         <p className="text-zinc-500 text-sm">お題: <span className="text-white font-semibold">{state.myTheme}</span></p>
         <div className="mt-2">
-          {isMyTurn ? (
-            <p className="text-indigo-400 font-semibold">
-              あなたのターンです！カードをドラッグして場に置いてください
-            </p>
-          ) : alreadyPlaced ? (
+          {isMyTurn ? null : alreadyPlaced ? (
             <p className="text-zinc-400">
               <span className="text-white font-medium">{currentPlayer?.name ?? '?'}</span> のターンを見守りましょう
             </p>
@@ -212,12 +208,12 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
         <div className="flex flex-col items-center justify-center py-4 my-2 animate-fade-in select-none">
           {/* Header Info */}
           <div className="text-center mb-3">
-            <div className="flex items-center justify-center gap-2 text-xs">
-              <span className="bg-indigo-950/85 border border-indigo-500/30 text-indigo-300 font-bold px-2.5 py-0.5 rounded-full">
-                お題: {state.myTheme}
+            <div className="flex flex-col items-center gap-1 select-none">
+              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
+                あなたの数字
               </span>
-              <span className="bg-indigo-600 text-white font-mono font-extrabold px-2.5 py-0.5 rounded-full shadow-md">
-                あなたの数字: #{state.myCardNumber}
+              <span className="text-5xl font-mono font-extrabold text-indigo-400 tracking-tight leading-none py-1 animate-pulse">
+                #{state.myCardNumber}
               </span>
             </div>
             <p className="text-[10px] text-zinc-500 mt-2 animate-pulse font-medium">
