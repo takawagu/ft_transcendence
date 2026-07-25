@@ -209,10 +209,23 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
 
       {/* Large Draggable Hand Card (Only visible on your turn & not placed) */}
       {isMyTurn && !alreadyPlaced && (
-        <div className="flex flex-col items-center justify-center py-4 my-2 animate-fade-in">
-          <p className="text-xs text-zinc-400 mb-3 flex items-center gap-1.5 animate-pulse">
-            <span>✨</span> このカードをドラッグして場の上にドロップしてください
-          </p>
+        <div className="flex flex-col items-center justify-center py-4 my-2 animate-fade-in select-none">
+          {/* Header Info */}
+          <div className="text-center mb-3">
+            <div className="flex items-center justify-center gap-2 text-xs">
+              <span className="bg-indigo-950/85 border border-indigo-500/30 text-indigo-300 font-bold px-2.5 py-0.5 rounded-full">
+                お題: {state.myTheme}
+              </span>
+              <span className="bg-indigo-600 text-white font-mono font-extrabold px-2.5 py-0.5 rounded-full shadow-md">
+                あなたの数字: #{state.myCardNumber}
+              </span>
+            </div>
+            <p className="text-[10px] text-zinc-500 mt-2 animate-pulse font-medium">
+              ✨ カードをドラッグして場の上にドロップしてください
+            </p>
+          </div>
+
+          {/* Draggable Card (Pure Image) */}
           <div
             draggable={true}
             onDragStart={e => {
@@ -224,41 +237,24 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
               setIsDraggingMyCard(false);
               setDragOverPosition(null);
             }}
-            className={`flex flex-col items-center bg-zinc-800 rounded-2xl p-4 border select-none w-48 shadow-2xl transition-all duration-300 cursor-grab active:cursor-grabbing hover:scale-[1.02]
+            className={`w-36 h-36 bg-zinc-800 rounded-2xl border shadow-2xl transition-all duration-300 cursor-grab active:cursor-grabbing hover:scale-[1.02] flex items-center justify-center overflow-hidden
               ${isDraggingMyCard ? 'opacity-20 scale-95 border-dashed border-indigo-500' : 'border-indigo-500/80 ring-2 ring-indigo-500/30'}
             `}
           >
-            {/* Theme & Card Number Header */}
-            <div className="flex items-center justify-between w-full mb-3 px-1">
-              <span className="text-[10px] bg-indigo-950/80 border border-indigo-500/30 text-indigo-300 font-bold px-2 py-0.5 rounded-full truncate max-w-[100px]">
-                {state.myTheme}
-              </span>
-              <span className="text-xs text-zinc-400 font-medium">No.</span>
-            </div>
-
-            {/* Large Image */}
             {myPlayer?.imageUrl ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={myPlayer.imageUrl}
                 alt="Your generated card"
-                className="w-36 h-36 rounded-xl object-cover shadow-lg border border-zinc-700/50"
+                className="w-full h-full object-cover"
                 draggable={false}
               />
             ) : (
-              <div className="w-36 h-36 rounded-xl bg-zinc-700 flex flex-col items-center justify-center text-zinc-500 gap-1.5 text-xs border border-zinc-700/50">
+              <div className="w-full h-full bg-zinc-700 flex flex-col items-center justify-center text-zinc-400 gap-1.5 text-xs">
                 <span className="text-xl">🎨</span>
                 <span>画像なし</span>
               </div>
             )}
-
-            {/* Large Number */}
-            <div className="text-center mt-4">
-              <p className="font-mono text-5xl font-extrabold text-white tracking-tight leading-none drop-shadow-md">
-                {state.myCardNumber ?? '?'}
-              </p>
-              <p className="text-[10px] text-zinc-500 mt-2 font-medium">ドラッグして移動</p>
-            </div>
           </div>
         </div>
       )}
