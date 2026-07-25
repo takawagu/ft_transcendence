@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { PhaseProps } from '@/lib/ito/types';
 
 const DropIndicator = () => (
-  <div className="w-1.5 h-16 bg-indigo-500 rounded-full animate-pulse mx-1 shadow-lg shadow-indigo-500/50 flex-shrink-0" />
+  <div className="w-1.5 h-28 bg-indigo-500 rounded-full animate-pulse mx-1 shadow-lg shadow-indigo-500/50 flex-shrink-0" />
 );
 
 export function Speaking({ state, myId, emit }: PhaseProps) {
@@ -141,7 +141,7 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
             onDragOver={handleDragOverBoard}
             onDragLeave={handleBoardDragLeave}
             onDrop={handleDropBoard}
-            className="flex items-center justify-center gap-1.5 flex-wrap py-4 bg-zinc-800/20 rounded-xl px-4 min-h-[104px] border border-zinc-800/40 relative"
+            className="flex items-center justify-center gap-1.5 flex-wrap py-4 bg-zinc-800/20 rounded-xl px-4 min-h-[140px] border border-zinc-800/40 relative"
           >
             {state.boardOrder.map((pid, i) => {
               const p = playerMap.get(pid);
@@ -165,8 +165,8 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                   <div
                     onDragOver={e => handleDragOverCard(e, i)}
                     onDrop={e => handleDropCard(e, i)}
-                    className={`text-center bg-zinc-800 p-2.5 rounded-xl border transition-all duration-200 select-none w-20
-                      ${dragOverPosition === i ? 'border-indigo-500/50 bg-indigo-950/10' : 'border-zinc-700/50'}
+                    className={`text-center bg-zinc-800 p-1.5 rounded-xl border transition-all duration-200 select-none w-28 h-28 flex items-center justify-center overflow-hidden
+                      ${dragOverPosition === i ? 'border-indigo-500 bg-indigo-950/20 scale-[1.02] shadow-lg' : 'border-zinc-700/30'}
                     `}
                   >
                     {p?.imageUrl ? (
@@ -174,15 +174,15 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                       <img
                         src={p.imageUrl}
                         alt={p.name}
-                        className="w-14 h-14 rounded-lg object-cover mx-auto"
+                        className="w-full h-full rounded-lg object-cover"
                         draggable={false}
                       />
                     ) : (
-                      <div className="w-14 h-14 rounded-lg bg-zinc-700 flex items-center justify-center text-xs text-zinc-400 mx-auto">
-                        {p?.name?.[0]}
+                      <div className="w-full h-full rounded-lg bg-zinc-700 flex flex-col items-center justify-center text-zinc-400 font-bold select-none text-sm">
+                        <span>{p?.name?.[0]}</span>
+                        <span className="text-[8px] text-zinc-500 font-normal mt-1 truncate max-w-[80px]">{p?.name}</span>
                       </div>
                     )}
-                    <p className="text-[10px] text-zinc-400 mt-1.5 truncate w-full">{p?.name}</p>
                   </div>
 
                   {/* If this is the last card and dragOverPosition is at the end, render DropIndicator at the very end */}

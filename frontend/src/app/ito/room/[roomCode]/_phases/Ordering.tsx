@@ -124,52 +124,39 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
               onDragLeave={handleDragLeave}
               onDrop={e => handleDrop(e, i)}
               onDragEnd={handleDragEnd}
-              className={`flex flex-col items-center gap-2 bg-zinc-800 rounded-xl p-3 border select-none w-32 text-center transition-all duration-200 
+              className={`flex flex-col items-center bg-zinc-800 rounded-xl p-2.5 border select-none w-32 text-center transition-all duration-200 
                 ${isHost ? 'cursor-grab active:cursor-grabbing hover:bg-zinc-700/60' : ''}
                 ${draggedIndex === i ? 'opacity-30 border-dashed border-indigo-500 scale-[0.98]' : 'border-transparent'}
                 ${dragOverIndex === i && draggedIndex !== i ? 'border-indigo-500 bg-indigo-900/20 scale-[1.03] shadow-lg shadow-indigo-500/15' : ''}
               `}
             >
-              {/* Badge/Order number */}
-              <div className="flex items-center justify-between w-full">
-                <span className="bg-zinc-700 text-zinc-300 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center font-mono select-none">
-                  {i + 1}
-                </span>
+              {/* Player Image Wrapper */}
+              <div className="relative w-28 h-28 rounded-lg overflow-hidden shadow-inner">
+                {p?.imageUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={p.imageUrl}
+                    alt={p.name}
+                    className="w-full h-full object-cover"
+                    draggable={false}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-zinc-700 flex flex-col items-center justify-center text-zinc-400 font-bold text-xl select-none">
+                    <span>{p?.name?.[0]}</span>
+                    <span className="text-[8px] text-zinc-500 font-normal mt-1 truncate max-w-[80px]">{p?.name}</span>
+                  </div>
+                )}
+                {/* Overlay drag handle on card for host */}
                 {isHost && (
-                  <div className="text-zinc-500">
+                  <div className="absolute top-1.5 right-1.5 p-1 rounded bg-black/60 text-zinc-400 backdrop-blur-xs select-none">
                     <DragHandleIcon />
                   </div>
                 )}
               </div>
 
-              {/* Player Image */}
-              {p?.imageUrl ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={p.imageUrl}
-                  alt={p.name}
-                  className="w-24 h-24 rounded-lg object-cover shadow-inner"
-                  draggable={false}
-                />
-              ) : (
-                <div className="w-24 h-24 rounded-lg bg-zinc-700 flex items-center justify-center text-zinc-400 font-bold text-xl select-none">
-                  {p?.name?.[0]}
-                </div>
-              )}
-
-              {/* Player Name */}
-              <div className="w-full">
-                <p className="text-sm font-medium text-white truncate select-none">{p?.name}</p>
-                {pid === myId && (
-                  <p className="text-[10px] text-indigo-400 font-semibold mt-0.5 truncate select-none">
-                    あなた (#{state.myCardNumber})
-                  </p>
-                )}
-              </div>
-
               {/* Fallback Left/Right Buttons */}
               {isHost && (
-                <div className="flex gap-1.5 mt-1 w-full justify-center">
+                <div className="flex gap-1.5 w-full justify-center mt-1">
                   <button
                     onClick={e => {
                       e.stopPropagation();
@@ -199,6 +186,50 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
             </div>
           );
         })}
+      </div>
+
+      {/* Current order list (Extremely compact horizontal pills to prevent scrolling) */}
+      <div className="mt-1">
+        <p className="text-[10px] text-zinc-600 mb-2 text-center select-none uppercase tracking-wider font-semibold">現在の並び順</p>
+        <div className="flex flex-wrap items-center justify-center gap-1.5">
+          {state.boardOrder.map((pid, i) => {
+            const p = playerMap.get(pid);
+            if (!p) return null;
+            return (
+              <div
+                key={p.id}
+                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs border select-none transition-all
+                  ${p.id === myId
+                    ? 'bg-indigo-950/40 border-indigo-500/30 text-indigo-300 font-semibold'
+                    : 'bg-zinc-800/40 border-zinc-800 text-zinc-400'
+                  }
+                `}
+              >
+                {/* Tiny Avatar */}
+                {p.imageUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={p.imageUrl}
+                    alt={p.name}
+                    className="w-4 h-4 rounded-full object-cover"
+                    draggable={false}
+                  />
+                ) : (
+                  <div className="w-4 h-4 rounded-full bg-zinc-700 flex items-center justify-center text-[8px] text-zinc-300 font-bold">
+                    {p.name?.[0]}
+                  </div>
+                )}
+                
+                <span className="font-mono text-zinc-500 font-bold">{i + 1}.</span>
+                <span className="truncate max-w-[70px]">{p.name}</span>
+                
+                {p.id === myId && (
+                  <span className="opacity-80 font-mono text-[10px]">#{state.myCardNumber}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {isHost && (
