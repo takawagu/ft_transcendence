@@ -210,27 +210,36 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
         </button>
       )}
 
-      {/* Chat */}
-      <div className="flex flex-col gap-2 mt-2">
-        <p className="text-xs text-zinc-600">チャット（みんなで相談しよう）</p>
-        <div className="h-24 overflow-y-auto bg-zinc-800/60 rounded-lg p-3 space-y-1">
+      {/* Chat Container */}
+      <div className="flex flex-col border border-zinc-800 bg-zinc-800/30 rounded-xl overflow-hidden mt-2 shadow-inner">
+        <div className="px-3 py-2 bg-zinc-800/60 border-b border-zinc-800/80 flex items-center justify-between">
+          <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider select-none">
+            チャット（みんなで相談しよう）
+          </span>
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+        </div>
+
+        {/* Message History */}
+        <div className="h-24 overflow-y-auto p-3 space-y-1.5">
           {state.chatMessages.length === 0 ? (
-            <p className="text-xs text-zinc-600">まだメッセージはありません</p>
+            <p className="text-xs text-zinc-500 text-center py-2 select-none">まだメッセージはありません</p>
           ) : (
             state.chatMessages.map((msg, i) => (
-              <div key={i} className="text-sm">
-                <span className={`font-medium ${msg.playerId === myId ? 'text-indigo-400' : 'text-zinc-300'}`}>
+              <div key={i} className="text-xs break-all">
+                <span className={`font-semibold ${msg.playerId === myId ? 'text-indigo-400' : 'text-zinc-300'}`}>
                   {msg.playerName}:&nbsp;
                 </span>
-                <span className="text-white">{msg.message}</span>
+                <span className="text-zinc-100">{msg.message}</span>
               </div>
             ))
           )}
           <div ref={chatEndRef} />
         </div>
-        <div className="flex gap-2">
+
+        {/* Input Bar */}
+        <div className="p-2 bg-zinc-800/40 border-t border-zinc-800/80 flex gap-2">
           <input
-            className="flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-white text-sm placeholder-zinc-500 outline-none focus:ring-2 focus:ring-indigo-500"
+            className="flex-1 rounded-lg bg-zinc-900 border border-zinc-700/50 px-3 py-1.5 text-white text-xs placeholder-zinc-500 outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 transition-all"
             placeholder="メッセージを入力..."
             value={chatInput}
             onChange={e => setChatInput(e.target.value)}
@@ -239,7 +248,7 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
           <button
             onClick={sendChat}
             disabled={!chatInput.trim()}
-            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-sm font-medium transition-colors"
+            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-xs font-semibold text-white transition-colors cursor-pointer"
           >
             送信
           </button>
