@@ -2,6 +2,7 @@
 
 export type RoomPhase =
   | 'WAITING'
+  | 'THEME_SETTING'
   | 'DEALING'
   | 'INPUT_GENERATING'
   | 'SPEAKING'
@@ -43,7 +44,10 @@ export const ITO_EVENTS = {
   /** ルームを解散する（ルームオーナーのみ） */
   DISSOLVE_ROOM: 'ito:dissolveRoom',
 
-  /** ゲームを開始する（ルームオーナーのみ） */
+  /** メンバーを確定してお題設定フェーズへ進む（ルームオーナーのみ） */
+  CONFIRM_MEMBERS: 'ito:confirmMembers',
+
+  /** お題を確定してゲームを開始する（ルームオーナーのみ） */
   START_GAME: 'ito:startGame',
 
   /** プロンプトを送信する（INPUT_GENERATING / INPUTフェーズ） */

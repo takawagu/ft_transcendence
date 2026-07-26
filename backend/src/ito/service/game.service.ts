@@ -25,7 +25,7 @@ export class GameService {
     if (!room) return;
 
     const owner = room.players.find((p) => p.socketId === client.id);
-    if (!owner?.isRoomOwner || room.roomPhase !== 'WAITING') return;
+    if (!owner?.isRoomOwner || room.roomPhase !== 'THEME_SETTING') return;
     if (room.players.length < 2) {
       client.emit('ito:error', { message: '2人以上必要です' });
       return;
