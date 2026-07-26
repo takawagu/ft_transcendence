@@ -1,5 +1,6 @@
 export type RoomPhase =
   | 'WAITING'
+  | 'THEME_SETTING'
   | 'DEALING'
   | 'INPUT_GENERATING'
   | 'SPEAKING'

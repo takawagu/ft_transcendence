@@ -75,6 +75,23 @@ export class RoomService {
     console.log(`[ITO] ${payload.playerName} joined room ${payload.roomCode}`);
   }
 
+  confirmMembers(client: Socket) {
+    const room = this.store.getRoomBySocketId(client.id);
+    if (!room) return;
+
+    const owner = room.players.find((p) => p.socketId === client.id);
+    if (!owner?.isRoomOwner || room.roomPhase !== 'WAITING') return;
+    if (room.players.length < 2) {
+      client.emit('ito:error', { message: '2人以上必要です' });
+      return;
+    }
+
+    room.roomPhase = 'THEME_SETTING';
+    this.broadcast.broadcastPhaseChange(room);
+    this.broadcast.broadcastRoomState(room);
+    console.log(`[ITO] members confirmed in room ${room.roomCode}`);
+  }
+
   leaveRoom(client: Socket) {
     const room = this.store.getRoomBySocketId(client.id);
     if (!room) return;

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import type { GameState } from '@/lib/ito/types';
 import { WaitingRoom } from './_phases/WaitingRoom';
+import { ThemeSetting } from './_phases/ThemeSetting';
 import { InputGenerating } from './_phases/InputGenerating';
 import { Speaking } from './_phases/Speaking';
 import { Ordering } from './_phases/Ordering';
@@ -149,6 +150,8 @@ export default function RoomPage() {
     switch (state.roomPhase) {
       case 'WAITING':
         return <WaitingRoom {...phaseProps} />;
+      case 'THEME_SETTING':
+        return <ThemeSetting {...phaseProps} />;
       case 'DEALING':
         return <Centered>カードを配布中...</Centered>;
       case 'INPUT_GENERATING':

@@ -75,6 +75,11 @@ export class ItoGateway
     this.roomService.dissolveRoom(client);
   }
 
+  @SubscribeMessage(ITO_EVENTS.CONFIRM_MEMBERS)
+  handleConfirmMembers(@ConnectedSocket() client: Socket) {
+    this.roomService.confirmMembers(client);
+  }
+
   @SubscribeMessage(ITO_EVENTS.START_GAME)
   handleStartGame(
     @ConnectedSocket() client: Socket,

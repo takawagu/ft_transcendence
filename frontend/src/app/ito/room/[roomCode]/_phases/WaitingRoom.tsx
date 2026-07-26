@@ -1,18 +1,15 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { PhaseProps } from '@/lib/ito/types';
 
 export function WaitingRoom({ state, myId, emit }: PhaseProps) {
   const router = useRouter();
-  const [theme, setTheme] = useState('');
   const me = state.players.find(p => p.id === myId);
   const isOwner = me?.isRoomOwner ?? false;
 
-  const handleStart = () => {
-    if (!theme.trim()) return;
-    emit('ito:startGame', { theme: theme.trim(), totalRounds: 1 });
+  const handleConfirmMembers = () => {
+    emit('ito:confirmMembers');
   };
 
   const handleLeave = () => {
@@ -51,22 +48,12 @@ export function WaitingRoom({ state, myId, emit }: PhaseProps) {
 
       {isOwner ? (
         <div className="w-full max-w-sm space-y-3">
-          <div>
-            <label className="block text-sm text-zinc-400 mb-1">お題</label>
-            <input
-              className="w-full rounded-lg bg-zinc-800 px-4 py-2 text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="例: 速さ、幸福度、辛さ..."
-              value={theme}
-              onChange={e => setTheme(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleStart()}
-            />
-          </div>
           <button
-            onClick={handleStart}
-            disabled={state.players.length < 2 || !theme.trim()}
+            onClick={handleConfirmMembers}
+            disabled={state.players.length < 2}
             className="w-full rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-500 disabled:opacity-40 transition-colors"
           >
-            ゲームを開始する
+            メンバーを確定する
           </button>
           {state.players.length < 2 && (
             <p className="text-xs text-zinc-600 text-center">2人以上必要です</p>
