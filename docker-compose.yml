@@ -38,6 +38,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: ft_backend
+    command: sh -c "npx prisma migrate deploy && npm run start:dev"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379

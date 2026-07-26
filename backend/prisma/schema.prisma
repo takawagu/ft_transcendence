@@ -1,71 +1,61 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
-  id               Int       @id @default(autoincrement())
-  username         String    @unique
-  email            String    @unique
-  password         String?
-  avatar           String?
-  twoFactorEnabled Boolean   @default(false)
-  twoFactorSecret  String?
-  fortytwoId       String?   @unique
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                  Int             @id @default(autoincrement())
+  email               String          @unique
+  password            String
+  username            String
+  profileImage        String?
+  bio                 String?
 
-  friendsAdded    Friendship[] @relation("FriendshipUser")
-  friendsReceived Friendship[] @relation("FriendshipFriend")
-  gamesAsPlayer1  Game[]       @relation("GamePlayer1")
-  gamesAsPlayer2  Game[]       @relation("GamePlayer2")
+  gameRecord          ItoGameRecord?
+  sentMessages        DirectMessage[] @relation("SentMessages")
+  receivedMessages    DirectMessage[] @relation("ReceivedMessages")
+  appliedFriendships  Friendship[]    @relation("Applicant")
+  receivedFriendships Friendship[]    @relation("Approver")
+}
 
-  @@map("users")
+model ItoGameRecord {
+  id           Int  @id @default(autoincrement())
+  userId       Int  @unique
+  totalGames   Int  @default(0)
+  successCount Int  @default(0)
+
+  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Friendship {
-  id        Int              @id @default(autoincrement())
-  userId    Int
-  friendId  Int
-  status    FriendshipStatus @default(PENDING)
-  createdAt DateTime         @default(now())
+  id          Int      @id @default(autoincrement())
+  applicantId Int
+  approverId  Int
+  status      String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
+  createdAt   DateTime @default(now())
 
-  user   User @relation("FriendshipUser", fields: [userId], references: [id])
-  friend User @relation("FriendshipFriend", fields: [friendId], references: [id])
+  applicant   User     @relation("Applicant", fields: [applicantId], references: [id], onDelete: Cascade)
+  approver    User     @relation("Approver", fields: [approverId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, friendId])
-  @@map("friendships")
+  @@unique([applicantId, approverId])
 }
 
-model Game {
-  id        Int        @id @default(autoincrement())
-  player1Id Int
-  player2Id Int
-  score1    Int        @default(0)
-  score2    Int        @default(0)
-  status    GameStatus @default(WAITING)
-  startedAt DateTime?
-  endedAt   DateTime?
-  createdAt DateTime   @default(now())
+model DirectMessage {
+  id         Int      @id @default(autoincrement())
+  senderId   Int
+  receiverId Int
+  content    String
+  createdAt  DateTime @default(now())
 
-  player1 User @relation("GamePlayer1", fields: [player1Id], references: [id])
-  player2 User @relation("GamePlayer2", fields: [player2Id], references: [id])
-
-  @@map("games")
-}
-
-enum FriendshipStatus {
-  PENDING
-  ACCEPTED
-  BLOCKED
-}
-
-enum GameStatus {
-  WAITING
-  PLAYING
-  FINISHED
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
 }
