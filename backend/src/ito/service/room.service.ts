@@ -12,7 +12,7 @@ export class RoomService {
     private readonly broadcast: BroadcastService,
   ) {}
 
-  createRoom(client: Socket, playerName: string) {
+  createRoom(client: Socket, playerName: string, playerId: string) {
     const roomCode = this.store.generateRoomCode();
     const roomId = `ito_${Date.now()}`;
 
@@ -23,6 +23,7 @@ export class RoomService {
       players: [
         {
           socketId: client.id,
+          playerId,
           name: playerName,
           isRoomOwner: true,
           playerPhase: 'INPUT',
@@ -60,9 +61,16 @@ export class RoomService {
       client.emit('ito:error', { message: 'ルームが満員です' });
       return;
     }
+    if (room.players.some((p) => p.playerId === payload.playerId)) {
+      client.emit('ito:error', {
+        message: 'このブラウザから既に参加しています（別タブは使用できません）',
+      });
+      return;
+    }
 
     room.players.push({
       socketId: client.id,
+      playerId: payload.playerId,
       name: payload.playerName,
       isRoomOwner: false,
       playerPhase: 'INPUT',

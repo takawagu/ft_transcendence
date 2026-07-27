@@ -108,11 +108,13 @@ export const ITO_EVENTS = {
 
 export class CreateRoomPayload {
   playerName: string;
+  playerId: string;
 }
 
 export class JoinRoomPayload {
   roomCode: string;
   playerName: string;
+  playerId: string;
 }
 
 export class StartGamePayload {

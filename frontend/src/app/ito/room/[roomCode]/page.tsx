@@ -40,15 +40,21 @@ export default function RoomPage() {
 
   useEffect(() => {
     const playerName = sessionStorage.getItem('ito_player_name') ?? 'プレイヤー';
+    let playerId = sessionStorage.getItem('ito_player_id');
+    if (!playerId) {
+      playerId = crypto.randomUUID();
+      sessionStorage.setItem('ito_player_id', playerId);
+    }
+    setMyId(playerId);
+
     const socket = io(`${BACKEND_URL}/ito`);
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      setMyId(socket.id!);
       if (isCreating) {
-        socket.emit('ito:createRoom', { playerName });
+        socket.emit('ito:createRoom', { playerName, playerId });
       } else {
-        socket.emit('ito:joinRoom', { roomCode: routeRoomCode, playerName });
+        socket.emit('ito:joinRoom', { roomCode: routeRoomCode, playerName, playerId });
       }
     });
 
@@ -146,7 +152,7 @@ export default function RoomPage() {
   const phaseProps = { state, myId, emit };
 
   const renderPhase = () => {
-    if (!myId) return <Centered>接続中...</Centered>;
+    if (!state.roomCode) return <Centered>接続中...</Centered>;
     switch (state.roomPhase) {
       case 'WAITING':
         return <WaitingRoom {...phaseProps} />;

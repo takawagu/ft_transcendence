@@ -2,6 +2,7 @@ import { PlayerPhase } from './ito.events';
 
 export interface ItoPlayer {
   socketId: string;
+  playerId: string;
   name: string;
   isRoomOwner: boolean;
   cardNumber?: number;

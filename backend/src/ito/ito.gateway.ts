@@ -54,7 +54,7 @@ export class ItoGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: CreateRoomPayload,
   ) {
-    this.roomService.createRoom(client, payload.playerName);
+    this.roomService.createRoom(client, payload.playerName, payload.playerId);
   }
 
   @SubscribeMessage(ITO_EVENTS.JOIN_ROOM)

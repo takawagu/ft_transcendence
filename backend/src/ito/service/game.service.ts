@@ -72,7 +72,7 @@ export class GameService {
     player.hasSubmittedPrompt = true;
     player.playerPhase = 'GENERATING';
 
-    this.broadcast.emitPlayerPhaseChange(room.id, client.id, 'GENERATING');
+    this.broadcast.emitPlayerPhaseChange(room.id, player.playerId, 'GENERATING');
 
     const submittedCount = room.players.filter(
       (p) => p.hasSubmittedPrompt,
@@ -82,21 +82,23 @@ export class GameService {
       totalCount: room.players.length,
     });
 
-    this.stubGenerateImage(room, client.id);
+    this.stubGenerateImage(room, player.playerId);
   }
 
   placeCard(client: Socket, payload: PlaceCardPayload) {
     const room = this.store.getRoomBySocketId(client.id);
     if (!room || room.roomPhase !== 'SPEAKING') return;
 
-    if (room.turnOrder[room.currentTurnIndex] !== client.id) return;
+    const player = room.players.find((p) => p.socketId === client.id);
+    if (!player) return;
+    if (room.turnOrder[room.currentTurnIndex] !== player.playerId) return;
 
     const pos = Math.max(0, Math.min(payload.position, room.boardOrder.length));
-    room.boardOrder.splice(pos, 0, client.id);
+    room.boardOrder.splice(pos, 0, player.playerId);
     room.currentTurnIndex++;
 
     this.broadcast.emitToRoom(room.id, ITO_EVENTS.CARD_PLACED, {
-      playerId: client.id,
+      playerId: player.playerId,
       boardOrder: [...room.boardOrder],
     });
 
@@ -114,7 +116,9 @@ export class GameService {
   reorderCards(client: Socket, payload: ReorderCardsPayload) {
     const room = this.store.getRoomBySocketId(client.id);
     if (!room || room.roomPhase !== 'ORDERING') return;
-    if (room.roundHostId !== client.id) return;
+
+    const player = room.players.find((p) => p.socketId === client.id);
+    if (!player || room.roundHostId !== player.playerId) return;
 
     room.boardOrder = payload.orderedPlayerIds;
 
@@ -126,18 +130,20 @@ export class GameService {
   confirmOrder(client: Socket) {
     const room = this.store.getRoomBySocketId(client.id);
     if (!room || room.roomPhase !== 'ORDERING') return;
-    if (room.roundHostId !== client.id) return;
+
+    const player = room.players.find((p) => p.socketId === client.id);
+    if (!player || room.roundHostId !== player.playerId) return;
 
     const correctOrder = [...room.players]
       .sort((a, b) => a.cardNumber! - b.cardNumber!)
-      .map((p) => p.socketId);
+      .map((p) => p.playerId);
 
     const success = room.boardOrder.every((id, i) => id === correctOrder[i]);
 
     room.roomPhase = 'REVEAL';
     this.broadcast.emitToRoom(room.id, ITO_EVENTS.CARDS_REVEALED, {
       revealedCards: room.players.map((p) => ({
-        playerId: p.socketId,
+        playerId: p.playerId,
         cardNumber: p.cardNumber!,
       })),
       submittedOrder: [...room.boardOrder],
@@ -170,7 +176,7 @@ export class GameService {
     if (!player) return;
 
     this.broadcast.emitToRoom(room.id, ITO_EVENTS.CHAT_MESSAGE, {
-      playerId: client.id,
+      playerId: player.playerId,
       playerName: player.name,
       message: payload.message,
       timestamp: Date.now(),
@@ -179,11 +185,11 @@ export class GameService {
 
   // ===== private =====
 
-  private stubGenerateImage(room: ItoRoom, socketId: string) {
+  private stubGenerateImage(room: ItoRoom, playerId: string) {
     const delay = 1000 + Math.random() * 2000;
     setTimeout(() => {
       if (!this.store.hasRoom(room.id)) return;
-      const player = room.players.find((p) => p.socketId === socketId);
+      const player = room.players.find((p) => p.playerId === playerId);
       if (!player || player.playerPhase !== 'GENERATING') return;
 
       player.imageUrl = `https://placehold.co/300x300/1a1a2e/00d4ff?text=${encodeURIComponent(player.name)}`;
@@ -193,10 +199,10 @@ export class GameService {
         (p) => p.playerPhase === 'DONE',
       ).length;
 
-      this.broadcast.emitPlayerPhaseChange(room.id, socketId, 'DONE');
+      this.broadcast.emitPlayerPhaseChange(room.id, playerId, 'DONE');
 
       this.broadcast.emitToRoom(room.id, ITO_EVENTS.IMAGE_GENERATED, {
-        playerId: socketId,
+        playerId,
         imageUrl: player.imageUrl,
         generatedCount,
         totalCount: room.players.length,
@@ -238,7 +244,7 @@ export class GameService {
   }
 
   private buildTurnOrder(room: ItoRoom): string[] {
-    const ids = room.players.map((p) => p.socketId);
+    const ids = room.players.map((p) => p.playerId);
     if (room.currentRound === 1) {
       for (let i = ids.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));

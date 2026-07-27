@@ -59,7 +59,7 @@ export class BroadcastService {
       roomCode: room.roomCode,
       roomPhase: room.roomPhase,
       players: room.players.map((p) => ({
-        id: p.socketId,
+        id: p.playerId,
         name: p.name,
         isRoomOwner: p.isRoomOwner,
         playerPhase:
