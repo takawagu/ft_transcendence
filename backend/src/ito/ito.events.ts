@@ -25,6 +25,7 @@ export interface PlayerInGameInfo extends PlayerInfo {
   playerPhase?: PlayerPhase; // INPUT_GENERATING中のみ有効
   hasSubmittedPrompt: boolean; // 他プレイヤーから見える（プロンプト内容は非公開）
   imageUrl?: string; // SPEAKING以降で全員に公開
+  connected: boolean;
 }
 
 // ===== イベント名定数 =====
@@ -65,6 +66,18 @@ export const ITO_EVENTS = {
   /** チャットメッセージを送信する（ORDERINGフェーズのみ） */
   SEND_CHAT: 'ito:sendChat',
 
+  /** 切断済みプレイヤーとして同一playerIdで再接続する */
+  REJOIN: 'ito:rejoin',
+
+  /** 切断中のプレイヤーを除外してゲームを続行する（ルームオーナーのみ） */
+  EXCLUDE_PLAYER: 'ito:excludePlayer',
+
+  /** ゲームを中断して終了する（ルームオーナーのみ） */
+  ABORT_GAME: 'ito:abortGame',
+
+  /** 一時停止を解除してゲームを再開する（ルームオーナーのみ） */
+  RESUME_GAME: 'ito:resumeGame',
+
   // ---------- Server → Client ----------
 
   /** ルームの現在状態を送信（参加時の初期同期） */
@@ -102,6 +115,21 @@ export const ITO_EVENTS = {
 
   /** ルームが解散された（全員にブロードキャスト） */
   ROOM_DISSOLVED: 'ito:roomDissolved',
+
+  /** 誰かが切断し、ゲームが一時停止した */
+  GAME_PAUSED: 'ito:gamePaused',
+
+  /** ホストの操作で一時停止が解除された */
+  GAME_RESUMED: 'ito:gameResumed',
+
+  /** 切断していたプレイヤーが再接続した */
+  PLAYER_RECONNECTED: 'ito:playerReconnected',
+
+  /** ゲームが中断され終了した */
+  GAME_ABORTED: 'ito:gameAborted',
+
+  /** 再接続した本人にのみ送る、完全な状態復元用ペイロード */
+  RESYNC_STATE: 'ito:resyncState',
 } as const;
 
 // ===== ペイロード型（Client → Server） =====
@@ -138,6 +166,11 @@ export class SendChatPayload {
   message: string;
 }
 
+export class RejoinPayload {
+  roomCode: string;
+  playerId: string;
+}
+
 // ===== ペイロード型（Server → Client） =====
 
 export interface RoomStatePayload {
@@ -147,6 +180,8 @@ export interface RoomStatePayload {
   roundHostId?: string;
   currentTurnPlayerId?: string;
   boardOrder?: string[]; // 場のプレイヤーID順（SPEAKINGフェーズ以降）
+  paused: boolean;
+  pausedPlayerId?: string;
 }
 
 export interface PhaseChangePayload {
@@ -205,4 +240,27 @@ export interface CardsRevealedPayload {
   submittedOrder: string[]; // 提出した並び順（プレイヤーID）
   correctOrder: string[]; // 正解の並び順（プレイヤーID）
   success: boolean;
+}
+
+export interface GamePausedPayload {
+  disconnectedPlayerId: string;
+  disconnectedPlayerName: string;
+}
+
+export interface PlayerReconnectedPayload {
+  playerId: string;
+  playerName: string;
+}
+
+export interface GameAbortedPayload {
+  reason: string;
+}
+
+export interface ResyncStatePayload extends RoomStatePayload {
+  theme: string;
+  totalRounds: number;
+  currentRound: number;
+  turnOrder: string[];
+  messages: ChatMessagePayload[];
+  myCardNumber?: number; // 本人のみに送る
 }

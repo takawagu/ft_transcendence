@@ -24,6 +24,8 @@ export class GameService {
     const room = this.store.getRoomBySocketId(client.id);
     if (!room) return;
 
+    if (room.paused) return;
+
     const owner = room.players.find((p) => p.socketId === client.id);
     if (!owner?.isRoomOwner || room.roomPhase !== 'THEME_SETTING') return;
     if (room.players.length < 2) {
@@ -63,7 +65,7 @@ export class GameService {
 
   submitPrompt(client: Socket, payload: SubmitPromptPayload) {
     const room = this.store.getRoomBySocketId(client.id);
-    if (!room || room.roomPhase !== 'INPUT_GENERATING') return;
+    if (!room || room.roomPhase !== 'INPUT_GENERATING' || room.paused) return;
 
     const player = room.players.find((p) => p.socketId === client.id);
     if (!player || player.playerPhase !== 'INPUT') return;
@@ -87,7 +89,7 @@ export class GameService {
 
   placeCard(client: Socket, payload: PlaceCardPayload) {
     const room = this.store.getRoomBySocketId(client.id);
-    if (!room || room.roomPhase !== 'SPEAKING') return;
+    if (!room || room.roomPhase !== 'SPEAKING' || room.paused) return;
 
     const player = room.players.find((p) => p.socketId === client.id);
     if (!player) return;
@@ -115,7 +117,7 @@ export class GameService {
 
   reorderCards(client: Socket, payload: ReorderCardsPayload) {
     const room = this.store.getRoomBySocketId(client.id);
-    if (!room || room.roomPhase !== 'ORDERING') return;
+    if (!room || room.roomPhase !== 'ORDERING' || room.paused) return;
 
     const player = room.players.find((p) => p.socketId === client.id);
     if (!player || room.roundHostId !== player.playerId) return;
@@ -129,7 +131,7 @@ export class GameService {
 
   confirmOrder(client: Socket) {
     const room = this.store.getRoomBySocketId(client.id);
-    if (!room || room.roomPhase !== 'ORDERING') return;
+    if (!room || room.roomPhase !== 'ORDERING' || room.paused) return;
 
     const player = room.players.find((p) => p.socketId === client.id);
     if (!player || room.roundHostId !== player.playerId) return;
@@ -170,17 +172,45 @@ export class GameService {
 
   sendChat(client: Socket, payload: SendChatPayload) {
     const room = this.store.getRoomBySocketId(client.id);
-    if (!room || room.roomPhase !== 'ORDERING') return;
+    if (!room || room.roomPhase !== 'ORDERING' || room.paused) return;
 
     const player = room.players.find((p) => p.socketId === client.id);
     if (!player) return;
 
-    this.broadcast.emitToRoom(room.id, ITO_EVENTS.CHAT_MESSAGE, {
+    const chatMessage = {
       playerId: player.playerId,
       playerName: player.name,
       message: payload.message,
       timestamp: Date.now(),
-    });
+    };
+    room.messages.push(chatMessage);
+
+    this.broadcast.emitToRoom(room.id, ITO_EVENTS.CHAT_MESSAGE, chatMessage);
+  }
+
+  /**
+   * 除外（ito:excludePlayer）でプレイヤーが減った直後に呼ぶ。
+   * INPUT_GENERATING/SPEAKINGは人数カウントに達した時点でのみ次フェーズへ進む作りのため、
+   * 除外で分母が減っても自動では進まない。ここで残りプレイヤーだけで条件を満たしているか再判定する。
+   */
+  checkProgressAfterExclusion(room: ItoRoom): void {
+    if (room.roomPhase === 'INPUT_GENERATING') {
+      const allDone =
+        room.players.length > 0 &&
+        room.players.every((p) => p.playerPhase === 'DONE');
+      if (allDone) {
+        this.transitionToSpeaking(room);
+      }
+      return;
+    }
+
+    if (room.roomPhase === 'SPEAKING') {
+      if (room.turnOrder.length > 0 && room.boardOrder.length >= room.turnOrder.length) {
+        room.roomPhase = 'ORDERING';
+        this.broadcast.broadcastPhaseChange(room);
+        this.broadcast.broadcastRoomState(room);
+      }
+    }
   }
 
   // ===== private =====
