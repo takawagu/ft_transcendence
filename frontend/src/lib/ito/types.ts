@@ -18,6 +18,8 @@ export interface PlayerInGameInfo {
   playerPhase?: PlayerPhase;
   hasSubmittedPrompt: boolean;
   imageUrl?: string;
+  connected: boolean;
+  excluded: boolean;
 }
 
 export interface ChatMessage {
@@ -50,6 +52,9 @@ export interface GameState {
   promptTotalCount?: number;
   imageGeneratedCount?: number;
   imageTotalCount?: number;
+  paused: boolean;
+  pausedPlayerId?: string;
+  aborted?: string;
 }
 
 export interface PhaseProps {

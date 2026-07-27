@@ -3,9 +3,10 @@ import { Server } from 'socket.io';
 import {
   ITO_EVENTS,
   PlayerPhaseChangePayload,
+  ResyncStatePayload,
   RoomStatePayload,
 } from '../ito.events';
-import { ItoRoom } from '../types';
+import { ItoPlayer, ItoRoom } from '../types';
 
 @Injectable()
 export class BroadcastService {
@@ -36,6 +37,19 @@ export class BroadcastService {
     this.server.to(socketId).emit(event, payload);
   }
 
+  emitResyncState(room: ItoRoom, player: ItoPlayer): void {
+    const payload: ResyncStatePayload = {
+      ...this.buildRoomStatePayload(room),
+      theme: room.theme,
+      totalRounds: room.totalRounds,
+      currentRound: room.currentRound,
+      turnOrder: [...room.turnOrder],
+      messages: [...room.messages],
+      myCardNumber: player.cardNumber,
+    };
+    this.server.to(player.socketId).emit(ITO_EVENTS.RESYNC_STATE, payload);
+  }
+
   emitPlayerPhaseChange(
     roomId: string,
     playerId: string,
@@ -59,13 +73,15 @@ export class BroadcastService {
       roomCode: room.roomCode,
       roomPhase: room.roomPhase,
       players: room.players.map((p) => ({
-        id: p.socketId,
+        id: p.playerId,
         name: p.name,
         isRoomOwner: p.isRoomOwner,
         playerPhase:
           room.roomPhase === 'INPUT_GENERATING' ? p.playerPhase : undefined,
         hasSubmittedPrompt: p.hasSubmittedPrompt,
         imageUrl: showImages ? p.imageUrl : undefined,
+        connected: p.connected,
+        excluded: p.excluded,
       })),
       roundHostId: room.roundHostId || undefined,
       currentTurnPlayerId:
@@ -73,6 +89,8 @@ export class BroadcastService {
           ? room.turnOrder[room.currentTurnIndex]
           : undefined,
       boardOrder: room.boardOrder.length > 0 ? [...room.boardOrder] : undefined,
+      paused: room.paused,
+      pausedPlayerId: room.pausedPlayerId,
     };
   }
 }
