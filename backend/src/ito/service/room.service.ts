@@ -29,6 +29,7 @@ export class RoomService {
           name: playerName,
           isRoomOwner: true,
           connected: true,
+          excluded: false,
           playerPhase: 'INPUT',
           hasSubmittedPrompt: false,
         },
@@ -79,6 +80,7 @@ export class RoomService {
       name: payload.playerName,
       isRoomOwner: false,
       connected: true,
+      excluded: false,
       playerPhase: 'INPUT',
       hasSubmittedPrompt: false,
     });
@@ -226,28 +228,54 @@ export class RoomService {
     if (!requester?.isRoomOwner) return;
 
     const targetId = room.pausedPlayerId;
-    const removedTurnIndex = room.turnOrder.indexOf(targetId);
+    const target = room.players.find((p) => p.playerId === targetId);
+    if (!target) {
+      room.paused = false;
+      room.pausedPlayerId = undefined;
+      this.broadcast.emitToRoom(room.id, ITO_EVENTS.GAME_RESUMED, {});
+      this.broadcast.broadcastRoomState(room);
+      return;
+    }
 
-    room.players = room.players.filter((p) => p.playerId !== targetId);
-    room.turnOrder = room.turnOrder.filter((id) => id !== targetId);
-    room.boardOrder = room.boardOrder.filter((id) => id !== targetId);
+    // カードが既に場に公開済みかどうかで除外範囲を分岐する（reconnect-design.md §4）
+    const cardAlreadyVisible = room.boardOrder.includes(targetId);
+
+    if (cardAlreadyVisible) {
+      // 配置済み: カードは場に残し、プレイヤーとしてのみ除外する。
+      // room.playersから削除すると正解判定(correctOrder)・結果画面のカード情報が失われるため、
+      // 削除せずexcludedフラグを立てるだけにする。turnOrder/boardOrderも変更しない
+      // （turnOrderから削除すると、まだ配置していない人がいるのに完了判定の分母が狂うため）。
+      target.excluded = true;
+    } else {
+      // 配置前: 誰にも見えていないため、プレイヤーとカードを丸ごと除外する
+      const removedTurnIndex = room.turnOrder.indexOf(targetId);
+
+      room.players = room.players.filter((p) => p.playerId !== targetId);
+      room.turnOrder = room.turnOrder.filter((id) => id !== targetId);
+      room.boardOrder = room.boardOrder.filter((id) => id !== targetId);
+
+      // 除外されたプレイヤーがcurrentTurnIndexより手前にいた場合、
+      // turnOrderが1つ詰まる分だけインデックスも詰める（そうしないと次のターンがずれる）
+      if (removedTurnIndex !== -1 && removedTurnIndex < room.currentTurnIndex) {
+        room.currentTurnIndex -= 1;
+      }
+      if (room.currentTurnIndex >= room.turnOrder.length) {
+        room.currentTurnIndex = Math.max(0, room.turnOrder.length - 1);
+      }
+    }
 
     if (room.roundHostId === targetId) {
-      room.roundHostId = room.turnOrder[0] ?? '';
-    }
-    // 除外されたプレイヤーがcurrentTurnIndexより手前にいた場合、
-    // turnOrderが1つ詰まる分だけインデックスも詰める（そうしないと次のターンがずれる）
-    if (removedTurnIndex !== -1 && removedTurnIndex < room.currentTurnIndex) {
-      room.currentTurnIndex -= 1;
-    }
-    if (room.currentTurnIndex >= room.turnOrder.length) {
-      room.currentTurnIndex = Math.max(0, room.turnOrder.length - 1);
+      const activeIds = new Set(
+        room.players.filter((p) => !p.excluded).map((p) => p.playerId),
+      );
+      room.roundHostId = room.turnOrder.find((id) => activeIds.has(id)) ?? '';
     }
 
     room.paused = false;
     room.pausedPlayerId = undefined;
 
-    if (room.players.length < 2) {
+    const activePlayerCount = room.players.filter((p) => !p.excluded).length;
+    if (activePlayerCount < 2) {
       this.broadcast.emitToRoom(room.id, ITO_EVENTS.GAME_ABORTED, {
         reason: '人数不足のため終了しました',
       });

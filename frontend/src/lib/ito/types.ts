@@ -19,6 +19,7 @@ export interface PlayerInGameInfo {
   hasSubmittedPrompt: boolean;
   imageUrl?: string;
   connected: boolean;
+  excluded: boolean;
 }
 
 export interface ChatMessage {

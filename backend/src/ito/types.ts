@@ -6,6 +6,7 @@ export interface ItoPlayer {
   name: string;
   isRoomOwner: boolean;
   connected: boolean;
+  excluded: boolean;
   cardNumber?: number;
   prompt?: string;
   imageUrl?: string;

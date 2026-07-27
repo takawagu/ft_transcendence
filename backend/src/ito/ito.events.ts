@@ -26,6 +26,7 @@ export interface PlayerInGameInfo extends PlayerInfo {
   hasSubmittedPrompt: boolean; // 他プレイヤーから見える（プロンプト内容は非公開）
   imageUrl?: string; // SPEAKING以降で全員に公開
   connected: boolean;
+  excluded: boolean;
 }
 
 // ===== イベント名定数 =====

@@ -195,9 +195,10 @@ export class GameService {
    */
   checkProgressAfterExclusion(room: ItoRoom): void {
     if (room.roomPhase === 'INPUT_GENERATING') {
+      const activePlayers = room.players.filter((p) => !p.excluded);
       const allDone =
-        room.players.length > 0 &&
-        room.players.every((p) => p.playerPhase === 'DONE');
+        activePlayers.length > 0 &&
+        activePlayers.every((p) => p.playerPhase === 'DONE');
       if (allDone) {
         this.transitionToSpeaking(room);
       }
@@ -274,7 +275,7 @@ export class GameService {
   }
 
   private buildTurnOrder(room: ItoRoom): string[] {
-    const ids = room.players.map((p) => p.playerId);
+    const ids = room.players.filter((p) => !p.excluded).map((p) => p.playerId);
     if (room.currentRound === 1) {
       for (let i = ids.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));

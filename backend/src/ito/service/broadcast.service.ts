@@ -81,6 +81,7 @@ export class BroadcastService {
         hasSubmittedPrompt: p.hasSubmittedPrompt,
         imageUrl: showImages ? p.imageUrl : undefined,
         connected: p.connected,
+        excluded: p.excluded,
       })),
       roundHostId: room.roundHostId || undefined,
       currentTurnPlayerId:
