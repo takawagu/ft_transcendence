@@ -67,6 +67,12 @@ export const ITO_EVENTS = {
   /** チャットメッセージを送信する（ORDERINGフェーズのみ） */
   SEND_CHAT: 'ito:sendChat',
 
+  /** 次のラウンドへ進む（ROUND_RESULTフェーズ / ルームオーナーのみ） */
+  NEXT_ROUND: 'ito:nextRound',
+
+  /** ゲームを終了して最終リザルトへ進む（ROUND_RESULTフェーズ / ルームオーナーのみ） */
+  END_GAME: 'ito:endGame',
+
   /** 切断済みプレイヤーとして同一playerIdで再接続する */
   REJOIN: 'ito:rejoin',
 
@@ -138,6 +144,7 @@ export const ITO_EVENTS = {
 export class CreateRoomPayload {
   playerName: string;
   playerId: string;
+  totalRounds?: number;
 }
 
 export class JoinRoomPayload {
@@ -183,6 +190,8 @@ export interface RoomStatePayload {
   boardOrder?: string[]; // 場のプレイヤーID順（SPEAKINGフェーズ以降）
   paused: boolean;
   pausedPlayerId?: string;
+  currentRound?: number;
+  totalRounds?: number;
 }
 
 export interface PhaseChangePayload {

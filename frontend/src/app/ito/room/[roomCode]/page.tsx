@@ -41,14 +41,18 @@ export default function RoomPage() {
   const emit = (event: string, payload?: unknown) => {
     socketRef.current?.emit(event, payload);
   };
-
   useEffect(() => {
-    const playerName = sessionStorage.getItem('ito_player_name') ?? 'プレイヤー';
-    let playerId = sessionStorage.getItem('ito_player_id');
-    if (!playerId) {
-      playerId = crypto.randomUUID();
-      sessionStorage.setItem('ito_player_id', playerId);
+    const storedToken = localStorage.getItem('ft_token');
+    const storedUser = localStorage.getItem('ft_user');
+
+    if (!storedToken || !storedUser) {
+      router.push('/');
+      return;
     }
+
+    const userObj = JSON.parse(storedUser);
+    const playerName = userObj.username;
+    const playerId = String(userObj.id);
     setMyId(playerId);
 
     const savedSessionRaw = sessionStorage.getItem('ito_room_session');
@@ -58,6 +62,7 @@ export default function RoomPage() {
     socketRef.current = socket;
 
     socket.on('connect', () => {
+      const totalRounds = parseInt(sessionStorage.getItem('ito_total_rounds') || '3', 10);
       if (joinedRoomCodeRef.current) {
         // 同一ページ内でのsocket.io自動再接続: 既に参加済みの部屋へ再接続する
         socket.emit('ito:rejoin', { roomCode: joinedRoomCodeRef.current, playerId });
@@ -65,7 +70,7 @@ export default function RoomPage() {
         // ページリロード後: sessionStorageに記録された同じ部屋へ再接続する
         socket.emit('ito:rejoin', { roomCode: savedSession.roomCode, playerId });
       } else if (isCreating) {
-        socket.emit('ito:createRoom', { playerName, playerId });
+        socket.emit('ito:createRoom', { playerName, playerId, totalRounds });
       } else {
         socket.emit('ito:joinRoom', { roomCode: routeRoomCode, playerName, playerId });
       }
@@ -82,6 +87,8 @@ export default function RoomPage() {
         boardOrder: data.boardOrder ?? [],
         paused: data.paused ?? false,
         pausedPlayerId: data.pausedPlayerId,
+        currentRound: data.currentRound,
+        totalRounds: data.totalRounds,
       }));
       if (isCreating && !urlUpdated.current && data.roomCode) {
         urlUpdated.current = true;
@@ -105,6 +112,8 @@ export default function RoomPage() {
         myCardNumber: data.myCardNumber,
         myTheme: data.theme,
         chatMessages: data.messages ?? [],
+        currentRound: data.currentRound,
+        totalRounds: data.totalRounds,
       }));
       joinedRoomCodeRef.current = data.roomCode;
       sessionStorage.setItem('ito_room_session', JSON.stringify({ roomCode: data.roomCode, playerId }));

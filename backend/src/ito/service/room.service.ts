@@ -14,7 +14,7 @@ export class RoomService {
     private readonly gameService: GameService,
   ) {}
 
-  createRoom(client: Socket, playerName: string, playerId: string) {
+  createRoom(client: Socket, playerName: string, playerId: string, totalRounds?: number) {
     const roomCode = this.store.generateRoomCode();
     const roomId = `ito_${Date.now()}`;
 
@@ -35,7 +35,7 @@ export class RoomService {
         },
       ],
       theme: '',
-      totalRounds: 1,
+      totalRounds: totalRounds || 3,
       currentRound: 0,
       turnOrder: [],
       currentTurnIndex: 0,

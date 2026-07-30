@@ -55,7 +55,7 @@ export class ItoGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: CreateRoomPayload,
   ) {
-    this.roomService.createRoom(client, payload.playerName, payload.playerId);
+    this.roomService.createRoom(client, payload.playerName, payload.playerId, payload.totalRounds);
   }
 
   @SubscribeMessage(ITO_EVENTS.JOIN_ROOM)
@@ -147,5 +147,15 @@ export class ItoGateway
   @SubscribeMessage(ITO_EVENTS.RESUME_GAME)
   handleResumeGame(@ConnectedSocket() client: Socket) {
     this.roomService.resumeGame(client);
+  }
+
+  @SubscribeMessage(ITO_EVENTS.NEXT_ROUND)
+  handleNextRound(@ConnectedSocket() client: Socket) {
+    this.gameService.nextRound(client);
+  }
+
+  @SubscribeMessage(ITO_EVENTS.END_GAME)
+  handleEndGame(@ConnectedSocket() client: Socket) {
+    this.gameService.endGame(client);
   }
 }

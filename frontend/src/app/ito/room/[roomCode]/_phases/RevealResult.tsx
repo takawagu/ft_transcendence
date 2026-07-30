@@ -3,13 +3,16 @@
 import { useRouter } from 'next/navigation';
 import type { PhaseProps } from '@/lib/ito/types';
 
-export function RevealResult({ state, myId }: PhaseProps) {
+export function RevealResult({ state, myId, emit }: PhaseProps) {
   const router = useRouter();
   const { revealResult, roomPhase, players } = state;
   const playerMap = new Map(players.map(p => [p.id, p]));
   const cardMap = new Map(
     revealResult?.revealedCards.map(c => [c.playerId, c.cardNumber]) ?? []
   );
+
+  const me = players.find(p => p.id === myId);
+  const isOwner = me?.isRoomOwner ?? false;
 
   if (roomPhase === 'REVEAL' && !revealResult) {
     return (
@@ -45,7 +48,7 @@ export function RevealResult({ state, myId }: PhaseProps) {
 
           {/* Submitted order with card numbers */}
           <div className="w-full">
-            <p className="text-xs text-zinc-600 mb-3">提出した順番</p>
+            <p className="text-xs text-zinc-600 mb-3 font-semibold">提出した順番</p>
             <div className="flex flex-wrap justify-center gap-3">
               {revealResult.submittedOrder.map((pid, i) => {
                 const p = playerMap.get(pid);
@@ -102,7 +105,7 @@ export function RevealResult({ state, myId }: PhaseProps) {
           {/* Correct order (on failure) */}
           {!revealResult.success && (
             <div className="w-full">
-              <p className="text-xs text-zinc-600 mb-3">正解の順番</p>
+              <p className="text-xs text-zinc-600 mb-3 font-semibold">正解の順番</p>
               <div className="flex flex-wrap justify-center gap-3">
                 {revealResult.correctOrder.map((pid, i) => {
                   const p = playerMap.get(pid);
@@ -136,14 +139,60 @@ export function RevealResult({ state, myId }: PhaseProps) {
         </>
       )}
 
+      {/* Rounds Progression & Host Control Buttons */}
+      {roomPhase === 'ROUND_RESULT' && (
+        <div className="w-full bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-md rounded-2xl p-5 text-center mt-4 space-y-4">
+          <div className="flex justify-between items-center px-2">
+            <span className="text-zinc-500 text-xs uppercase tracking-wider font-semibold">ラウンド進行状況</span>
+            <span className="text-xs bg-zinc-805 border border-zinc-800 text-zinc-300 font-bold px-2.5 py-1 rounded-full">
+              ラウンド {state.currentRound ?? 1} / {state.totalRounds ?? 1}
+            </span>
+          </div>
+
+          {isOwner ? (
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              {(state.currentRound ?? 1) < (state.totalRounds ?? 1) ? (
+                <>
+                  <button
+                    onClick={() => emit('ito:nextRound')}
+                    className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-4 py-3.5 font-bold text-sm text-white transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    次のラウンドへ進む 🚀
+                  </button>
+                  <button
+                    onClick={() => emit('ito:endGame')}
+                    className="flex-1 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 border border-zinc-700 px-4 py-3.5 font-bold text-sm text-zinc-300 transition-all cursor-pointer"
+                  >
+                    ゲームを途中で終了する 🏁
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => emit('ito:endGame')}
+                  className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-4 py-3.5 font-bold text-sm text-white transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
+                >
+                  結果を確認してゲームを終了する 🏆
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="text-sm text-zinc-400 py-2 animate-pulse font-medium">
+              {(state.currentRound ?? 1) < (state.totalRounds ?? 1)
+                ? 'ホストが次のラウンドを開始するのを待っています...'
+                : 'ホストがゲームを終了するのを待っています...'}
+            </div>
+          )}
+        </div>
+      )}
+
       {roomPhase === 'GAME_OVER' && (
-        <div className="text-center space-y-4 mt-4">
-          <p className="text-zinc-400">ゲーム終了！</p>
+        <div className="text-center space-y-4 mt-6 bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-md rounded-2xl p-6 w-full">
+          <p className="text-zinc-300 font-bold text-lg">ゲーム終了！お疲れ様でした！</p>
           <button
             onClick={() => router.push('/')}
-            className="rounded-lg bg-indigo-600 px-6 py-3 font-semibold text-white hover:bg-indigo-500 transition-colors"
+            className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-6 py-3.5 font-bold text-sm text-white transition-all shadow-md cursor-pointer"
           >
-            トップに戻る
+            ホームに戻る
           </button>
         </div>
       )}

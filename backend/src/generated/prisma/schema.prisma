@@ -13,12 +13,12 @@ datasource db {
 }
 
 model User {
-  id                  Int             @id @default(autoincrement())
-  email               String          @unique
-  password            String
-  username            String
-  profileImage        String?
-  bio                 String?
+  id           Int     @id @default(autoincrement())
+  email        String  @unique
+  password     String
+  username     String
+  profileImage String?
+  bio          String?
 
   gameRecord          ItoGameRecord?
   sentMessages        DirectMessage[] @relation("SentMessages")
@@ -28,12 +28,12 @@ model User {
 }
 
 model ItoGameRecord {
-  id           Int  @id @default(autoincrement())
-  userId       Int  @unique
-  totalGames   Int  @default(0)
-  successCount Int  @default(0)
+  id           Int @id @default(autoincrement())
+  userId       Int @unique
+  totalGames   Int @default(0)
+  successCount Int @default(0)
 
-  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Friendship {
@@ -43,8 +43,8 @@ model Friendship {
   status      String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
   createdAt   DateTime @default(now())
 
-  applicant   User     @relation("Applicant", fields: [applicantId], references: [id], onDelete: Cascade)
-  approver    User     @relation("Approver", fields: [approverId], references: [id], onDelete: Cascade)
+  applicant User @relation("Applicant", fields: [applicantId], references: [id], onDelete: Cascade)
+  approver  User @relation("Approver", fields: [approverId], references: [id], onDelete: Cascade)
 
   @@unique([applicantId, approverId])
 }
@@ -56,6 +56,6 @@ model DirectMessage {
   content    String
   createdAt  DateTime @default(now())
 
-  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender   User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
 }
