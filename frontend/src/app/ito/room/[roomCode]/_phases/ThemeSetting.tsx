@@ -31,7 +31,11 @@ export function ThemeSetting({ state, myId, emit }: PhaseProps) {
               placeholder="例: 速さ、幸福度、辛さ..."
               value={theme}
               onChange={e => setTheme(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleStart()}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                  handleStart();
+                }
+              }}
             />
           </div>
           <button
