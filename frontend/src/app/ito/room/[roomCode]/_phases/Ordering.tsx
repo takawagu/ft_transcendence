@@ -284,7 +284,11 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
                 placeholder="メッセージを入力..."
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && sendChat()}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                    sendChat();
+                  }
+                }}
               />
               <button
                 onClick={sendChat}
