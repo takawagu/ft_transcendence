@@ -34,8 +34,8 @@ export class GameService {
     }
 
     room.theme = payload.theme;
-    room.totalRounds = payload.totalRounds ?? 1;
-    room.currentRound = 1;
+    room.totalRounds = room.totalRounds || payload.totalRounds || 3;
+    room.currentRound = room.currentRound === 0 ? 1 : room.currentRound + 1;
     room.roomPhase = 'DEALING';
 
     const cards = this.dealCards(room.players.length);
@@ -160,14 +160,7 @@ export class GameService {
       `[ITO] round ${room.currentRound} result: ${success ? 'SUCCESS' : 'FAIL'}`,
     );
 
-    if (room.currentRound >= room.totalRounds) {
-      setTimeout(() => {
-        if (!this.store.hasRoom(room.id)) return;
-        room.roomPhase = 'GAME_OVER';
-        this.broadcast.broadcastPhaseChange(room);
-        this.broadcast.broadcastRoomState(room);
-      }, 3000);
-    }
+
   }
 
   sendChat(client: Socket, payload: SendChatPayload) {
@@ -262,6 +255,46 @@ export class GameService {
       currentTurnPlayerId: room.turnOrder[0],
     });
 
+    this.broadcast.broadcastRoomState(room);
+  }
+
+  nextRound(client: Socket) {
+    const room = this.store.getRoomBySocketId(client.id);
+    if (!room || room.roomPhase !== 'ROUND_RESULT' || room.paused) return;
+
+    const requester = room.players.find((p) => p.socketId === client.id);
+    if (!requester?.isRoomOwner) return;
+
+    // Reset game state for the new round but keep players, totalRounds and currentRound
+    room.roomPhase = 'THEME_SETTING';
+    room.theme = '';
+    room.boardOrder = [];
+    room.turnOrder = [];
+    room.currentTurnIndex = 0;
+    room.roundHostId = '';
+
+    // Reset players for the new round
+    room.players.forEach((p) => {
+      p.cardNumber = undefined;
+      p.playerPhase = 'INPUT';
+      p.hasSubmittedPrompt = false;
+      p.imageUrl = undefined;
+      p.prompt = undefined;
+    });
+
+    this.broadcast.broadcastPhaseChange(room);
+    this.broadcast.broadcastRoomState(room);
+  }
+
+  endGame(client: Socket) {
+    const room = this.store.getRoomBySocketId(client.id);
+    if (!room || room.roomPhase !== 'ROUND_RESULT' || room.paused) return;
+
+    const requester = room.players.find((p) => p.socketId === client.id);
+    if (!requester?.isRoomOwner) return;
+
+    room.roomPhase = 'GAME_OVER';
+    this.broadcast.broadcastPhaseChange(room);
     this.broadcast.broadcastRoomState(room);
   }
 

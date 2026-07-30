@@ -55,6 +55,8 @@ export interface GameState {
   paused: boolean;
   pausedPlayerId?: string;
   aborted?: string;
+  currentRound?: number;
+  totalRounds?: number;
 }
 
 export interface PhaseProps {

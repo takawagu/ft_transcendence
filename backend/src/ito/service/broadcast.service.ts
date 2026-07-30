@@ -91,6 +91,8 @@ export class BroadcastService {
       boardOrder: room.boardOrder.length > 0 ? [...room.boardOrder] : undefined,
       paused: room.paused,
       pausedPlayerId: room.pausedPlayerId,
+      currentRound: room.currentRound,
+      totalRounds: room.totalRounds,
     };
   }
 }
