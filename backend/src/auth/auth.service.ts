@@ -1,5 +1,7 @@
 import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 
@@ -9,7 +11,7 @@ export class AuthService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async register(body: any) {
+  async register(body: RegisterDto) {
     const { email, password, username, bio, profileImage } = body;
 
     const existingUser = await this.prisma.user.findFirst({
@@ -50,7 +52,7 @@ export class AuthService {
     };
   }
 
-  async login(body: any) {
+  async login(body: LoginDto) {
     const { email, password } = body;
 
     const user = await this.prisma.user.findUnique({
@@ -77,6 +79,16 @@ export class AuthService {
       },
       token,
     };
+  }
+
+  async isUsernameTaken(username: string): Promise<boolean> {
+    const user = await this.prisma.user.findFirst({ where: { username } });
+    return !!user;
+  }
+
+  async isEmailTaken(email: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    return !!user;
   }
 
   generateToken(userId: number): string {

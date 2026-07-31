@@ -5955,11 +5955,11 @@ export namespace Prisma {
   export type UserWhereUniqueInput = Prisma.AtLeast<{
     id?: number
     email?: string
+    username?: string
     AND?: UserWhereInput | UserWhereInput[]
     OR?: UserWhereInput[]
     NOT?: UserWhereInput | UserWhereInput[]
     password?: StringFilter<"User"> | string
-    username?: StringFilter<"User"> | string
     profileImage?: StringNullableFilter<"User"> | string | null
     bio?: StringNullableFilter<"User"> | string | null
     gameRecord?: XOR<ItoGameRecordNullableScalarRelationFilter, ItoGameRecordWhereInput> | null
@@ -5967,7 +5967,7 @@ export namespace Prisma {
     receivedMessages?: DirectMessageListRelationFilter
     appliedFriendships?: FriendshipListRelationFilter
     receivedFriendships?: FriendshipListRelationFilter
-  }, "id" | "email">
+  }, "id" | "email" | "username">
 
   export type UserOrderByWithAggregationInput = {
     id?: SortOrder

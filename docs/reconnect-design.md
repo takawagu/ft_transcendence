@@ -13,14 +13,13 @@ ft_transcendence subject「Gaming and user experience」内 Remote players モ�
 
 ## 1. プレイヤー識別方法
 
-status: 方針決定（詳細は要確認）
+status: 実装済み（ログイン機能導入により移行完了。[login-requirements.md](docs/login-requirements.md)セクション6参照）
 
-- 現時点ではログイン機能なし。クライアント生成のUUIDを`sessionStorage`に保存する「ゲストplayerId」方式とする。
-- サーバー/ゲームロジック側では`playerId`を「ゲストUUIDかDB userIdか」を意識しない、ただの不透明な文字列として扱う（将来の移行を楽にするため）。
-- **将来**: ログイン機能を追加し、DBでplayerId（userId）を管理する方式に移行する。移行時、`playerId`の発行元がクライアント生成UUIDからDB userIdに変わるだけで、ゲームロジック側の参照方法は変えずに済む設計にしておく。
-- `localStorage`ではなく`sessionStorage`を採用: `localStorage`はブラウザの全タブで共有されるため、同一ブラウザの複数タブを別プレイヤーとして開く（ローカルでの複数人テストや、実運用でも家族間での使い回し等）と同一playerId衝突が起きる。`sessionStorage`はタブ単位で独立するため、これを避けられる。
-- トレードオフ: `sessionStorage`はタブを閉じると消える。復帰できるのは同一タブ内でのページリロードやネットワーク瞬断（socket.io自動再接続）まで。タブを閉じてから開き直すケースの復帰は非対応（reconnect-design.mdが対象とする「ネットワーク遅延・切断」は基本的に同一タブ内で起きるため、実用上は許容範囲と判断）。
-- 未確定: 別デバイス/別ブラウザからの復帰について。ログイン機能導入後はuserIdでどのデバイスからでも復帰可能になる見込みだが、この制約を今の段階でどこまで許容するかは要再確認。
+- ログイン機能が実装され、ito機能全体がログイン必須になった。`playerId`はDBの`userId`をそのまま使う方式に移行済み（[page.tsx:53-55](frontend/src/app/ito/room/[roomCode]/page.tsx#L53-L55)の`playerId = String(userObj.id)`）
+- サーバー/ゲームロジック側は元々`playerId`を「ゲストUUIDかDB userIdか」を意識しない、ただの不透明な文字列として扱う設計だったため、この移行にあたってバックエンド側の変更は不要だった
+- ルーム画面は未ログイン（`ft_token`/`ft_user`が無い）だとトップへリダイレクトされるため、ゲストとしてのプレイは不可（[page.tsx:48-51](frontend/src/app/ito/room/[roomCode]/page.tsx#L48-L51)）
+- 解消済み: 「別デバイス/別ブラウザからの復帰」も、同じアカウントでログインすればuserId一致により復帰可能になった
+- `sessionStorage`（`ito_room_session`）は引き続き「どの部屋にいたか」の記録用途で使用（identity自体はuserIdが担うため、こちらは補助的な位置づけに変わった）
 
 ---
 
