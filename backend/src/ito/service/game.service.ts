@@ -12,12 +12,14 @@ import {
 import { ItoRoom } from '../types';
 import { RoomStore } from './room.store';
 import { BroadcastService } from './broadcast.service';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class GameService {
   constructor(
     private readonly store: RoomStore,
     private readonly broadcast: BroadcastService,
+    private readonly prisma: PrismaService,
   ) {}
 
   startGame(client: Socket, payload: StartGamePayload) {
@@ -160,7 +162,9 @@ export class GameService {
       `[ITO] round ${room.currentRound} result: ${success ? 'SUCCESS' : 'FAIL'}`,
     );
 
-
+    this.recordRoundResults(room, success).catch((err) => {
+      console.error('[ITO] failed to record round result', err);
+    });
   }
 
   sendChat(client: Socket, payload: SendChatPayload) {
@@ -208,6 +212,26 @@ export class GameService {
   }
 
   // ===== private =====
+
+  private async recordRoundResults(room: ItoRoom, success: boolean) {
+    const activePlayers = room.players.filter((p) => !p.excluded);
+
+    await Promise.all(
+      activePlayers.map((p) => {
+        const userId = Number(p.playerId);
+        if (!Number.isInteger(userId)) return Promise.resolve();
+
+        return this.prisma.itoGameRecord.upsert({
+          where: { userId },
+          create: { userId, totalGames: 1, successCount: success ? 1 : 0 },
+          update: {
+            totalGames: { increment: 1 },
+            ...(success ? { successCount: { increment: 1 } } : {}),
+          },
+        });
+      }),
+    );
+  }
 
   private stubGenerateImage(room: ItoRoom, playerId: string) {
     const delay = 1000 + Math.random() * 2000;
