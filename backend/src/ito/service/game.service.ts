@@ -332,14 +332,18 @@ export class GameService {
   }
 
   private buildTurnOrder(room: ItoRoom): string[] {
-    const ids = room.players.filter((p) => !p.excluded).map((p) => p.playerId);
+    const activeIds = room.players.filter((p) => !p.excluded).map((p) => p.playerId);
     if (room.currentRound === 1) {
+      const ids = [...activeIds];
       for (let i = ids.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [ids[i], ids[j]] = [ids[j], ids[i]];
       }
       return ids;
     }
-    return [...room.turnOrder.slice(1), room.turnOrder[0]];
+    // 前ラウンド中に「配置済み」を理由に除外されたプレイヤーはturnOrderに残ったままなので、
+    // ローテーションした上で現在アクティブなプレイヤーだけに絞り込む。
+    const rotated = [...room.turnOrder.slice(1), room.turnOrder[0]];
+    return rotated.filter((id) => activeIds.includes(id));
   }
 }
