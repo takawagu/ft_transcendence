@@ -11,6 +11,11 @@ interface User {
   profileImage?: string;
 }
 
+interface GameRecord {
+  totalGames: number;
+  successCount: number;
+}
+
 interface FriendshipRequest {
   id: number;
   user: User;
@@ -62,6 +67,7 @@ export default function HomePage() {
   const [editPassword, setEditPassword] = useState('');
   const [editError, setEditError] = useState('');
   const [editSuccess, setEditSuccess] = useState('');
+  const [gameRecord, setGameRecord] = useState<GameRecord | null>(null);
 
   // Hydration state check
   const [mounted, setMounted] = useState(false);
@@ -306,7 +312,12 @@ export default function HomePage() {
     setEditPassword('');
     setEditError('');
     setEditSuccess('');
+    setGameRecord(null);
     setShowOptionsModal(true);
+
+    apiCall('/api/users/me')
+      .then(data => setGameRecord(data.gameRecord ?? { totalGames: 0, successCount: 0 }))
+      .catch(() => setGameRecord({ totalGames: 0, successCount: 0 }));
   };
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -985,6 +996,35 @@ export default function HomePage() {
                   onChange={e => setEditPassword(e.target.value)}
                   className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:border-indigo-500 transition-all"
                 />
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+                  ito 戦績
+                </p>
+                {gameRecord === null ? (
+                  <div className="text-xs text-zinc-500">読み込み中...</div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2 p-3 bg-zinc-950 rounded-lg border border-zinc-800 text-center">
+                    <div>
+                      <div className="text-lg font-bold text-white">{gameRecord.totalGames}</div>
+                      <div className="text-[10px] text-zinc-500 uppercase tracking-wider">対局数</div>
+                    </div>
+                    <div>
+                      <div className="text-lg font-bold text-emerald-400">{gameRecord.successCount}</div>
+                      <div className="text-[10px] text-zinc-500 uppercase tracking-wider">成功数</div>
+                    </div>
+                    <div>
+                      <div className="text-lg font-bold text-indigo-400">
+                        {gameRecord.totalGames > 0
+                          ? Math.round((gameRecord.successCount / gameRecord.totalGames) * 100)
+                          : 0}
+                        %
+                      </div>
+                      <div className="text-[10px] text-zinc-500 uppercase tracking-wider">成功率</div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800 mt-6">

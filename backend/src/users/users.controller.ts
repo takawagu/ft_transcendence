@@ -10,7 +10,19 @@ export class UsersController {
 
   @Get('me')
   async getMe(@Request() req: any) {
-    return req.user;
+    return this.prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        bio: true,
+        profileImage: true,
+        gameRecord: {
+          select: { totalGames: true, successCount: true },
+        },
+      },
+    });
   }
 
   @Put('me')
