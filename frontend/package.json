@@ -6,7 +6,8 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "next": "16.2.9",
@@ -15,6 +16,7 @@
     "socket.io-client": "^4.7.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

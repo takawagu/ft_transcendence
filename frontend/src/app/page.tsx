@@ -29,6 +29,12 @@ export default function HomePage() {
   const [isLoginTab, setIsLoginTab] = useState(true);
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [registerSuccessMsg, setRegisterSuccessMsg] = useState('');
+
+  // Real-time registration validation
+  type AvailabilityStatus = 'idle' | 'checking' | 'available' | 'taken';
+  const [usernameStatus, setUsernameStatus] = useState<AvailabilityStatus>('idle');
+  const [emailStatus, setEmailStatus] = useState<AvailabilityStatus>('idle');
 
   // Title/Form values
   const [email, setEmail] = useState('');
@@ -69,6 +75,44 @@ export default function HomePage() {
       setUser(JSON.parse(storedUser));
     }
   }, []);
+
+  // Real-time username availability check (register tab only)
+  useEffect(() => {
+    if (isLoginTab || !username.trim()) {
+      setUsernameStatus('idle');
+      return;
+    }
+    setUsernameStatus('checking');
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/auth/check-username?username=${encodeURIComponent(username)}`);
+        const data = await res.json();
+        setUsernameStatus(data.taken ? 'taken' : 'available');
+      } catch {
+        setUsernameStatus('idle');
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [username, isLoginTab]);
+
+  // Real-time email availability check (register tab only)
+  useEffect(() => {
+    if (isLoginTab || !email.trim()) {
+      setEmailStatus('idle');
+      return;
+    }
+    setEmailStatus('checking');
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(email)}`);
+        const data = await res.json();
+        setEmailStatus(data.taken ? 'taken' : 'available');
+      } catch {
+        setEmailStatus('idle');
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [email, isLoginTab]);
 
   // Fetch Friends and Requests
   const fetchFriendsData = async () => {
@@ -114,7 +158,10 @@ export default function HomePage() {
         setUser(null);
       }
       const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.message || 'エラーが発生しました');
+      const message = Array.isArray(errorData.message)
+        ? errorData.message.join(' / ')
+        : errorData.message;
+      throw new Error(message || 'エラーが発生しました');
     }
     return res.json();
   };
@@ -144,7 +191,11 @@ export default function HomePage() {
         });
         localStorage.setItem('ft_token', data.token);
         localStorage.setItem('ft_user', JSON.stringify(data.user));
-        setUser(data.user);
+        setRegisterSuccessMsg('🎉 登録が完了しました！');
+        setTimeout(() => {
+          setToken(data.token);
+          setUser(data.user);
+        }, 900);
       }
     } catch (err: any) {
       setAuthError(err.message || '認証に失敗しました。入力内容を確認してください。');
@@ -183,6 +234,7 @@ export default function HomePage() {
     setPassword('');
     setBio('');
     setProfileImage(AVATAR_PRESETS[0]);
+    setRegisterSuccessMsg('');
   };
 
   // Room Actions
@@ -336,12 +388,20 @@ export default function HomePage() {
             </p>
           </div>
 
+          {registerSuccessMsg ? (
+            <div className="py-10 text-center space-y-3">
+              <p className="text-2xl">{registerSuccessMsg}</p>
+              <p className="text-zinc-400 text-sm">ホーム画面に移動します...</p>
+            </div>
+          ) : (
+          <>
           {/* Form Tabs */}
           <div className="flex border-b border-zinc-800 mb-6">
             <button
               onClick={() => {
                 setIsLoginTab(true);
                 setAuthError('');
+                setRegisterSuccessMsg('');
               }}
               className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 ${
                 isLoginTab
@@ -355,6 +415,7 @@ export default function HomePage() {
               onClick={() => {
                 setIsLoginTab(false);
                 setAuthError('');
+                setRegisterSuccessMsg('');
               }}
               className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 ${
                 !isLoginTab
@@ -385,6 +446,16 @@ export default function HomePage() {
                 onChange={e => setEmail(e.target.value)}
                 className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
               />
+              {!isLoginTab && emailStatus !== 'idle' && (
+                <p className={`mt-1 text-xs ${
+                  emailStatus === 'taken' ? 'text-red-400' :
+                  emailStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
+                }`}>
+                  {emailStatus === 'checking' && '確認中...'}
+                  {emailStatus === 'taken' && 'そのメールアドレスはすでに使われています'}
+                  {emailStatus === 'available' && '使用可能です'}
+                </p>
+              )}
             </div>
 
             {!isLoginTab && (
@@ -400,6 +471,16 @@ export default function HomePage() {
                   onChange={e => setUsername(e.target.value)}
                   className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
                 />
+                {usernameStatus !== 'idle' && (
+                  <p className={`mt-1 text-xs ${
+                    usernameStatus === 'taken' ? 'text-red-400' :
+                    usernameStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
+                  }`}>
+                    {usernameStatus === 'checking' && '確認中...'}
+                    {usernameStatus === 'taken' && 'そのユーザー名はすでに使われています'}
+                    {usernameStatus === 'available' && '使用可能です'}
+                  </p>
+                )}
               </div>
             )}
 
@@ -415,11 +496,25 @@ export default function HomePage() {
                 onChange={e => setPassword(e.target.value)}
                 className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
               />
+              {!isLoginTab && password.length > 0 && (
+                <p className={`mt-1 text-xs ${password.length >= 8 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {password.length >= 8 ? '使用可能な長さです' : `あと${8 - password.length}文字以上必要です（8文字以上）`}
+                </p>
+              )}
             </div>
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={
+                loading ||
+                (!isLoginTab && (
+                  usernameStatus === 'taken' ||
+                  usernameStatus === 'checking' ||
+                  emailStatus === 'taken' ||
+                  emailStatus === 'checking' ||
+                  password.length < 8
+                ))
+              }
               className="w-full mt-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-4 py-3 font-semibold text-sm text-white disabled:opacity-50 transition-all shadow-lg hover:shadow-indigo-500/20 hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
             >
               {loading ? (
@@ -459,6 +554,8 @@ export default function HomePage() {
               </button>
             </div>
           </form>
+          </>
+          )}
         </div>
       </main>
     );
