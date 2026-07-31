@@ -1,10 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { Socket } from 'socket.io';
-import { ITO_EVENTS, JoinRoomPayload, RejoinPayload } from '../ito.events';
+import {
+  AwaitReturnPayload,
+  ExcludePlayerPayload,
+  ITO_EVENTS,
+  JoinRoomPayload,
+  RejoinPayload,
+} from '../ito.events';
 import { ItoRoom } from '../types';
 import { RoomStore } from './room.store';
 import { BroadcastService } from './broadcast.service';
 import { GameService } from './game.service';
+import { activeCount, awolPlayers, connectedPlayers } from './player-utils';
 
 @Injectable()
 export class RoomService {
@@ -28,8 +35,8 @@ export class RoomService {
           playerId,
           name: playerName,
           isRoomOwner: true,
-          connected: true,
-          excluded: false,
+          status: 'ACTIVE',
+          awaitingReturn: false,
           playerPhase: 'INPUT',
           hasSubmittedPrompt: false,
         },
@@ -46,7 +53,7 @@ export class RoomService {
     };
 
     this.store.addRoom(room);
-    this.store.linkSocket(client.id, roomId);
+    this.store.linkSocket(client.id, roomId, playerId);
     client.join(roomId);
 
     this.broadcast.broadcastRoomState(room);
@@ -79,12 +86,12 @@ export class RoomService {
       playerId: payload.playerId,
       name: payload.playerName,
       isRoomOwner: false,
-      connected: true,
-      excluded: false,
+      status: 'ACTIVE',
+      awaitingReturn: false,
       playerPhase: 'INPUT',
       hasSubmittedPrompt: false,
     });
-    this.store.linkSocket(client.id, room.id);
+    this.store.linkSocket(client.id, room.id, payload.playerId);
     client.join(room.id);
 
     this.broadcast.broadcastRoomState(room);
@@ -92,11 +99,11 @@ export class RoomService {
   }
 
   confirmMembers(client: Socket) {
-    const room = this.store.getRoomBySocketId(client.id);
-    if (!room) return;
+    const resolved = this.store.resolve(client.id);
+    if (!resolved) return;
+    const { room, player } = resolved;
 
-    const owner = room.players.find((p) => p.socketId === client.id);
-    if (!owner?.isRoomOwner || room.roomPhase !== 'WAITING') return;
+    if (!player.isRoomOwner || room.roomPhase !== 'WAITING') return;
     if (room.players.length < 2) {
       client.emit('ito:error', { message: '2人以上必要です' });
       return;
@@ -109,14 +116,25 @@ export class RoomService {
   }
 
   leaveRoom(client: Socket) {
-    const room = this.store.getRoomBySocketId(client.id);
-    if (!room) return;
+    const resolved = this.store.resolve(client.id);
+    if (!resolved) return;
+    const { room, player } = resolved;
 
-    room.players = room.players.filter((p) => p.socketId !== client.id);
+    // ゲーム進行中の離脱はturnOrder/boardOrder/roundHostIdの再計算を伴うため、
+    // このパスでは受け付けない。切断→ホストの除外操作を通すこと（不変条件I5）。
+    if (room.roomPhase !== 'WAITING') {
+      client.emit('ito:error', {
+        message: 'ゲーム中は退室できません',
+      });
+      return;
+    }
+
+    room.players = room.players.filter((p) => p.playerId !== player.playerId);
     this.store.unlinkSocket(client.id);
     client.leave(room.id);
 
     if (room.players.length === 0) {
+      this.store.unlinkRoomSockets(room);
       this.store.deleteRoom(room.id, room.roomCode);
       return;
     }
@@ -126,37 +144,34 @@ export class RoomService {
     }
 
     this.broadcast.broadcastRoomState(room);
-    console.log(`[ITO] player ${client.id} left room ${room.roomCode}`);
+    console.log(`[ITO] player ${player.name} left room ${room.roomCode}`);
   }
 
   dissolveRoom(client: Socket) {
-    const room = this.store.getRoomBySocketId(client.id);
-    if (!room) return;
+    const resolved = this.store.resolve(client.id);
+    if (!resolved) return;
+    const { room, player } = resolved;
 
-    const player = room.players.find((p) => p.socketId === client.id);
-    if (!player?.isRoomOwner) return;
+    if (!player.isRoomOwner) return;
 
     this.broadcast.emitToRoom(room.id, ITO_EVENTS.ROOM_DISSOLVED, {});
 
-    for (const p of room.players) {
-      this.store.unlinkSocket(p.socketId);
-    }
+    this.store.unlinkRoomSockets(room);
     this.store.deleteRoom(room.id, room.roomCode);
     console.log(`[ITO] room ${room.roomCode} dissolved by ${player.name}`);
   }
 
   handleDisconnect(socketId: string) {
-    const room = this.store.getRoomBySocketId(socketId);
-    if (!room) return;
+    const resolved = this.store.resolve(socketId);
     this.store.unlinkSocket(socketId);
-
-    const player = room.players.find((p) => p.socketId === socketId);
-    if (!player) return;
+    if (!resolved) return;
+    const { room, player } = resolved;
 
     if (room.roomPhase === 'WAITING') {
-      room.players = room.players.filter((p) => p.socketId !== socketId);
+      room.players = room.players.filter((p) => p.playerId !== player.playerId);
 
       if (room.players.length === 0) {
+        this.store.unlinkRoomSockets(room);
         this.store.deleteRoom(room.id, room.roomCode);
         return;
       }
@@ -167,28 +182,33 @@ export class RoomService {
       return;
     }
 
-    player.connected = false;
+    player.status = 'DISCONNECTED';
+    player.socketId = null;
 
-    if (!room.players.some((p) => p.connected)) {
+    if (connectedPlayers(room).length === 0) {
+      this.store.unlinkRoomSockets(room);
       this.store.deleteRoom(room.id, room.roomCode);
       return;
     }
 
     if (player.isRoomOwner) {
       player.isRoomOwner = false;
+      // 除外済みプレイヤーをホストに据えないよう、接続中→未除外の順に探す
       const newHost =
-        room.players.find((p) => p !== player && p.connected) ??
-        room.players.find((p) => p !== player);
+        connectedPlayers(room).find((p) => p !== player) ??
+        room.players.find((p) => p !== player && p.status !== 'EXCLUDED');
       if (newHost) newHost.isRoomOwner = true;
     }
 
-    room.paused = true;
-    room.pausedPlayerId = player.playerId;
+    // GAME_OVERは結果を眺めるだけのフェーズなので、抜けても進行を止める必要がない
+    if (room.roomPhase !== 'GAME_OVER') {
+      room.paused = true;
+      this.broadcast.emitToRoom(room.id, ITO_EVENTS.GAME_PAUSED, {
+        disconnectedPlayerId: player.playerId,
+        disconnectedPlayerName: player.name,
+      });
+    }
 
-    this.broadcast.emitToRoom(room.id, ITO_EVENTS.GAME_PAUSED, {
-      disconnectedPlayerId: player.playerId,
-      disconnectedPlayerName: player.name,
-    });
     this.broadcast.broadcastRoomState(room);
     console.log(`[ITO] ${player.name} disconnected, room ${room.roomCode} paused`);
   }
@@ -206,9 +226,22 @@ export class RoomService {
       return;
     }
 
+    // 除外済みの席は復活させない（復活させると集計対象に幽霊が戻ってしまう）。
+    // ホストが「復帰を待つ」を選んでいる/まだ何も選んでいない切断者は復帰できる。
+    if (player.status === 'EXCLUDED') {
+      client.emit(ITO_EVENTS.GAME_ABORTED, {
+        reason: 'ゲームから除外されました',
+      });
+      return;
+    }
+
+    // 同一ページ内でのsocket.io自動再接続では旧ソケットのリンクが残り得るため先に外す
+    if (player.socketId) this.store.unlinkSocket(player.socketId);
+
     player.socketId = client.id;
-    player.connected = true;
-    this.store.linkSocket(client.id, room.id);
+    player.status = 'ACTIVE';
+    player.awaitingReturn = false;
+    this.store.linkSocket(client.id, room.id, player.playerId);
     client.join(room.id);
 
     this.broadcast.emitResyncState(room, player);
@@ -220,105 +253,128 @@ export class RoomService {
     console.log(`[ITO] ${player.name} rejoined room ${room.roomCode}`);
   }
 
-  excludePlayer(client: Socket) {
-    const room = this.store.getRoomBySocketId(client.id);
-    if (!room || !room.paused || !room.pausedPlayerId) return;
+  excludePlayer(client: Socket, payload?: ExcludePlayerPayload) {
+    const resolved = this.store.resolve(client.id);
+    if (!resolved) return;
+    const { room, player: requester } = resolved;
+    if (!room.paused || !requester.isRoomOwner) return;
 
-    const requester = room.players.find((p) => p.socketId === client.id);
-    if (!requester?.isRoomOwner) return;
+    // 対象は必ず「今まさに切断中の人」に限る。再接続済みの人を誤って除外できないようにする。
+    // playerId未指定の場合は先頭の切断者（旧クライアント互換）。
+    const awol = awolPlayers(room);
+    const target = payload?.playerId
+      ? awol.find((p) => p.playerId === payload.playerId)
+      : awol[0];
 
-    const targetId = room.pausedPlayerId;
-    const target = room.players.find((p) => p.playerId === targetId);
     if (!target) {
-      room.paused = false;
-      room.pausedPlayerId = undefined;
-      this.broadcast.emitToRoom(room.id, ITO_EVENTS.GAME_RESUMED, {});
-      this.broadcast.broadcastRoomState(room);
+      client.emit('ito:error', {
+        message: '対象のプレイヤーは既に復帰しています',
+      });
       return;
     }
+    const targetId = target.playerId;
 
     // カードが既に場に公開済みかどうかで除外範囲を分岐する（reconnect-design.md §4）
     const cardAlreadyVisible = room.boardOrder.includes(targetId);
 
-    if (cardAlreadyVisible) {
-      // 配置済み: カードは場に残し、プレイヤーとしてのみ除外する。
-      // room.playersから削除すると正解判定(correctOrder)・結果画面のカード情報が失われるため、
-      // 削除せずexcludedフラグを立てるだけにする。turnOrder/boardOrderも変更しない
-      // （turnOrderから削除すると、まだ配置していない人がいるのに完了判定の分母が狂うため）。
-      target.excluded = true;
-    } else {
-      // 配置前: 誰にも見えていないため、プレイヤーとカードを丸ごと除外する
-      const removedTurnIndex = room.turnOrder.indexOf(targetId);
+    // room.playersからは削除しない（不変条件I5）。ラウンド途中で消すと、
+    // 場に出ているカードの番号・名前・画像が失われて正解判定と結果画面が壊れる。
+    // 実際に消えるのはラウンド境界のpurgeExcluded。
+    target.status = 'EXCLUDED';
+    target.awaitingReturn = false;
 
-      room.players = room.players.filter((p) => p.playerId !== targetId);
+    if (!cardAlreadyVisible) {
+      // 配置前: まだ誰にも見えていないので、この人の手番ごと消す。
+      // turnOrderに残すと本人の番でゲームが止まる。
       room.turnOrder = room.turnOrder.filter((id) => id !== targetId);
-      room.boardOrder = room.boardOrder.filter((id) => id !== targetId);
-
-      // 除外されたプレイヤーがcurrentTurnIndexより手前にいた場合、
-      // turnOrderが1つ詰まる分だけインデックスも詰める（そうしないと次のターンがずれる）
-      if (removedTurnIndex !== -1 && removedTurnIndex < room.currentTurnIndex) {
-        room.currentTurnIndex -= 1;
-      }
-      if (room.currentTurnIndex >= room.turnOrder.length) {
-        room.currentTurnIndex = Math.max(0, room.turnOrder.length - 1);
-      }
+      // 不変条件I4: SPEAKING中、次に置くべき人のindexは常に「場に出ている枚数」に等しい
+      room.currentTurnIndex = room.boardOrder.length;
     }
+    // 配置済みの場合はturnOrder/boardOrderをそのまま維持する。
+    // turnOrderから抜くと、まだ配置していない人が居るのに完了判定の分母がずれる。
 
     if (room.roundHostId === targetId) {
       const activeIds = new Set(
-        room.players.filter((p) => !p.excluded).map((p) => p.playerId),
+        room.players.filter((p) => p.status !== 'EXCLUDED').map((p) => p.playerId),
       );
       room.roundHostId = room.turnOrder.find((id) => activeIds.has(id)) ?? '';
     }
 
-    room.paused = false;
-    room.pausedPlayerId = undefined;
-
-    const activePlayerCount = room.players.filter((p) => !p.excluded).length;
-    if (activePlayerCount < 2) {
+    if (activeCount(room) < 2) {
       this.broadcast.emitToRoom(room.id, ITO_EVENTS.GAME_ABORTED, {
         reason: '人数不足のため終了しました',
       });
-      for (const p of room.players) {
-        this.store.unlinkSocket(p.socketId);
-      }
+      this.store.unlinkRoomSockets(room);
       this.store.deleteRoom(room.id, room.roomCode);
       return;
     }
 
-    // 除外で残りプレイヤーだけを見ると現フェーズの完了条件を既に満たしている場合があるため再判定する
-    this.gameService.checkProgressAfterExclusion(room);
+    // 切断者がまだ他に残っていればポーズは解除しない。
+    // ここで無条件に解除すると、未処理の切断者が幽霊のまま進行して集計が固まる。
+    if (awolPlayers(room).length === 0) {
+      room.paused = false;
+      // 除外で分母が減り、残りだけで現フェーズの完了条件を満たしている場合があるため再判定する
+      this.gameService.advancePhaseIfComplete(room);
+      this.broadcast.emitToRoom(room.id, ITO_EVENTS.GAME_RESUMED, {});
+    }
 
-    this.broadcast.emitToRoom(room.id, ITO_EVENTS.GAME_RESUMED, {});
+    this.broadcast.broadcastRoomState(room);
+  }
+
+  /** ホストが切断中プレイヤーの復帰を待つと宣言する。ゲームはポーズしたまま */
+  awaitReturn(client: Socket, payload: AwaitReturnPayload) {
+    const resolved = this.store.resolve(client.id);
+    if (!resolved) return;
+    const { room, player: requester } = resolved;
+    if (!room.paused || !requester.isRoomOwner) return;
+
+    const target = awolPlayers(room).find(
+      (p) => p.playerId === payload.playerId,
+    );
+    if (!target) {
+      client.emit('ito:error', {
+        message: '対象のプレイヤーは既に復帰しています',
+      });
+      return;
+    }
+
+    target.awaitingReturn = true;
     this.broadcast.broadcastRoomState(room);
   }
 
   abortGame(client: Socket) {
-    const room = this.store.getRoomBySocketId(client.id);
-    if (!room) return;
-
-    const requester = room.players.find((p) => p.socketId === client.id);
-    if (!requester?.isRoomOwner) return;
+    const resolved = this.store.resolve(client.id);
+    if (!resolved) return;
+    const { room, player: requester } = resolved;
+    if (!requester.isRoomOwner) return;
 
     this.broadcast.emitToRoom(room.id, ITO_EVENTS.GAME_ABORTED, {
       reason: 'ホストが中断しました',
     });
-    for (const p of room.players) {
-      this.store.unlinkSocket(p.socketId);
-    }
+    this.store.unlinkRoomSockets(room);
     this.store.deleteRoom(room.id, room.roomCode);
   }
 
   resumeGame(client: Socket) {
-    const room = this.store.getRoomBySocketId(client.id);
-    if (!room || !room.paused) return;
+    const resolved = this.store.resolve(client.id);
+    if (!resolved) return;
+    const { room, player: requester } = resolved;
+    if (!room.paused) return;
+    if (!requester.isRoomOwner) return;
 
-    const requester = room.players.find((p) => p.socketId === client.id);
-    if (!requester?.isRoomOwner) return;
+    // 切断者を抱えたまま再開すると、その人の手番や集計で必ず止まる。
+    // ホストは常に「除外」を選べるので、この制限で詰むことはない。
+    if (awolPlayers(room).length > 0) {
+      client.emit('ito:error', {
+        message: '切断中のプレイヤーがいるため再開できません',
+      });
+      return;
+    }
 
     room.paused = false;
-    room.pausedPlayerId = undefined;
     this.broadcast.emitToRoom(room.id, ITO_EVENTS.GAME_RESUMED, {});
+    // ポーズ中に完了していた画像生成などをここで消化する
+    this.gameService.advancePhaseIfComplete(room);
     this.broadcast.broadcastRoomState(room);
   }
 }

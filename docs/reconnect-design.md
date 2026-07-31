@@ -121,3 +121,19 @@ itoは2〜6人の幅を持つゲームで、1人減っても2人以上いれば�
 - 残り人数が1人以下になったらラウンド/ゲームを中断扱いにする。
 - 再接続時は新規`ito:rejoin`イベント＋`RESYNC_STATE`（個別送信）で、フェーズ・ターン順・盤面・自分の数字カード・チャット履歴を丸ごと復元する。チャットは`ItoRoom.messages`として新たに永続化する。
 - 「再接続を待つ」中に本人が再接続しても自動でポーズは解除せず、ホストが明示的に「再開」を押すまで停止したままにする。
+
+### 2026-07-31 の改訂（多重切断対応）
+
+当初の「切断者は常に1人」という暗黙の前提を外し、状態モデルを作り直した。
+詳細は [docs/disconnect-playerid-architecture.md](disconnect-playerid-architecture.md)。
+
+- プレイヤーの参加状態を`connected`/`excluded`の2ブールから、単一の`status`（`ACTIVE`/`DISCONNECTED`/`EXCLUDED`）へ集約。
+  identityは`playerId`に一本化し、`socketId`は「今紐づいている接続」を表すだけの値（切断中は`null`）に降格した。
+- `ItoRoom.pausedPlayerId`（単一値）を廃止。切断者一覧は`players[].status`から導出するため、**同時に何人切断しても取りこぼさない**。
+- ホストは切断者**1人ずつ**に「復帰を待つ」（`ito:awaitReturn`）か「除外して続行」（`ito:excludePlayer {playerId}`）を選ぶ。
+- **切断者が1人でも残っている間はポーズを解除できない**。除外は常に選べるため詰まない。
+- 除外対象は`DISCONNECTED`の人に限る（再接続済みの人を誤って除外できない）。
+- 除外済みプレイヤーの`rejoin`は拒否して離脱画面へ送る。ホストが未対応/「復帰を待つ」を選んだ切断者はいつでも復帰できる。
+- 除外済みプレイヤーは**ラウンド境界（`nextRound`/`startGame`冒頭）で`room.players`から削除**する。
+  ラウンド途中に消すと場のカード情報が失われるため、そこまでは`EXCLUDED`のまま席に残す。
+- `ito:leaveRoom`は`WAITING`フェーズ専用にした。進行中の離脱は「切断→ホストが除外」に一本化。

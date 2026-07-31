@@ -13,6 +13,14 @@ export type RoomPhase =
 
 export type PlayerPhase = 'INPUT' | 'GENERATING' | 'DONE';
 
+/**
+ * プレイヤーの参加状態。
+ * - ACTIVE: 接続中で通常どおりプレイ可能
+ * - DISCONNECTED: 切断中。席は保持され、ホストの対応待ちでゲームはポーズする
+ * - EXCLUDED: ホストの判断でゲームから除外済み。人数・進捗の集計対象外
+ */
+export type PlayerStatus = 'ACTIVE' | 'DISCONNECTED' | 'EXCLUDED';
+
 // ===== 共通型 =====
 
 export interface PlayerInfo {
@@ -25,8 +33,9 @@ export interface PlayerInGameInfo extends PlayerInfo {
   playerPhase?: PlayerPhase; // INPUT_GENERATING中のみ有効
   hasSubmittedPrompt: boolean; // 他プレイヤーから見える（プロンプト内容は非公開）
   imageUrl?: string; // SPEAKING以降で全員に公開
-  connected: boolean;
-  excluded: boolean;
+  status: PlayerStatus;
+  /** ホストが「復帰を待つ」を明示選択済み。表示専用でゲームロジックは参照しない */
+  awaitingReturn: boolean;
 }
 
 // ===== イベント名定数 =====
@@ -78,6 +87,9 @@ export const ITO_EVENTS = {
 
   /** 切断中のプレイヤーを除外してゲームを続行する（ルームオーナーのみ） */
   EXCLUDE_PLAYER: 'ito:excludePlayer',
+
+  /** 切断中のプレイヤーの復帰を待つと宣言する（ルームオーナーのみ） */
+  AWAIT_RETURN: 'ito:awaitReturn',
 
   /** ゲームを中断して終了する（ルームオーナーのみ） */
   ABORT_GAME: 'ito:abortGame',
@@ -179,6 +191,14 @@ export class RejoinPayload {
   playerId: string;
 }
 
+export class ExcludePlayerPayload {
+  playerId: string;
+}
+
+export class AwaitReturnPayload {
+  playerId: string;
+}
+
 // ===== ペイロード型（Server → Client） =====
 
 export interface RoomStatePayload {
@@ -189,7 +209,6 @@ export interface RoomStatePayload {
   currentTurnPlayerId?: string;
   boardOrder?: string[]; // 場のプレイヤーID順（SPEAKINGフェーズ以降）
   paused: boolean;
-  pausedPlayerId?: string;
   currentRound?: number;
   totalRounds?: number;
 }

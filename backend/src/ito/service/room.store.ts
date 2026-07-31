@@ -1,15 +1,32 @@
 import { Injectable } from '@nestjs/common';
-import { ItoRoom } from '../types';
+import { ItoPlayer, ItoRoom } from '../types';
 
 @Injectable()
 export class RoomStore {
   private rooms = new Map<string, ItoRoom>();
-  private socketToRoomId = new Map<string, string>();
+  private socketToPlayer = new Map<string, { roomId: string; playerId: string }>();
   private roomCodeToId = new Map<string, string>();
 
+  /**
+   * socketIdから部屋とプレイヤーを一度に解決する。
+   * player.socketIdとの一致を検証するため、再接続で無効化された古いソケットから
+   * イベントが届いても解決に失敗し、そのまま無視される。
+   */
+  resolve(socketId: string): { room: ItoRoom; player: ItoPlayer } | undefined {
+    const link = this.socketToPlayer.get(socketId);
+    if (!link) return undefined;
+
+    const room = this.rooms.get(link.roomId);
+    if (!room) return undefined;
+
+    const player = room.players.find((p) => p.playerId === link.playerId);
+    if (!player || player.socketId !== socketId) return undefined;
+
+    return { room, player };
+  }
+
   getRoomBySocketId(socketId: string): ItoRoom | undefined {
-    const roomId = this.socketToRoomId.get(socketId);
-    return roomId ? this.rooms.get(roomId) : undefined;
+    return this.resolve(socketId)?.room;
   }
 
   getRoomByCode(roomCode: string): ItoRoom | undefined {
@@ -26,12 +43,19 @@ export class RoomStore {
     this.roomCodeToId.set(room.roomCode, room.id);
   }
 
-  linkSocket(socketId: string, roomId: string): void {
-    this.socketToRoomId.set(socketId, roomId);
+  linkSocket(socketId: string, roomId: string, playerId: string): void {
+    this.socketToPlayer.set(socketId, { roomId, playerId });
   }
 
   unlinkSocket(socketId: string): void {
-    this.socketToRoomId.delete(socketId);
+    this.socketToPlayer.delete(socketId);
+  }
+
+  /** 部屋を消す前に、その部屋に紐づく全ソケットのリンクを外してMapのリークを防ぐ */
+  unlinkRoomSockets(room: ItoRoom): void {
+    for (const [socketId, link] of this.socketToPlayer) {
+      if (link.roomId === room.id) this.socketToPlayer.delete(socketId);
+    }
   }
 
   deleteRoom(roomId: string, roomCode: string): void {

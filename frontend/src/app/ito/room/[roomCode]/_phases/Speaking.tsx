@@ -13,6 +13,10 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
   const playerMap = new Map(state.players.map(p => [p.id, p]));
   const currentPlayer = playerMap.get(state.currentTurnPlayerId ?? '');
   const myPlayer = state.players.find(p => p.id === myId);
+  // 除外済みは数えない。ただし既に場にカードが出ている人は場の枚数に含まれ続ける
+  const boardTotal = state.players.filter(
+    p => p.status !== 'EXCLUDED' || state.boardOrder.includes(p.id)
+  ).length;
 
   // Drag and drop states
   const [isDraggingMyCard, setIsDraggingMyCard] = useState(false);
@@ -143,7 +147,7 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
 
           {/* Board Card Area */}
           <div className="flex-1 flex flex-col justify-center">
-            <p className="text-xs text-zinc-600 mb-2 font-semibold select-none">場 ({state.boardOrder.length} / {state.players.length}人)</p>
+            <p className="text-xs text-zinc-600 mb-2 font-semibold select-none">場 ({state.boardOrder.length} / {boardTotal}人)</p>
             {boardWithDraft.length === 0 ? (
               <div
                 onDragOver={e => {
@@ -372,7 +376,9 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
             <div
               key={p.id}
               className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-all select-none border
-                ${p.id === myId
+                ${p.status === 'EXCLUDED'
+                  ? 'bg-zinc-900/40 border-zinc-800/40 text-zinc-600 line-through opacity-50'
+                  : p.id === myId
                   ? 'bg-indigo-950/40 border-indigo-500/30 text-indigo-300 font-semibold shadow-inner'
                   : p.id === state.currentTurnPlayerId
                   ? 'bg-zinc-700/80 border-zinc-500/30 text-white font-medium ring-1 ring-zinc-500/20 animate-pulse'

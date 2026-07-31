@@ -38,6 +38,7 @@ export class BroadcastService {
   }
 
   emitResyncState(room: ItoRoom, player: ItoPlayer): void {
+    if (!player.socketId) return;
     const payload: ResyncStatePayload = {
       ...this.buildRoomStatePayload(room),
       theme: room.theme,
@@ -80,8 +81,8 @@ export class BroadcastService {
           room.roomPhase === 'INPUT_GENERATING' ? p.playerPhase : undefined,
         hasSubmittedPrompt: p.hasSubmittedPrompt,
         imageUrl: showImages ? p.imageUrl : undefined,
-        connected: p.connected,
-        excluded: p.excluded,
+        status: p.status,
+        awaitingReturn: p.awaitingReturn,
       })),
       roundHostId: room.roundHostId || undefined,
       currentTurnPlayerId:
@@ -90,7 +91,6 @@ export class BroadcastService {
           : undefined,
       boardOrder: room.boardOrder.length > 0 ? [...room.boardOrder] : undefined,
       paused: room.paused,
-      pausedPlayerId: room.pausedPlayerId,
       currentRound: room.currentRound,
       totalRounds: room.totalRounds,
     };

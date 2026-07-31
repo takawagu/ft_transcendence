@@ -22,6 +22,8 @@ import {
   ReorderCardsPayload,
   SendChatPayload,
   RejoinPayload,
+  ExcludePlayerPayload,
+  AwaitReturnPayload,
 } from './ito.events';
 
 @WebSocketGateway({ namespace: '/ito', cors: { origin: '*' } })
@@ -135,8 +137,19 @@ export class ItoGateway
   }
 
   @SubscribeMessage(ITO_EVENTS.EXCLUDE_PLAYER)
-  handleExcludePlayer(@ConnectedSocket() client: Socket) {
-    this.roomService.excludePlayer(client);
+  handleExcludePlayer(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: ExcludePlayerPayload,
+  ) {
+    this.roomService.excludePlayer(client, payload);
+  }
+
+  @SubscribeMessage(ITO_EVENTS.AWAIT_RETURN)
+  handleAwaitReturn(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: AwaitReturnPayload,
+  ) {
+    this.roomService.awaitReturn(client, payload);
   }
 
   @SubscribeMessage(ITO_EVENTS.ABORT_GAME)
