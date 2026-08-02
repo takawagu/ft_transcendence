@@ -10,11 +10,13 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
   const me = state.players.find(p => p.id === myId);
   const myPhase = me?.playerPhase ?? 'INPUT';
 
+  // サーバ値が無いときのフォールバックも除外者抜きで数える（分子・分母を必ず揃える）
+  const active = state.players.filter(p => p.status !== 'EXCLUDED');
   const submittedCount =
-    state.promptSubmittedCount ?? state.players.filter(p => p.hasSubmittedPrompt).length;
-  const totalCount = state.promptTotalCount ?? state.players.length;
+    state.promptSubmittedCount ?? active.filter(p => p.hasSubmittedPrompt).length;
+  const totalCount = state.promptTotalCount ?? active.length;
   const generatedCount =
-    state.imageGeneratedCount ?? state.players.filter(p => p.playerPhase === 'DONE').length;
+    state.imageGeneratedCount ?? active.filter(p => p.playerPhase === 'DONE').length;
 
   const handleSubmit = () => {
     if (!prompt.trim() || submitted) return;
@@ -81,8 +83,14 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
         <p className="text-xs text-zinc-600 mb-2">プレイヤー状況</p>
         <div className="flex gap-2 flex-wrap">
           {state.players.map(p => (
-            <div key={p.id} className="flex items-center gap-1.5 text-xs bg-zinc-800 rounded-full px-3 py-1">
+            <div
+              key={p.id}
+              className={`flex items-center gap-1.5 text-xs bg-zinc-800 rounded-full px-3 py-1 ${
+                p.status === 'EXCLUDED' ? 'opacity-40 line-through' : ''
+              }`}
+            >
               <span className={
+                p.status === 'EXCLUDED' ? 'text-zinc-600' :
                 p.playerPhase === 'DONE' ? 'text-green-400' :
                 p.playerPhase === 'GENERATING' ? 'text-yellow-400' :
                 'text-zinc-500'

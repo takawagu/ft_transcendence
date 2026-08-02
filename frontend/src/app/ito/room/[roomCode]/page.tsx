@@ -86,7 +86,6 @@ export default function RoomPage() {
         currentTurnPlayerId: data.currentTurnPlayerId,
         boardOrder: data.boardOrder ?? [],
         paused: data.paused ?? false,
-        pausedPlayerId: data.pausedPlayerId,
         currentRound: data.currentRound,
         totalRounds: data.totalRounds,
       }));
@@ -108,7 +107,6 @@ export default function RoomPage() {
         currentTurnPlayerId: data.currentTurnPlayerId,
         boardOrder: data.boardOrder ?? [],
         paused: data.paused ?? false,
-        pausedPlayerId: data.pausedPlayerId,
         myCardNumber: data.myCardNumber,
         myTheme: data.theme,
         chatMessages: data.messages ?? [],
@@ -189,12 +187,13 @@ export default function RoomPage() {
       setTimeout(() => router.push('/'), 3000);
     });
 
-    socket.on('ito:gamePaused', (data: any) => {
-      setState(prev => ({ ...prev, paused: true, pausedPlayerId: data.disconnectedPlayerId }));
+    socket.on('ito:gamePaused', () => {
+      // 誰が切断中かはroomStateのplayers[].statusが持つ
+      setState(prev => ({ ...prev, paused: true }));
     });
 
     socket.on('ito:gameResumed', () => {
-      setState(prev => ({ ...prev, paused: false, pausedPlayerId: undefined }));
+      setState(prev => ({ ...prev, paused: false }));
     });
 
     socket.on('ito:gameAborted', (data: any) => {

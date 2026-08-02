@@ -9,9 +9,10 @@ import {
   SubmitPromptPayload,
   DealtCardPayload,
 } from '../ito.events';
-import { ItoRoom } from '../types';
+import { ItoPlayer, ItoRoom } from '../types';
 import { RoomStore } from './room.store';
 import { BroadcastService } from './broadcast.service';
+import { activePlayers, purgeExcluded } from './player-utils';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -23,14 +24,18 @@ export class GameService {
   ) {}
 
   startGame(client: Socket, payload: StartGamePayload) {
-    const room = this.store.getRoomBySocketId(client.id);
-    if (!room) return;
+    const resolved = this.store.resolve(client.id);
+    if (!resolved) return;
+    const { room, player: owner } = resolved;
 
     if (room.paused) return;
+    if (!owner.isRoomOwner || room.roomPhase !== 'THEME_SETTING') return;
 
-    const owner = room.players.find((p) => p.socketId === client.id);
-    if (!owner?.isRoomOwner || room.roomPhase !== 'THEME_SETTING') return;
-    if (room.players.length < 2) {
+    // THEME_SETTING中に除外が起きた場合はnextRoundを通らないため、ここでも掃除する（冪等）
+    purgeExcluded(room);
+
+    const active = activePlayers(room);
+    if (active.length < 2) {
       client.emit('ito:error', { message: '2人以上必要です' });
       return;
     }
@@ -40,8 +45,8 @@ export class GameService {
     room.currentRound = room.currentRound === 0 ? 1 : room.currentRound + 1;
     room.roomPhase = 'DEALING';
 
-    const cards = this.dealCards(room.players.length);
-    room.players.forEach((p, i) => {
+    const cards = this.dealCards(active.length);
+    active.forEach((p, i) => {
       p.cardNumber = cards[i];
       p.playerPhase = 'INPUT';
       p.hasSubmittedPrompt = false;
@@ -49,7 +54,8 @@ export class GameService {
       p.prompt = undefined;
     });
 
-    room.players.forEach((p) => {
+    active.forEach((p) => {
+      if (!p.socketId) return;
       const dealt: DealtCardPayload = {
         cardNumber: p.cardNumber!,
         theme: room.theme,
@@ -66,11 +72,11 @@ export class GameService {
   }
 
   submitPrompt(client: Socket, payload: SubmitPromptPayload) {
-    const room = this.store.getRoomBySocketId(client.id);
-    if (!room || room.roomPhase !== 'INPUT_GENERATING' || room.paused) return;
-
-    const player = room.players.find((p) => p.socketId === client.id);
-    if (!player || player.playerPhase !== 'INPUT') return;
+    const resolved = this.store.resolve(client.id);
+    if (!resolved) return;
+    const { room, player } = resolved;
+    if (room.roomPhase !== 'INPUT_GENERATING' || room.paused) return;
+    if (player.playerPhase !== 'INPUT') return;
 
     player.prompt = payload.prompt;
     player.hasSubmittedPrompt = true;
@@ -78,23 +84,21 @@ export class GameService {
 
     this.broadcast.emitPlayerPhaseChange(room.id, player.playerId, 'GENERATING');
 
-    const submittedCount = room.players.filter(
-      (p) => p.hasSubmittedPrompt,
-    ).length;
+    // 分子・分母の両方を除外者抜きで数える。片方だけにすると完了条件が永久に成立しなくなる。
+    const active = activePlayers(room);
     this.broadcast.emitToRoom(room.id, ITO_EVENTS.PROMPT_SUBMITTED, {
-      submittedCount,
-      totalCount: room.players.length,
+      submittedCount: active.filter((p) => p.hasSubmittedPrompt).length,
+      totalCount: active.length,
     });
 
     this.stubGenerateImage(room, player.playerId);
   }
 
   placeCard(client: Socket, payload: PlaceCardPayload) {
-    const room = this.store.getRoomBySocketId(client.id);
-    if (!room || room.roomPhase !== 'SPEAKING' || room.paused) return;
-
-    const player = room.players.find((p) => p.socketId === client.id);
-    if (!player) return;
+    const resolved = this.store.resolve(client.id);
+    if (!resolved) return;
+    const { room, player } = resolved;
+    if (room.roomPhase !== 'SPEAKING' || room.paused) return;
     if (room.turnOrder[room.currentTurnIndex] !== player.playerId) return;
 
     const pos = Math.max(0, Math.min(payload.position, room.boardOrder.length));
@@ -118,11 +122,11 @@ export class GameService {
   }
 
   reorderCards(client: Socket, payload: ReorderCardsPayload) {
-    const room = this.store.getRoomBySocketId(client.id);
-    if (!room || room.roomPhase !== 'ORDERING' || room.paused) return;
-
-    const player = room.players.find((p) => p.socketId === client.id);
-    if (!player || room.roundHostId !== player.playerId) return;
+    const resolved = this.store.resolve(client.id);
+    if (!resolved) return;
+    const { room, player } = resolved;
+    if (room.roomPhase !== 'ORDERING' || room.paused) return;
+    if (room.roundHostId !== player.playerId) return;
 
     room.boardOrder = payload.orderedPlayerIds;
 
@@ -132,21 +136,30 @@ export class GameService {
   }
 
   confirmOrder(client: Socket) {
-    const room = this.store.getRoomBySocketId(client.id);
-    if (!room || room.roomPhase !== 'ORDERING' || room.paused) return;
+    const resolved = this.store.resolve(client.id);
+    if (!resolved) return;
+    const { room, player } = resolved;
+    if (room.roomPhase !== 'ORDERING' || room.paused) return;
+    if (room.roundHostId !== player.playerId) return;
 
-    const player = room.players.find((p) => p.socketId === client.id);
-    if (!player || room.roundHostId !== player.playerId) return;
+    // 正解順は「場に出ているカード」だけから作る。room.players全体から作ると、
+    // 場に出していないプレイヤー（除外者など）が混入してboardOrderと長さがズレ、
+    // every()が短い方で打ち切られて誤った成功判定が出る。
+    const placed = room.boardOrder
+      .map((id) => room.players.find((p) => p.playerId === id))
+      .filter((p): p is ItoPlayer => !!p);
 
-    const correctOrder = [...room.players]
+    const correctOrder = [...placed]
       .sort((a, b) => a.cardNumber! - b.cardNumber!)
       .map((p) => p.playerId);
 
-    const success = room.boardOrder.every((id, i) => id === correctOrder[i]);
+    const success =
+      room.boardOrder.length === correctOrder.length &&
+      room.boardOrder.every((id, i) => id === correctOrder[i]);
 
     room.roomPhase = 'REVEAL';
     this.broadcast.emitToRoom(room.id, ITO_EVENTS.CARDS_REVEALED, {
-      revealedCards: room.players.map((p) => ({
+      revealedCards: placed.map((p) => ({
         playerId: p.playerId,
         cardNumber: p.cardNumber!,
       })),
@@ -168,11 +181,10 @@ export class GameService {
   }
 
   sendChat(client: Socket, payload: SendChatPayload) {
-    const room = this.store.getRoomBySocketId(client.id);
-    if (!room || room.roomPhase !== 'ORDERING' || room.paused) return;
-
-    const player = room.players.find((p) => p.socketId === client.id);
-    if (!player) return;
+    const resolved = this.store.resolve(client.id);
+    if (!resolved) return;
+    const { room, player } = resolved;
+    if (room.roomPhase !== 'ORDERING' || room.paused) return;
 
     const chatMessage = {
       playerId: player.playerId,
@@ -186,16 +198,18 @@ export class GameService {
   }
 
   /**
-   * 除外（ito:excludePlayer）でプレイヤーが減った直後に呼ぶ。
-   * INPUT_GENERATING/SPEAKINGは人数カウントに達した時点でのみ次フェーズへ進む作りのため、
-   * 除外で分母が減っても自動では進まない。ここで残りプレイヤーだけで条件を満たしているか再判定する。
+   * 現フェーズの完了条件を満たしていれば次フェーズへ進める。
+   * 完了判定は本来「人数カウントに達した瞬間」にしか走らないため、
+   * 除外で分母が減ったときやポーズ解除で保留分を消化するときに呼び直す必要がある。
+   * ポーズ中は何もしないので、どこから呼んでも安全。
    */
-  checkProgressAfterExclusion(room: ItoRoom): void {
+  advancePhaseIfComplete(room: ItoRoom): void {
+    if (room.paused) return;
+
     if (room.roomPhase === 'INPUT_GENERATING') {
-      const activePlayers = room.players.filter((p) => !p.excluded);
+      const active = activePlayers(room);
       const allDone =
-        activePlayers.length > 0 &&
-        activePlayers.every((p) => p.playerPhase === 'DONE');
+        active.length > 0 && active.every((p) => p.playerPhase === 'DONE');
       if (allDone) {
         this.transitionToSpeaking(room);
       }
@@ -214,10 +228,10 @@ export class GameService {
   // ===== private =====
 
   private async recordRoundResults(room: ItoRoom, success: boolean) {
-    const activePlayers = room.players.filter((p) => !p.excluded);
+    const active = activePlayers(room);
 
     await Promise.all(
-      activePlayers.map((p) => {
+      active.map((p) => {
         const userId = Number(p.playerId);
         if (!Number.isInteger(userId)) return Promise.resolve();
 
@@ -243,22 +257,19 @@ export class GameService {
       player.imageUrl = `https://placehold.co/300x300/1a1a2e/00d4ff?text=${encodeURIComponent(player.name)}`;
       player.playerPhase = 'DONE';
 
-      const generatedCount = room.players.filter(
-        (p) => p.playerPhase === 'DONE',
-      ).length;
+      const active = activePlayers(room);
 
       this.broadcast.emitPlayerPhaseChange(room.id, playerId, 'DONE');
 
       this.broadcast.emitToRoom(room.id, ITO_EVENTS.IMAGE_GENERATED, {
         playerId,
         imageUrl: player.imageUrl,
-        generatedCount,
-        totalCount: room.players.length,
+        generatedCount: active.filter((p) => p.playerPhase === 'DONE').length,
+        totalCount: active.length,
       });
 
-      if (generatedCount === room.players.length) {
-        this.transitionToSpeaking(room);
-      }
+      // ポーズ中ならここでは進めない。ホストが再開したときにまとめて消化される。
+      this.advancePhaseIfComplete(room);
     }, delay);
   }
 
@@ -283,19 +294,25 @@ export class GameService {
   }
 
   nextRound(client: Socket) {
-    const room = this.store.getRoomBySocketId(client.id);
-    if (!room || room.roomPhase !== 'ROUND_RESULT' || room.paused) return;
+    const resolved = this.store.resolve(client.id);
+    if (!resolved) return;
+    const { room, player: requester } = resolved;
+    if (room.roomPhase !== 'ROUND_RESULT' || room.paused) return;
+    if (!requester.isRoomOwner) return;
 
-    const requester = room.players.find((p) => p.socketId === client.id);
-    if (!requester?.isRoomOwner) return;
+    // 結果表示はもう終わっているので、除外済みプレイヤーをここで席ごと片付ける。
+    // 残したままだとカード配布と進捗の分母に混入し、次ラウンドが永久に完了しなくなる。
+    purgeExcluded(room);
 
     // Reset game state for the new round but keep players, totalRounds and currentRound
     room.roomPhase = 'THEME_SETTING';
     room.theme = '';
     room.boardOrder = [];
-    room.turnOrder = [];
     room.currentTurnIndex = 0;
     room.roundHostId = '';
+    // turnOrderは意図的に残す。buildTurnOrderが次ラウンドの手番順を
+    // 「前ラウンドの順を1つ回転させたもの」として組み立てる回転元になるため、
+    // ここで空にすると次ラウンドの手番順が空になりゲームが進行不能になる。
 
     // Reset players for the new round
     room.players.forEach((p) => {
@@ -311,11 +328,11 @@ export class GameService {
   }
 
   endGame(client: Socket) {
-    const room = this.store.getRoomBySocketId(client.id);
-    if (!room || room.roomPhase !== 'ROUND_RESULT' || room.paused) return;
-
-    const requester = room.players.find((p) => p.socketId === client.id);
-    if (!requester?.isRoomOwner) return;
+    const resolved = this.store.resolve(client.id);
+    if (!resolved) return;
+    const { room, player: requester } = resolved;
+    if (room.roomPhase !== 'ROUND_RESULT' || room.paused) return;
+    if (!requester.isRoomOwner) return;
 
     room.roomPhase = 'GAME_OVER';
     this.broadcast.broadcastPhaseChange(room);
@@ -332,18 +349,26 @@ export class GameService {
   }
 
   private buildTurnOrder(room: ItoRoom): string[] {
-    const activeIds = room.players.filter((p) => !p.excluded).map((p) => p.playerId);
-    if (room.currentRound === 1) {
-      const ids = [...activeIds];
-      for (let i = ids.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [ids[i], ids[j]] = [ids[j], ids[i]];
-      }
-      return ids;
-    }
+    const activeIds = activePlayers(room).map((p) => p.playerId);
+
+    // 前ラウンドの手番順が無ければ（初回ラウンド）ランダムに決める。
+    if (room.turnOrder.length === 0) return this.shuffle(activeIds);
+
     // 前ラウンド中に「配置済み」を理由に除外されたプレイヤーはturnOrderに残ったままなので、
     // ローテーションした上で現在アクティブなプレイヤーだけに絞り込む。
     const rotated = [...room.turnOrder.slice(1), room.turnOrder[0]];
-    return rotated.filter((id) => activeIds.includes(id));
+    const next = rotated.filter((id) => activeIds.includes(id));
+    // turnOrderに載っていないアクティブプレイヤーが居れば末尾に補い、必ず全員を含める。
+    const missing = activeIds.filter((id) => !next.includes(id));
+    return [...next, ...missing];
+  }
+
+  private shuffle(ids: string[]): string[] {
+    const shuffled = [...ids];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
   }
 }

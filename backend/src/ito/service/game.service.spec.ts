@@ -10,8 +10,8 @@ function makePlayer(overrides: Partial<ItoPlayer>): ItoPlayer {
     playerId: 'unset',
     name: `p${overrides.playerId}`,
     isRoomOwner: false,
-    connected: true,
-    excluded: false,
+    status: 'ACTIVE',
+    awaitingReturn: false,
     cardNumber: 50,
     playerPhase: 'DONE',
     hasSubmittedPrompt: true,
@@ -40,12 +40,19 @@ function makeRoom(overrides: Partial<ItoRoom>): ItoRoom {
 
 describe('GameService turn order', () => {
   let service: GameService;
-  let broadcast: jest.Mocked<Pick<BroadcastService, 'emitToRoom' | 'broadcastRoomState'>>;
+  let broadcast: jest.Mocked<
+    Pick<
+      BroadcastService,
+      'emitToRoom' | 'broadcastRoomState' | 'broadcastPhaseChange' | 'emitToSocket'
+    >
+  >;
 
   beforeEach(() => {
     broadcast = {
       emitToRoom: jest.fn(),
       broadcastRoomState: jest.fn(),
+      broadcastPhaseChange: jest.fn(),
+      emitToSocket: jest.fn(),
     };
     const store = new RoomStore();
     const prisma = {} as PrismaService;
@@ -74,7 +81,7 @@ describe('GameService turn order', () => {
       currentRound: 2,
       turnOrder: ['a', 'b', 'c'],
       players: [
-        makePlayer({ playerId: 'a', excluded: true, connected: false }),
+        makePlayer({ playerId: 'a', status: 'EXCLUDED' }),
         makePlayer({ playerId: 'b' }),
         makePlayer({ playerId: 'c' }),
       ],
@@ -93,7 +100,7 @@ describe('GameService turn order', () => {
       currentRound: 2,
       turnOrder: ['a', 'b', 'c'],
       players: [
-        makePlayer({ playerId: 'a', excluded: true, connected: false }),
+        makePlayer({ playerId: 'a', status: 'EXCLUDED' }),
         makePlayer({ playerId: 'b' }),
         makePlayer({ playerId: 'c' }),
       ],
@@ -105,7 +112,63 @@ describe('GameService turn order', () => {
     expect(room.roundHostId).not.toBe('a');
     const currentTurnPlayerId = room.turnOrder[room.currentTurnIndex];
     const currentPlayer = room.players.find((p) => p.playerId === currentTurnPlayerId);
-    expect(currentPlayer?.excluded).toBe(false);
+    expect(currentPlayer?.status).toBe('ACTIVE');
+  });
+
+  it('nextRound keeps the previous turn order so round 2 can rotate from it', () => {
+    // 回帰: nextRound()がturnOrderを空にしていた頃は、次ラウンドのbuildTurnOrderが
+    // 空配列を回転元にして[]を返し、手番が誰にも回らずゲームが停止していた。
+    const room = makeRoom({
+      roomPhase: 'ROUND_RESULT',
+      currentRound: 1,
+      turnOrder: ['a', 'b', 'c'],
+      boardOrder: ['a', 'b', 'c'],
+      players: [
+        makePlayer({ playerId: 'a', isRoomOwner: true }),
+        makePlayer({ playerId: 'b' }),
+        makePlayer({ playerId: 'c' }),
+      ],
+    });
+    const store = (service as any).store as RoomStore;
+    store.addRoom(room);
+    store.linkSocket('sock-a', room.id, 'a');
+
+    service.nextRound({ id: 'sock-a' } as any);
+    expect(room.turnOrder).toEqual(['a', 'b', 'c']);
+
+    room.currentRound = 2;
+    (service as any).transitionToSpeaking(room);
+
+    expect(room.turnOrder).toEqual(['b', 'c', 'a']);
+    expect(room.roundHostId).toBe('b');
+    expect(room.turnOrder[room.currentTurnIndex]).toBe('b');
+  });
+
+  it('nextRound removes excluded players so they stop counting toward the next round', () => {
+    // 回帰: 除外済みプレイヤーがplayersに残り続けると、次ラウンドでカードが配られ
+    // 進捗の分母にも入り、本人は切断済みで応答できないため永久に完了しなかった。
+    const room = makeRoom({
+      roomPhase: 'ROUND_RESULT',
+      currentRound: 1,
+      turnOrder: ['a', 'b', 'c'],
+      boardOrder: ['a', 'b', 'c'],
+      players: [
+        makePlayer({ playerId: 'a', isRoomOwner: true }),
+        makePlayer({ playerId: 'b' }),
+        makePlayer({ playerId: 'c', status: 'EXCLUDED', socketId: null }),
+      ],
+    });
+    const store = (service as any).store as RoomStore;
+    store.addRoom(room);
+    store.linkSocket('sock-a', room.id, 'a');
+
+    service.nextRound({ id: 'sock-a' } as any);
+
+    expect(room.players.map((p) => p.playerId)).toEqual(['a', 'b']);
+
+    room.currentRound = 2;
+    (service as any).transitionToSpeaking(room);
+    expect(room.turnOrder).toEqual(['b', 'a']);
   });
 
   it('round>=2: all players excluded except host still produces a valid single-player order', () => {
@@ -113,8 +176,8 @@ describe('GameService turn order', () => {
       currentRound: 3,
       turnOrder: ['a', 'b', 'c'],
       players: [
-        makePlayer({ playerId: 'a', excluded: true, connected: false }),
-        makePlayer({ playerId: 'b', excluded: true, connected: false }),
+        makePlayer({ playerId: 'a', status: 'EXCLUDED' }),
+        makePlayer({ playerId: 'b', status: 'EXCLUDED' }),
         makePlayer({ playerId: 'c' }),
       ],
     });

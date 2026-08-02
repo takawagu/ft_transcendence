@@ -11,6 +11,9 @@ export type RoomPhase =
 
 export type PlayerPhase = 'INPUT' | 'GENERATING' | 'DONE';
 
+/** ACTIVE: 接続中 / DISCONNECTED: 切断中でホストの対応待ち / EXCLUDED: 除外済み */
+export type PlayerStatus = 'ACTIVE' | 'DISCONNECTED' | 'EXCLUDED';
+
 export interface PlayerInGameInfo {
   id: string;
   name: string;
@@ -18,8 +21,9 @@ export interface PlayerInGameInfo {
   playerPhase?: PlayerPhase;
   hasSubmittedPrompt: boolean;
   imageUrl?: string;
-  connected: boolean;
-  excluded: boolean;
+  status: PlayerStatus;
+  /** ホストが「復帰を待つ」を選択済み */
+  awaitingReturn: boolean;
 }
 
 export interface ChatMessage {
@@ -53,7 +57,6 @@ export interface GameState {
   imageGeneratedCount?: number;
   imageTotalCount?: number;
   paused: boolean;
-  pausedPlayerId?: string;
   aborted?: string;
   currentRound?: number;
   totalRounds?: number;
