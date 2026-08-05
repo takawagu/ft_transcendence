@@ -112,7 +112,6 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
 
       {/* Card */}
       <div className="text-center flex flex-col items-center">
-        <p className="text-zinc-500 text-sm mb-3">あなたのカード番号</p>
         
         <div className="card-container">
           <div className={`card-inner ${isDealing ? 'dealing' : ''} ${isFlipped ? 'flipped' : ''}`}>
@@ -177,8 +176,8 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
           </div>
         </div>
 
-        <p className="text-zinc-400 mt-4 text-sm">
-          お題: <span className="text-white font-semibold">{state.myTheme ?? ''}</span>
+        <p className="text-zinc-400 mt-5 text-base">
+          お題: <span className="text-white font-bold text-lg">{state.myTheme ?? ''}</span>
         </p>
       </div>
 
