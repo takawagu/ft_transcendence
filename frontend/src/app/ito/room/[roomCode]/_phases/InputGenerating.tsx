@@ -117,8 +117,8 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
           <div className={`card-inner ${isDealing ? 'dealing' : ''} ${isFlipped ? 'flipped' : ''}`}>
             {/* Card Back */}
             <div className="card-back">
-              <div className="text-sm uppercase tracking-widest text-indigo-400 font-bold mb-2">AITO</div>
-              <div className="w-12 h-12 rounded-full border border-indigo-500/50 flex items-center justify-center text-xl font-bold text-indigo-300 bg-indigo-950/50">
+              <div className="text-sm uppercase tracking-widest text-indigo-400 font-extrabold mb-2 font-cyber">AITO</div>
+              <div className="w-12 h-12 rounded-full border border-indigo-500/50 flex items-center justify-center text-xl font-bold text-indigo-300 bg-indigo-950/50 font-cyber">
                 ?
               </div>
             </div>
@@ -176,7 +176,7 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
           </div>
         </div>
 
-        <p className="text-zinc-400 mt-5 text-base">
+        <p className="text-zinc-400 mt-5 text-base font-pixel">
           お題: <span className="text-white font-bold text-lg">{state.myTheme ?? ''}</span>
         </p>
       </div>
@@ -184,9 +184,9 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
       {/* Input area */}
       <div className="w-full max-w-sm">
         {!submitted && myPhase === 'INPUT' ? (
-          <div className="space-y-3">
+          <div className="cyber-panel-flat rounded-xl p-4 space-y-4">
             <textarea
-              className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+              className="w-full rounded-lg bg-zinc-950/80 border border-zinc-800/80 px-4 py-3 text-white placeholder-zinc-500 outline-none focus:ring-1 focus:ring-indigo-500 resize-none text-sm font-pixel"
               rows={3}
               placeholder={`「${state.myTheme ?? 'お題'}」として、あなたの数字のイメージを入力...`}
               value={prompt}
@@ -195,9 +195,9 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
             <button
               onClick={handleSubmit}
               disabled={!prompt.trim()}
-              className="w-full rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-500 disabled:opacity-40 transition-colors"
+              className="w-full rounded-lg px-4 py-3 font-bold text-sm transition-all cyber-btn-cyan cursor-pointer disabled:opacity-30"
             >
-              送信する
+              送信
             </button>
           </div>
         ) : myPhase === 'GENERATING' ? (
