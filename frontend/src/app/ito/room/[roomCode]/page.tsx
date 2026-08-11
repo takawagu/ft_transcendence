@@ -41,6 +41,35 @@ export default function RoomPage() {
   const emit = (event: string, payload?: unknown) => {
     socketRef.current?.emit(event, payload);
   };
+
+  const [scale, setScale] = useState(1);
+  const [isPortrait, setIsPortrait] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      const portrait = windowWidth < windowHeight;
+
+      // Dynamic virtual size based on orientation
+      const virtualWidth = portrait ? 480 : 1024;
+      const virtualHeight = portrait ? 800 : 720;
+      
+      const scaleX = windowWidth / virtualWidth;
+      const scaleY = windowHeight / virtualHeight;
+      const newScale = Math.min(scaleX, scaleY);
+      
+      // Limit minimum scale to 0.65 to maintain readability
+      const finalScale = Math.max(newScale, 0.65);
+      
+      setScale(Math.min(finalScale, 1.5));
+      setIsPortrait(portrait);
+    };
+    
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   useEffect(() => {
     const storedToken = localStorage.getItem('ft_token');
     const storedUser = localStorage.getItem('ft_user');
@@ -233,7 +262,7 @@ export default function RoomPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-900 text-white">
+    <div className="h-screen overflow-auto text-white flex flex-col relative items-center justify-center">
       {state.error && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 text-sm">
           {state.error}
@@ -242,7 +271,6 @@ export default function RoomPage() {
       {dissolved && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-zinc-800 rounded-2xl p-10 flex flex-col items-center gap-6 shadow-2xl">
-            <p className="text-4xl">🚪</p>
             <p className="text-xl font-bold text-white">部屋が解散されました</p>
             <p className="text-zinc-400 text-sm">まもなくトップへ戻ります...</p>
             <button
@@ -257,7 +285,6 @@ export default function RoomPage() {
       {abortedReason && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-zinc-800 rounded-2xl p-10 flex flex-col items-center gap-6 shadow-2xl">
-            <p className="text-4xl">⏹️</p>
             <p className="text-xl font-bold text-white">{abortedReason}</p>
             <p className="text-zinc-400 text-sm">まもなくトップへ戻ります...</p>
             <button
@@ -272,14 +299,27 @@ export default function RoomPage() {
       {state.paused && !abortedReason && (
         <PauseOverlay state={state} myId={myId} emit={emit} />
       )}
-      {renderPhase()}
+
+      {/* Game Scaled Container (Dynamic Virtual Resolution) */}
+      <div
+        className="flex-shrink-0 flex flex-col relative overflow-hidden"
+        style={{
+          width: isPortrait ? '480px' : '1024px',
+          height: isPortrait ? '800px' : '720px',
+          transform: `scale(${scale})`,
+          transformOrigin: 'center center',
+          pointerEvents: state.paused ? 'none' : 'auto',
+        }}
+      >
+        {renderPhase()}
+      </div>
     </div>
   );
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex items-center justify-center text-zinc-400 text-lg">
+    <div className="h-screen flex items-center justify-center text-zinc-400 text-lg">
       {children}
     </div>
   );

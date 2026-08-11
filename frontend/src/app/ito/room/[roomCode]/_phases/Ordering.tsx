@@ -95,7 +95,7 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col gap-6 p-6 max-w-6xl mx-auto w-full">
+    <div className="h-full w-full flex flex-col gap-6 p-6 max-w-6xl mx-auto">
       {/* Main Split Layout */}
       <div className="flex flex-col md:flex-row gap-6 items-stretch w-full flex-1">
         

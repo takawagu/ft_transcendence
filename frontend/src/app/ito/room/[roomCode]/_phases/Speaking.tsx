@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { PhaseProps } from '@/lib/ito/types';
 
 const DropIndicator = () => (
-  <div className="w-1.5 h-28 bg-indigo-500 rounded-full animate-pulse mx-1 shadow-lg shadow-indigo-500/50 flex-shrink-0" />
+  <div className="w-1.5 h-36 bg-indigo-500 rounded-full animate-pulse mx-1 shadow-lg shadow-indigo-500/50 flex-shrink-0" />
 );
 
 export function Speaking({ state, myId, emit }: PhaseProps) {
@@ -17,6 +17,99 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
   const boardTotal = state.players.filter(
     p => p.status !== 'EXCLUDED' || state.boardOrder.includes(p.id)
   ).length;
+
+  // Toggling between image and number card
+  const [showNumber, setShowNumber] = useState(false);
+  const [inspectPlayerId, setInspectPlayerId] = useState<string | null>(null);
+
+  const toggleShowNumber = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowNumber(prev => !prev);
+  };
+
+  const cardNumber = state.myCardNumber ?? 0;
+  const nodeCount = Math.max(4, Math.min(12, Math.floor(cardNumber / 10) + 3));
+  const nodes = Array.from({ length: nodeCount }, (_, i) => {
+    const angle = (i * 2 * Math.PI) / nodeCount;
+    const rSeed = Math.sin(cardNumber * (i + 1) * 43758.5453) * 0.5 + 0.5;
+    const r = 35 + rSeed * 25;
+    return {
+      x: 90 + Math.cos(angle) * r,
+      y: 120 + Math.sin(angle) * r,
+      size: ((i + cardNumber) % 3) + 2,
+    };
+  });
+
+  const renderCardContent = (pid: string, isLarge: boolean) => {
+    const p = playerMap.get(pid);
+    const isMe = pid === myId;
+    
+    if (isMe && showNumber) {
+      return (
+        <div 
+          onClick={toggleShowNumber}
+          className="w-full h-full bg-gradient-to-br from-[#0b132b] to-[#1c2541] border border-cyan-500 rounded-lg overflow-hidden relative flex flex-col items-center justify-center cursor-pointer select-none"
+        >
+          <svg width="100%" height="100%" viewBox="0 0 180 240" className="absolute top-0 left-0" preserveAspectRatio="xMidYMid slice">
+            {nodes.map((node, i) => {
+              const nextNode = nodes[(i + 1) % nodes.length];
+              return (
+                <line
+                  key={`line-${i}`}
+                  x1={node.x}
+                  y1={node.y}
+                  x2={nextNode.x}
+                  y2={nextNode.y}
+                  stroke="rgba(0, 240, 255, 0.25)"
+                  strokeWidth="1.5"
+                />
+              );
+            })}
+            {nodes.map((node, i) => (
+              <circle
+                key={`node-${i}`}
+                cx={node.x}
+                cy={node.y}
+                r={node.size * 1.2}
+                fill="#00f0ff"
+                opacity="0.8"
+              />
+            ))}
+          </svg>
+          <div className="relative z-10 flex flex-col items-center justify-center pointer-events-none">
+            <span 
+              className={`font-extrabold tracking-tight text-white font-cyber ${isLarge ? 'text-6xl' : 'text-4xl'}`}
+              style={{ textShadow: '0 0 8px rgba(0, 240, 255, 0.5)' }}
+            >
+              {state.myCardNumber ?? '?'}
+            </span>
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+      <div 
+        onClick={isMe ? toggleShowNumber : () => setInspectPlayerId(pid)}
+        className={`w-full h-full relative ${isMe ? 'cursor-pointer' : 'cursor-zoom-in'}`}
+      >
+        {p?.imageUrl ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={p.imageUrl}
+            alt={p.name}
+            className="w-full h-full rounded-lg object-cover"
+            draggable={false}
+          />
+        ) : (
+          <div className="w-full h-full rounded-lg bg-zinc-700 flex flex-col items-center justify-center text-zinc-400 font-bold select-none text-sm">
+            <span>{p?.name?.[0]}</span>
+            <span className="text-[8px] text-zinc-500 font-normal mt-1 truncate max-w-[80px]">{p?.name}</span>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Drag and drop states
   const [isDraggingMyCard, setIsDraggingMyCard] = useState(false);
@@ -116,11 +209,17 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
     setDragOverPosition(null);
   };
 
+  const handleHandClick = () => {
+    if (canInteract && draftPosition === null) {
+      setDraftPosition(state.boardOrder.length);
+    }
+  };
+
   return (
-    <div className="min-h-screen flex flex-col gap-6 p-6 max-w-4xl mx-auto w-full">
+    <div className="h-full w-full flex flex-col justify-center items-center gap-8 p-6 max-w-5xl mx-auto">
 
       {/* Main Split Columns (Responsive side-by-side) */}
-      <div className="flex flex-col md:flex-row gap-6 items-stretch w-full">
+      <div className="flex flex-col md:flex-row gap-8 items-center justify-center w-full min-h-0">
 
         {/* Left Pane: Theme, Board, and Drag Instructions */}
         <div className="flex-1 bg-zinc-800/10 border border-zinc-800/40 rounded-2xl p-5 flex flex-col gap-4">
@@ -136,11 +235,6 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                 ) : (
                   <span><span className="text-white font-semibold">{currentPlayer?.name}</span> のターン</span>
                 )}
-              </div>
-            )}
-            {isMyTurn && draftPosition !== null && (
-              <div className="mt-2 text-xs text-indigo-300 font-medium">
-                位置を確認して「確定する」を押してください（それまで何度でも置き直せます）
               </div>
             )}
           </div>
@@ -169,7 +263,7 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                     handleDraftPlace(0);
                   }
                 }}
-                className={`border rounded-xl p-8 text-center text-sm transition-all duration-200 flex items-center justify-center min-h-[140px] select-none
+                className={`border rounded-xl p-8 text-center text-sm transition-all duration-200 flex items-center justify-center min-h-[180px] select-none
                   ${canInteract ? 'cursor-pointer hover:bg-zinc-800/40' : ''}
                   ${dragOverPosition === 0
                     ? 'border-indigo-500 bg-indigo-900/20 text-indigo-300 scale-[1.02] shadow-lg shadow-indigo-500/10'
@@ -184,7 +278,7 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                 onDragOver={handleDragOverBoard}
                 onDragLeave={handleBoardDragLeave}
                 onDrop={handleDropBoard}
-                className="flex items-center justify-center gap-1.5 flex-wrap py-4 bg-zinc-800/20 rounded-xl px-4 min-h-[140px] border border-zinc-800/40 relative"
+                className="flex items-center justify-center gap-1.5 flex-wrap py-4 bg-zinc-800/20 rounded-xl px-4 min-h-[180px] border border-zinc-800/40 relative"
               >
                 {boardWithDraft.map((pid, i) => {
                   const p = playerMap.get(pid);
@@ -193,17 +287,6 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                     <div key={`${pid}-${i}`} className="flex items-center gap-1.5">
                       {/* Render drop indicator if dragOverPosition matches this index */}
                       {dragOverPosition === i && <DropIndicator />}
-
-                      {/* Plus button for click-placement before each card */}
-                      {canInteract && (
-                        <button
-                          onClick={() => handleDraftPlace(i)}
-                          className="w-6 h-6 rounded-full bg-indigo-600/70 hover:bg-indigo-500 text-white flex items-center justify-center text-xs shadow-md transition-all hover:scale-110 cursor-pointer"
-                          title="ここに置く"
-                        >
-                          +
-                        </button>
-                      )}
 
                       {/* Card Container */}
                       <div
@@ -220,30 +303,17 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                         }}
                         onDragOver={e => handleDragOverCard(e, i)}
                         onDrop={e => handleDropCard(e, i)}
-                        className={`text-center bg-zinc-800 p-1.5 rounded-xl border transition-all duration-200 select-none w-28 h-28 flex items-center justify-center overflow-hidden relative
+                        className={`text-center bg-zinc-800 p-1.5 rounded-xl border transition-all duration-200 select-none w-36 h-36 flex items-center justify-center overflow-hidden relative
                           ${isDraftCard ? 'cursor-grab active:cursor-grabbing' : ''}
                           ${dragOverPosition === i ? 'border-indigo-500 bg-indigo-950/20 scale-[1.02] shadow-lg' : isDraftCard ? 'border-dashed border-indigo-500/80 ring-2 ring-indigo-500/20' : 'border-zinc-700/30'}
                         `}
                       >
                         {isDraftCard && (
-                          <span className="absolute top-1 left-1 text-[8px] font-bold text-indigo-300 bg-indigo-950/80 rounded-full px-1.5 py-0.5 select-none">
+                          <span className="absolute top-1 left-1 text-[8px] font-bold text-indigo-300 bg-indigo-950/80 rounded-full px-1.5 py-0.5 select-none z-20 pointer-events-none">
                             未確定
                           </span>
                         )}
-                        {p?.imageUrl ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img
-                            src={p.imageUrl}
-                            alt={p.name}
-                            className="w-full h-full rounded-lg object-cover"
-                            draggable={false}
-                          />
-                        ) : (
-                          <div className="w-full h-full rounded-lg bg-zinc-700 flex flex-col items-center justify-center text-zinc-400 font-bold select-none text-sm">
-                            <span>{p?.name?.[0]}</span>
-                            <span className="text-[8px] text-zinc-500 font-normal mt-1 truncate max-w-[80px]">{p?.name}</span>
-                          </div>
-                        )}
+                        {renderCardContent(pid, false)}
                       </div>
 
                       {/* If this is the last card and dragOverPosition is at the end, render DropIndicator at the very end */}
@@ -251,19 +321,39 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                         <DropIndicator />
                       )}
 
-                      {/* Plus button for click-placement after the last card */}
-                      {i === boardWithDraft.length - 1 && canInteract && (
-                        <button
-                          onClick={() => handleDraftPlace(i + 1)}
-                          className="w-6 h-6 rounded-full bg-indigo-600/70 hover:bg-indigo-500 text-white flex items-center justify-center text-xs shadow-md transition-all hover:scale-110 cursor-pointer"
-                          title="ここに置く"
-                        >
-                          +
-                        </button>
-                      )}
                     </div>
                   );
                 })}
+              </div>
+            )}
+            
+            {/* Slide Arrows under the board */}
+            {canInteract && draftPosition !== null && (
+              <div className="flex justify-center gap-4 mt-4 select-none">
+                <button
+                  onClick={() => {
+                    if (draftPosition > 0) {
+                      setDraftPosition(draftPosition - 1);
+                    }
+                  }}
+                  disabled={draftPosition === 0}
+                  className="w-12 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 text-lg font-bold text-zinc-300 hover:bg-zinc-700 disabled:opacity-20 transition-all cursor-pointer flex items-center justify-center shadow-md shadow-black/30"
+                  title="左に移動"
+                >
+                  ←
+                </button>
+                <button
+                  onClick={() => {
+                    if (draftPosition < boardWithDraft.length - 1) {
+                      setDraftPosition(draftPosition + 1);
+                    }
+                  }}
+                  disabled={draftPosition === boardWithDraft.length - 1}
+                  className="w-12 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 text-lg font-bold text-zinc-300 hover:bg-zinc-700 disabled:opacity-20 transition-all cursor-pointer flex items-center justify-center shadow-md shadow-black/30"
+                  title="右に移動"
+                >
+                  →
+                </button>
               </div>
             )}
           </div>
@@ -271,24 +361,42 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
 
         {/* Right Pane: Hand Card, Number, and Status */}
         <div className="w-full md:w-80 bg-zinc-800/10 border border-zinc-800/40 rounded-2xl p-5 flex flex-col items-center justify-center min-h-[220px] md:min-h-0">
-          {canInteract && draftPosition === null ? (
-            <div className="flex flex-col items-center justify-center w-full select-none">
-              <div className="text-center mb-4">
-                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
-                  あなたの数字
-                </span>
-                <h2 className="text-6xl font-mono font-extrabold text-indigo-400 tracking-tight leading-none py-2 animate-pulse">
-                  #{state.myCardNumber}
-                </h2>
-                <p className="text-[10px] text-zinc-500 mt-2 font-medium">
-                  ✨ カードを場にドラッグ＆ドロップしてください
-                </p>
-              </div>
+          {canInteract && draftPosition !== null ? (
+            <div className="flex flex-col items-center justify-center w-full select-none gap-3">
+              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
+                配置プレビュー中（未確定）
+              </span>
+              <p className="text-xs text-zinc-400 text-center">
+                カードをクリックして、数字と画像を変換
+              </p>
 
-              {/* Draggable Card (Pure Image) */}
+              <button
+                onClick={handleConfirm}
+                className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 font-semibold text-white hover:bg-indigo-500 transition-colors mt-2 cursor-pointer"
+              >
+                確定する
+              </button>
+              <button
+                onClick={handleCancelDraft}
+                className="w-full rounded-lg bg-zinc-800 px-4 py-2 text-sm font-semibold text-zinc-300 hover:bg-zinc-700 transition-colors cursor-pointer"
+              >
+                取り消す
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center w-full select-none gap-3">
+              <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">
+                あなたの手札
+              </span>
+              <p className="text-[10px] text-zinc-500 text-center font-medium">
+                カードをクリックして、数字と画像を変換
+              </p>
+
+              {/* Hand Card (Draggable only if it's my turn to place and I haven't placed yet) */}
               <div
-                draggable={true}
+                draggable={canInteract}
                 onDragStart={e => {
+                  if (!canInteract) return;
                   setIsDraggingMyCard(true);
                   e.dataTransfer.effectAllowed = 'move';
                   e.dataTransfer.setData('text/plain', 'my-card');
@@ -297,70 +405,27 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                   setIsDraggingMyCard(false);
                   setDragOverPosition(null);
                 }}
-                className={`w-36 h-36 bg-zinc-800 rounded-2xl border shadow-2xl transition-all duration-300 cursor-grab active:cursor-grabbing hover:scale-[1.02] flex items-center justify-center overflow-hidden
+                className={`w-36 h-36 bg-zinc-800 rounded-2xl border shadow-2xl transition-all duration-300 hover:scale-[1.02] flex items-center justify-center overflow-hidden
                   ${isDraggingMyCard ? 'opacity-20 scale-95 border-dashed border-indigo-500' : 'border-indigo-500/80 ring-2 ring-indigo-500/30'}
                 `}
               >
-                {myPlayer?.imageUrl ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={myPlayer.imageUrl}
-                    alt="Your generated card"
-                    className="w-full h-full object-cover"
-                    draggable={false}
-                  />
-                ) : (
-                  <div className="w-full h-full bg-zinc-700 flex flex-col items-center justify-center text-zinc-400 gap-1.5 text-xs">
-                    <span className="text-xl">🎨</span>
-                    <span>画像なし</span>
-                  </div>
-                )}
+                {renderCardContent(myId, true)}
               </div>
-            </div>
-          ) : canInteract && draftPosition !== null ? (
-            <div className="flex flex-col items-center justify-center w-full select-none gap-3">
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
-                配置プレビュー中（未確定）
-              </span>
-              <p className="text-xs text-zinc-400 text-center">
-                場のカードをドラッグすると置き直せます。
-                <br />
-                問題なければ確定してください。
-              </p>
-              <button
-                onClick={handleConfirm}
-                className="w-full rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-500 transition-colors"
-              >
-                確定する
-              </button>
-              <button
-                onClick={handleCancelDraft}
-                className="w-full rounded-lg bg-zinc-800 px-4 py-2 text-sm font-semibold text-zinc-300 hover:bg-zinc-700 transition-colors"
-              >
-                取り消す
-              </button>
-            </div>
-          ) : (
-            // Status when not placing (waiting or already placed)
-            <div className="text-center w-full select-none">
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block mb-2">手札ステータス</span>
-              <div className="bg-zinc-800/40 border border-zinc-800/80 rounded-xl p-4 w-full flex flex-col items-center gap-3">
-                <div className="w-14 h-14 rounded-full bg-indigo-700/80 border border-indigo-500/30 flex items-center justify-center font-mono font-extrabold text-xl text-white shadow-lg shadow-indigo-500/10">
-                  #{state.myCardNumber ?? '?'}
-                </div>
-                <div className="w-full text-center">
-                  <p className="text-[10px] text-zinc-500 uppercase tracking-wide">お題</p>
-                  <p className="text-xs font-semibold text-white truncate max-w-[160px] mt-0.5">{state.myTheme}</p>
-                </div>
-                <div className="w-full h-px bg-zinc-800/80" />
+
+              {/* Status information under the card */}
+              <div className="w-full mt-2 text-center">
                 {alreadyPlaced ? (
-                  <span className="px-3 py-1 rounded-full bg-green-950/40 border border-green-600/30 text-green-400 text-xs font-bold shadow-sm">
-                    ✓ 配置済み
+                  <span className="inline-block px-3 py-1 rounded-full bg-green-950/40 border border-green-500/30 text-green-400 text-xs font-semibold font-pixel animate-pulse">
+                    配置完了
                   </span>
+                ) : !isMyTurn ? (
+                  <div className="text-zinc-500 text-xs mt-1 font-pixel">
+                    <span className="text-indigo-400 font-semibold">{currentPlayer?.name ?? 'ホスト'}</span> が配置中です
+                  </div>
                 ) : (
-                  <span className="px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-500 text-xs font-bold shadow-sm animate-pulse">
-                    待機中
-                  </span>
+                  <p className="text-[10px] text-indigo-400 mt-1 font-pixel animate-pulse">
+                    カードをボードへドラッグしてください
+                  </p>
                 )}
               </div>
             </div>
@@ -408,7 +473,7 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
               )}
 
               {state.boardOrder.includes(p.id) ? (
-                <span className="text-[10px] text-green-400 font-bold">✓</span>
+                <span className="text-[9px] text-green-400 font-bold uppercase tracking-wider">OK</span>
               ) : p.id === state.currentTurnPlayerId ? (
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping" />
               ) : (
@@ -418,6 +483,58 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
           ))}
         </div>
       </div>
+
+      {/* Card Inspector Modal */}
+      {inspectPlayerId && (() => {
+        const p = playerMap.get(inspectPlayerId);
+        if (!p) return null;
+        return (
+          <div 
+            className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 cursor-pointer"
+            onClick={() => setInspectPlayerId(null)}
+          >
+            <div 
+              className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl flex flex-col items-center gap-4 max-w-sm w-full relative shadow-2xl cursor-default"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Close button */}
+              <button
+                onClick={() => setInspectPlayerId(null)}
+                className="absolute top-3 right-3 text-zinc-500 hover:text-white transition-colors cursor-pointer font-bold text-sm"
+              >
+                ✕
+              </button>
+              
+              {/* Title */}
+              <div className="text-center">
+                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider font-cyber">Card Inspector</span>
+                <h3 className="text-lg font-bold text-indigo-400 font-pixel mt-0.5">{p.name}</h3>
+              </div>
+
+              {/* Large Card Image */}
+              <div className="w-72 h-72 rounded-xl overflow-hidden border border-zinc-700 bg-zinc-800 shadow-lg">
+                {p.imageUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={p.imageUrl}
+                    alt={p.name}
+                    className="w-full h-full object-cover select-none"
+                    draggable={false}
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 font-bold text-sm gap-2">
+                    <span>画像がありません</span>
+                  </div>
+                )}
+              </div>
+              
+              <p className="text-[10px] text-zinc-500 font-pixel text-center">
+                枠外をクリックして閉じる
+              </p>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

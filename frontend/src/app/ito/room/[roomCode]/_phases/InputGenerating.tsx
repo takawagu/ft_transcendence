@@ -52,13 +52,13 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
   });
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-6">
+    <div className="h-full w-full flex flex-col md:flex-row items-center justify-center gap-12 p-8 max-w-4xl mx-auto">
       {/* Styles for card animations */}
       <style>{`
         .card-container {
           perspective: 1000px;
-          width: 180px;
-          height: 240px;
+          width: 240px;
+          height: 320px;
         }
         .card-inner {
           position: relative;
@@ -110,15 +110,14 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
         }
       `}</style>
 
-      {/* Card */}
-      <div className="text-center flex flex-col items-center">
-        
+      {/* Left Column: Card */}
+      <div className="flex-shrink-0 flex flex-col items-center justify-center">
         <div className="card-container">
           <div className={`card-inner ${isDealing ? 'dealing' : ''} ${isFlipped ? 'flipped' : ''}`}>
             {/* Card Back */}
             <div className="card-back">
-              <div className="text-sm uppercase tracking-widest text-indigo-400 font-extrabold mb-2 font-cyber">AITO</div>
-              <div className="w-12 h-12 rounded-full border border-indigo-500/50 flex items-center justify-center text-xl font-bold text-indigo-300 bg-indigo-950/50 font-cyber">
+              <div className="text-base uppercase tracking-widest text-indigo-400 font-extrabold mb-3 font-cyber">AITO</div>
+              <div className="w-16 h-16 rounded-full border border-indigo-500/50 flex items-center justify-center text-3xl font-bold text-indigo-300 bg-indigo-950/50 font-cyber">
                 ?
               </div>
             </div>
@@ -168,71 +167,76 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
               
               {/* Number Overlay */}
               <div className="relative z-10 flex flex-col items-center justify-center pointer-events-none select-none">
-                <span className="text-7xl font-extrabold tracking-tight text-white animate-fade-in" style={{ textShadow: '0 0 8px rgba(0, 240, 255, 0.4)' }}>
+                <span className="text-8xl font-extrabold tracking-tight text-white animate-fade-in font-cyber" style={{ textShadow: '0 0 10px rgba(0, 240, 255, 0.4)' }}>
                   {state.myCardNumber ?? '?'}
                 </span>
               </div>
             </div>
           </div>
         </div>
-
-        <p className="text-zinc-400 mt-5 text-base font-pixel">
-          お題: <span className="text-white font-bold text-lg">{state.myTheme ?? ''}</span>
-        </p>
       </div>
 
-      {/* Input area */}
-      <div className="w-full max-w-sm">
-        {!submitted && myPhase === 'INPUT' ? (
-          <div className="cyber-panel-flat rounded-xl p-4 space-y-4">
-            <textarea
-              className="w-full rounded-lg bg-zinc-950/80 border border-zinc-800/80 px-4 py-3 text-white placeholder-zinc-500 outline-none focus:ring-1 focus:ring-indigo-500 resize-none text-sm font-pixel"
-              rows={3}
-              placeholder={`「${state.myTheme ?? 'お題'}」として、あなたの数字のイメージを入力...`}
-              value={prompt}
-              onChange={e => setPrompt(e.target.value)}
-            />
-            <button
-              onClick={handleSubmit}
-              disabled={!prompt.trim()}
-              className="w-full rounded-lg px-4 py-3 font-bold text-sm transition-all cyber-btn-cyan cursor-pointer disabled:opacity-30"
-            >
-              送信
-            </button>
-          </div>
-        ) : myPhase === 'GENERATING' ? (
-          <div className="text-center text-zinc-400 space-y-3">
-            <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
-            <p>画像を生成中...</p>
-          </div>
-        ) : (
-          <div className="text-center text-green-400 space-y-2">
-            <p className="text-2xl">✓</p>
-            <p>完了！他のプレイヤーを待っています...</p>
-          </div>
-        )}
-      </div>
+      {/* Right Column: Theme, Input, and Status */}
+      <div className="flex flex-col gap-6 w-full max-w-sm">
+        {/* Theme Panel */}
+        <div className="cyber-panel-flat rounded-xl p-4 flex flex-col items-center text-center">
+          <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider mb-1 font-cyber">お題</p>
+          <p className="text-white font-bold text-xl font-pixel">{state.myTheme ?? ''}</p>
+        </div>
 
-      {/* Player status grid */}
-      <div className="w-full max-w-sm">
-        <p className="text-xs text-zinc-600 mb-2">プレイヤー状況</p>
-        <div className="flex gap-2 flex-wrap">
-          {state.players.map(p => (
-            <div
-              key={p.id}
-              className={`flex items-center gap-1.5 text-xs bg-zinc-800 rounded-full px-3 py-1 ${
-                p.status === 'EXCLUDED' ? 'opacity-40 line-through' : ''
-              }`}
-            >
-              <span className={
-                p.status === 'EXCLUDED' ? 'text-zinc-600' :
-                p.playerPhase === 'DONE' ? 'text-green-400' :
-                p.playerPhase === 'GENERATING' ? 'text-yellow-400' :
-                'text-zinc-500'
-              }>●</span>
-              <span className="text-zinc-300">{p.name}</span>
+        {/* Input area */}
+        <div className="w-full">
+          {!submitted && myPhase === 'INPUT' ? (
+            <div className="cyber-panel-flat rounded-xl p-4 space-y-4">
+              <textarea
+                className="w-full rounded-lg bg-zinc-950/80 border border-zinc-800/80 px-4 py-3 text-white placeholder-zinc-500 outline-none focus:ring-1 focus:ring-indigo-500 resize-none text-sm font-pixel"
+                rows={3}
+                placeholder={`「${state.myTheme ?? 'お題'}」として、あなたの数字のイメージを入力...`}
+                value={prompt}
+                onChange={e => setPrompt(e.target.value)}
+              />
+              <button
+                onClick={handleSubmit}
+                disabled={!prompt.trim()}
+                className="w-full rounded-lg px-4 py-3 font-bold text-sm transition-all cyber-btn-cyan cursor-pointer disabled:opacity-30"
+              >
+                送信
+              </button>
             </div>
-          ))}
+          ) : myPhase === 'GENERATING' ? (
+            <div className="cyber-panel-flat rounded-xl p-6 text-center text-zinc-400 space-y-3">
+              <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-sm">画像を生成中...</p>
+            </div>
+          ) : (
+            <div className="cyber-panel-flat rounded-xl p-6 text-center text-green-400 space-y-2">
+              <p className="text-2xl">✓</p>
+              <p className="text-sm">完了！他のプレイヤーを待っています...</p>
+            </div>
+          )}
+        </div>
+
+        {/* Player status grid */}
+        <div className="w-full">
+          <p className="text-xs text-zinc-500 mb-2 font-pixel">プレイヤー状況</p>
+          <div className="flex gap-2 flex-wrap">
+            {state.players.map(p => (
+              <div
+                key={p.id}
+                className={`flex items-center gap-1.5 text-xs bg-zinc-800/30 border border-zinc-800/50 rounded-full px-3 py-1 ${
+                  p.status === 'EXCLUDED' ? 'opacity-40 line-through' : ''
+                }`}
+              >
+                <span className={
+                  p.status === 'EXCLUDED' ? 'text-zinc-600' :
+                  p.playerPhase === 'DONE' ? 'text-green-400' :
+                  p.playerPhase === 'GENERATING' ? 'text-yellow-400' :
+                  'text-zinc-500'
+                }>●</span>
+                <span className="text-zinc-300 font-pixel">{p.name}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

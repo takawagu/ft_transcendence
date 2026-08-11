@@ -22,7 +22,7 @@ export function WaitingRoom({ state, myId, emit }: PhaseProps) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-8 p-6">
+    <div className="h-full w-full flex flex-col items-center justify-center gap-8 p-6">
       <div className="text-center">
         <p className="text-zinc-500 text-sm mb-1">ルームコード</p>
         <p className="text-5xl font-mono font-bold tracking-widest text-indigo-400">
