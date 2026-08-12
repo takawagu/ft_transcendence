@@ -327,36 +327,37 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
               </div>
             )}
             
-            {/* Slide Arrows under the board */}
-            {canInteract && draftPosition !== null && (
-              <div className="flex justify-center gap-4 mt-4 select-none">
-                <button
-                  onClick={() => {
-                    if (draftPosition > 0) {
-                      setDraftPosition(draftPosition - 1);
-                    }
-                  }}
-                  disabled={draftPosition === 0}
-                  className="w-12 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 text-lg font-bold text-zinc-300 hover:bg-zinc-700 disabled:opacity-20 transition-all cursor-pointer flex items-center justify-center shadow-md shadow-black/30"
-                  title="左に移動"
-                >
-                  ←
-                </button>
-                <button
-                  onClick={() => {
-                    if (draftPosition < boardWithDraft.length - 1) {
-                      setDraftPosition(draftPosition + 1);
-                    }
-                  }}
-                  disabled={draftPosition === boardWithDraft.length - 1}
-                  className="w-12 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 text-lg font-bold text-zinc-300 hover:bg-zinc-700 disabled:opacity-20 transition-all cursor-pointer flex items-center justify-center shadow-md shadow-black/30"
-                  title="右に移動"
-                >
-                  →
-                </button>
-              </div>
-            )}
           </div>
+
+          {/* Slide Arrows under the board */}
+          {canInteract && draftPosition !== null && (
+            <div className="flex justify-center gap-4 mt-4 select-none">
+              <button
+                onClick={() => {
+                  if (draftPosition > 0) {
+                    setDraftPosition(draftPosition - 1);
+                  }
+                }}
+                disabled={draftPosition === 0}
+                className="w-12 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 text-lg font-bold text-zinc-300 hover:bg-zinc-700 disabled:opacity-20 transition-all cursor-pointer flex items-center justify-center shadow-md shadow-black/30"
+                title="左に移動"
+              >
+                ←
+              </button>
+              <button
+                onClick={() => {
+                  if (draftPosition < boardWithDraft.length - 1) {
+                    setDraftPosition(draftPosition + 1);
+                  }
+                }}
+                disabled={draftPosition === boardWithDraft.length - 1}
+                className="w-12 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 text-lg font-bold text-zinc-300 hover:bg-zinc-700 disabled:opacity-20 transition-all cursor-pointer flex items-center justify-center shadow-md shadow-black/30"
+                title="右に移動"
+              >
+                →
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right Pane: Hand Card, Number, and Status */}
