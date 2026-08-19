@@ -16,7 +16,7 @@ export function RevealResult({ state, myId, emit }: PhaseProps) {
 
   if (roomPhase === 'REVEAL' && !revealResult) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="h-full w-full flex items-center justify-center">
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-zinc-400">カードを公開中...</p>
@@ -26,7 +26,7 @@ export function RevealResult({ state, myId, emit }: PhaseProps) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center gap-6 p-6 pt-10 max-w-2xl mx-auto w-full">
+    <div className="h-full w-full flex flex-col items-center gap-6 p-6 pt-10 max-w-2xl mx-auto">
       {revealResult && (
         <>
           {/* Result banner */}

@@ -23,6 +23,7 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
   // Drag and drop states
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -95,7 +96,7 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col gap-6 p-6 max-w-6xl mx-auto w-full">
+    <div className="h-full w-full flex flex-col gap-6 p-6 max-w-6xl mx-auto">
       {/* Main Split Layout */}
       <div className="flex flex-col md:flex-row gap-6 items-stretch w-full flex-1">
         
@@ -104,14 +105,19 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
           <div className="space-y-6">
             {/* Header */}
             <div className="text-center md:text-left border-b border-zinc-800 pb-3">
-              <h2 className="text-xl font-bold text-white">並び順を確認しましょう</h2>
-              <p className="text-zinc-500 text-xs mt-1">お題: <span className="text-white font-semibold">{state.myTheme}</span></p>
+              <h2 className="text-xl font-bold text-white">並び替え</h2>
+              <p className="text-zinc-500 text-xs mt-1.5 flex items-baseline gap-2 select-none">
+                お題: 
+                <span className="text-white font-extrabold text-2xl font-pixel tracking-wide">
+                  {state.myTheme}
+                </span>
+              </p>
               {isHost ? (
-                <p className="text-indigo-400 text-xs mt-1.5 font-medium">
-                  あなたがホストです。ドラッグ＆ドロップまたは←→で順番を変更できます
+                <p className="text-indigo-400 text-xs mt-2 font-medium">
+                  あなたがホストです。カードをタップ選択し、下の矢印ボタンで順番を変更できます
                 </p>
               ) : (
-                <p className="text-zinc-500 text-xs mt-1.5 font-medium">
+                <p className="text-zinc-500 text-xs mt-2 font-medium">
                   <span className="text-white font-semibold">{hostPlayer?.name ?? '?'}</span> が並び順を調整しています
                 </p>
               )}
@@ -130,9 +136,15 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
                     onDragLeave={handleDragLeave}
                     onDrop={e => handleDrop(e, i)}
                     onDragEnd={handleDragEnd}
+                    onClick={() => {
+                      if (isHost) {
+                        setSelectedPlayerId(selectedPlayerId === pid ? null : pid);
+                      }
+                    }}
                     className={`flex flex-col items-center bg-zinc-800 rounded-xl p-2.5 border select-none w-32 text-center transition-all duration-200 
-                      ${isHost ? 'cursor-grab active:cursor-grabbing hover:bg-zinc-700/60' : ''}
-                      ${draggedIndex === i ? 'opacity-30 border-dashed border-indigo-500 scale-[0.98]' : 'border-transparent'}
+                      ${isHost ? 'cursor-pointer hover:bg-zinc-700/60' : ''}
+                      ${selectedPlayerId === pid ? 'border-indigo-500 bg-indigo-900/30 scale-[1.04] shadow-lg ring-2 ring-indigo-500/20' : 'border-zinc-700/30'}
+                      ${draggedIndex === i ? 'opacity-30 border-dashed border-indigo-500 scale-[0.98]' : ''}
                       ${dragOverIndex === i && draggedIndex !== i ? 'border-indigo-500 bg-indigo-900/20 scale-[1.03] shadow-lg shadow-indigo-500/15' : ''}
                     `}
                   >
@@ -152,47 +164,54 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
                           <span className="text-[8px] text-zinc-500 font-normal mt-1 truncate max-w-[80px]">{p?.name}</span>
                         </div>
                       )}
-                      {/* Overlay drag handle on card for host */}
-                      {isHost && (
-                        <div className="absolute top-1.5 right-1.5 p-1 rounded bg-black/60 text-zinc-400 backdrop-blur-xs select-none">
-                          <DragHandleIcon />
-                        </div>
-                      )}
                     </div>
+                  </div>
+                );
+              })}
+            </div>
 
-                    {/* Fallback Left/Right Buttons */}
-                    {isHost && (
-                      <div className="flex gap-1.5 w-full justify-center mt-1">
+            {/* Centralized reordering arrows for selected card */}
+            {isHost && (
+              <div className="flex flex-col items-center justify-center gap-2 mt-2 select-none">
+                {selectedPlayerId ? (() => {
+                  const selPlayer = playerMap.get(selectedPlayerId);
+                  const selIndex = state.boardOrder.indexOf(selectedPlayerId);
+                  return (
+                    <>
+                      <div className="flex justify-center gap-4">
                         <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            moveUp(i);
+                          onClick={() => {
+                            if (selIndex > 0) moveUp(selIndex);
                           }}
-                          onDragStart={e => e.stopPropagation()}
-                          disabled={i === 0}
-                          className="w-7 h-6 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-25 text-xs transition-colors cursor-pointer flex items-center justify-center"
+                          disabled={selIndex === 0}
+                          className="w-12 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 text-lg font-bold text-zinc-300 hover:bg-zinc-700 disabled:opacity-20 transition-all cursor-pointer flex items-center justify-center shadow-md shadow-black/30"
                           title="左に移動"
                         >
                           ←
                         </button>
                         <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            moveDown(i);
+                          onClick={() => {
+                            if (selIndex < state.boardOrder.length - 1) moveDown(selIndex);
                           }}
-                          onDragStart={e => e.stopPropagation()}
-                          disabled={i === state.boardOrder.length - 1}
-                          className="w-7 h-6 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-25 text-xs transition-colors cursor-pointer flex items-center justify-center"
+                          disabled={selIndex === state.boardOrder.length - 1}
+                          className="w-12 h-9 rounded-lg bg-zinc-800 border border-zinc-700/80 text-lg font-bold text-zinc-300 hover:bg-zinc-700 disabled:opacity-20 transition-all cursor-pointer flex items-center justify-center shadow-md shadow-black/30"
                           title="右に移動"
                         >
                           →
                         </button>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                      <p className="text-[10px] text-indigo-400 font-pixel">
+                        {selPlayer?.name} のカードを選択中
+                      </p>
+                    </>
+                  );
+                })() : (
+                  <p className="text-[10px] text-zinc-500 font-pixel py-1.5">
+                    並び替えるカードを選択してください
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Current order list (Extremely compact horizontal pills to prevent scrolling) */}
             <div className="mt-1">

@@ -1,8 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=M+PLUS+1p:wght@400;700;900&family=Share+Tech+Mono&display=swap');
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #050811;
+  --foreground: #ededed;
 }
 
 @theme inline {
@@ -12,15 +13,247 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  background-color: #050811;
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  position: relative;
+  min-height: 100vh;
+  
+  /* 🌌 宇宙・サイバー空間をイメージした3色のネオングローとドットグリッド */
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(79, 70, 229, 0.18) 0px, transparent 55%),
+    radial-gradient(at 100% 0%, rgba(147, 51, 234, 0.18) 0px, transparent 55%),
+    radial-gradient(at 50% 100%, rgba(6, 182, 212, 0.12) 0px, transparent 55%),
+    radial-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 0);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 28px 28px;
+  background-attachment: fixed;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* 1. フォント用クラス */
+.font-cyber {
+  font-family: 'Orbitron', 'Share Tech Mono', sans-serif;
+}
+.font-pixel {
+  font-family: 'M PLUS 1p', sans-serif;
+}
+
+/* 2. 四隅にL字のネオンフレームが浮かぶゲーム用カード枠 */
+.cyber-box {
+  position: relative;
+  background: rgba(11, 15, 25, 0.65);
+  border: 1px solid rgba(0, 240, 255, 0.15);
+  backdrop-filter: blur(12px);
+  box-shadow: inset 0 0 15px rgba(0, 240, 255, 0.05), 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+}
+
+.cyber-box::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 12px;
+  height: 12px;
+  border-top: 2px solid #00f0ff;
+  border-left: 2px solid #00f0ff;
+  pointer-events: none;
+}
+
+.cyber-box::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 12px;
+  height: 12px;
+  border-bottom: 2px solid #00f0ff;
+  border-right: 2px solid #00f0ff;
+  pointer-events: none;
+}
+
+/* 4隅すべてにL字フレームが浮かぶゲーム用カード枠 */
+.cyber-box-4 {
+  position: relative;
+  background: rgba(11, 15, 25, 0.65);
+  border: 1px solid rgba(0, 240, 255, 0.15);
+  backdrop-filter: blur(12px);
+  box-shadow: inset 0 0 15px rgba(0, 240, 255, 0.05), 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+}
+
+.cyber-box-4::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 12px;
+  height: 12px;
+  border-top: 2px solid #00f0ff;
+  border-left: 2px solid #00f0ff;
+  pointer-events: none;
+}
+
+.cyber-box-4::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 12px;
+  height: 12px;
+  border-bottom: 2px solid #00f0ff;
+  border-right: 2px solid #00f0ff;
+  pointer-events: none;
+}
+
+.cyber-box-4-corners {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cyber-box-4-corners::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 12px;
+  height: 12px;
+  border-top: 2px solid #00f0ff;
+  border-right: 2px solid #00f0ff;
+  pointer-events: none;
+}
+
+.cyber-box-4-corners::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: -1px;
+  width: 12px;
+  height: 12px;
+  border-bottom: 2px solid #00f0ff;
+  border-left: 2px solid #00f0ff;
+  pointer-events: none;
+}
+
+/* L字無しのフラットなサイバーパネル */
+.cyber-panel-flat {
+  background: rgba(11, 15, 25, 0.65);
+  border: 1px solid rgba(0, 240, 255, 0.15);
+  backdrop-filter: blur(12px);
+  box-shadow: inset 0 0 15px rgba(0, 240, 255, 0.05), 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+}
+
+/* 細い4隅のL字が浮かぶインプット用スタイル */
+.cyber-input-wrapper {
+  position: relative;
+  border-radius: 0.5rem;
+}
+
+.cyber-input-wrapper-corners {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.08); /* 通常時は標準的な薄いグレー境界線 */
+  border-radius: inherit;
+  transition: all 0.25s ease-in-out;
+}
+
+/* L字ブラケット用の基本設定（通常時は非表示） */
+.cyber-input-wrapper::before,
+.cyber-input-wrapper::after,
+.cyber-input-corners::before,
+.cyber-input-corners::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  pointer-events: none;
+  opacity: 0; /* 通常時は完全に非表示 */
+  transition: opacity 0.25s ease-in-out, border-color 0.25s ease-in-out, filter 0.25s ease-in-out;
+}
+
+/* Top-left */
+.cyber-input-wrapper::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid #00f0ff;
+  border-left: 1px solid #00f0ff;
+}
+
+/* Bottom-right */
+.cyber-input-wrapper::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 1px solid #00f0ff;
+  border-right: 1px solid #00f0ff;
+}
+
+.cyber-input-corners {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Top-right */
+.cyber-input-corners::before {
+  top: -1px;
+  right: -1px;
+  border-top: 1px solid #00f0ff;
+  border-right: 1px solid #00f0ff;
+}
+
+/* Bottom-left */
+.cyber-input-corners::after {
+  bottom: -1px;
+  left: -1px;
+  border-bottom: 1px solid #00f0ff;
+  border-left: 1px solid #00f0ff;
+}
+
+/* 入力中（フォーカス時）のスタイル定義 */
+.cyber-input-wrapper:focus-within .cyber-input-wrapper-corners {
+  border-color: rgba(0, 240, 255, 0.25);
+  box-shadow: inset 0 0 8px rgba(0, 240, 255, 0.1);
+}
+
+.cyber-input-wrapper:focus-within::before,
+.cyber-input-wrapper:focus-within::after,
+.cyber-input-wrapper:focus-within .cyber-input-corners::before,
+.cyber-input-wrapper:focus-within .cyber-input-corners::after {
+  opacity: 1; /* 入力中のみ4隅のL字を表示 */
+  filter: drop-shadow(0 0 2px rgba(0, 240, 255, 0.5));
+}
+
+/* 3. ネオン発光ボタン */
+.cyber-btn-cyan {
+  position: relative;
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px solid #00f0ff;
+  color: #00f0ff;
+  font-family: 'Orbitron', sans-serif;
+  text-shadow: 0 0 5px rgba(0, 240, 255, 0.5);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.1);
+  transition: all 0.2s ease-in-out;
+}
+.cyber-btn-cyan:hover:not(:disabled) {
+  background: #00f0ff;
+  color: #050811;
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+  text-shadow: none;
+}
+
+.cyber-btn-indigo {
+  position: relative;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid #6366f1;
+  color: #a5b4fc;
+  font-family: 'Orbitron', sans-serif;
+  text-shadow: 0 0 5px rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.1);
+  transition: all 0.2s ease-in-out;
+}
+.cyber-btn-indigo:hover:not(:disabled) {
+  background: #6366f1;
+  color: white;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+  text-shadow: none;
 }
