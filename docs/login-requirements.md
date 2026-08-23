@@ -41,6 +41,7 @@ status: 実装済み
   - 送信時の最終チェック（既存の409 `ConflictException`）も引き続き有効（レース条件対策）
 - `schema.prisma`の`username`に`@unique`を追加し、マイグレーション`20260730092155_add_username_unique`で反映済み
 - ブラウザ実機で一連の流れ（短いパスワード拒否・重複ユーザー名拒否・正常登録）を確認済み
+- **未対応（要修正）**: プロフィール更新 `PUT /api/users/me` は`@Body() body: any`でDTOを通していないため、グローバル`ValidationPipe`が効いていない（[users.controller.ts:31](backend/src/users/users.controller.ts#L31)）。`bio`/`profileImage`には長さ上限がどこにも無く（`schema.prisma`は`String?` = Postgresの`text`）、任意長の文字列を保存できる。`UpdateMeDto`を新設して`bio` 200文字 / `profileImage` 512文字の上限をかける。詳細と影響は[friend-requirements.md](docs/friend-requirements.md)セクション3を参照
 
 ---
 
@@ -79,3 +80,9 @@ status: 実装済み
 
 - 登録成功時に「🎉 登録が完了しました！」を約900ms表示してからホーム画面に自動遷移するよう実装（[page.tsx](frontend/src/app/page.tsx)の`handleAuthSubmit`register分岐、`registerSuccessMsg`）
 - ブラウザ実機で表示・遷移を確認済み
+
+---
+
+## 関連ドキュメント
+
+- [friend-requirements.md](docs/friend-requirements.md) — フレンド機能とオンライン状態表示。subject Usersモジュールの「Users can add other users as friends and see their online status」に対応する部分はそちらで定義している
