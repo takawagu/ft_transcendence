@@ -8,10 +8,12 @@ ft_transcendence subject の以下の要件に対応するための定義書。
   > A friends system (add/remove friends, see friends list).
 
 現状の実装（[schema.prisma](backend/prisma/schema.prisma) / [friends.controller.ts](backend/src/friends/friends.controller.ts) / [page.tsx](frontend/src/app/page.tsx)）:
-- `Friendship`テーブルと、申請・承認・拒否・削除の5エンドポイントは実装済み
-- ホーム画面のフレンドパネル（一覧タブ / 申請待ちタブ / 追加フォーム）も実装済み
-- **オンライン状態は未実装**。UIの緑ドットは常時点灯のダミーで、subject要件を満たしていない
-- **ブロック機能は未実装**（テーブルも無い）
+- `Friendship` / `Block` テーブル、フレンドAPI 9エンドポイント（申請・承認・拒否・削除・ブロック3件・一覧2件）は実装済み
+- オンライン状態と申請通知を配信する `/presence` WebSocket 名前空間（[presence/](backend/src/presence/)）も**サーバー側は実装済み**
+- ホーム画面のフレンドパネル（一覧タブ / 申請待ちタブ / 追加フォーム）は実装済みだが、**フロント側は本書の変更をまだ反映していない**
+  - UIの緑ドットは依然として常時点灯のダミーで、`/presence` に接続していない
+  - ブロックの導線（infoウィンドウ・拒否後の提示・ブロック中タブ）が無い
+- **`Block` テーブルのマイグレーションは未生成**。`npx prisma migrate dev --name add_block` の実行が必要
 
 本書のスコープ: **フレンド機能 + オンライン状態表示 + ブロック機能**。
 ブロックは subject の要件には無いが、拒否後の再申請を止める手段として本書で採用を決定した（セクション3）。
@@ -32,14 +34,14 @@ status: 決定済み（一部要修正）
 | `status` | `PENDING` または `ACCEPTED` |
 | `createdAt` | 申請日時 |
 
-- **1つのフレンド関係につき1行**。承認後も `applicantId` / `approverId` はそのまま残り、「どちらから申請したか」の記録として機能する。フレンドかどうかの判定は方向を問わず `OR` で両方を見る（[friends.controller.ts:12-21](backend/src/friends/friends.controller.ts#L12-L21)）
-- `@@unique([applicantId, approverId])` は**方向ありの一意制約**。DB制約だけでは A→B と B→A の2行が同時に存在しうるため、重複はアプリ層の `findFirst` + `OR` 検索で防いでいる（[friends.controller.ts:97-105](backend/src/friends/friends.controller.ts#L97-L105)）。DB側で完全に防ぐには `LEAST/GREATEST` を使った関数インデックスが必要だが、Prismaで表現できないため**アプリ層でのガードを正とする**
+- **1つのフレンド関係につき1行**。承認後も `applicantId` / `approverId` はそのまま残り、「どちらから申請したか」の記録として機能する。フレンドかどうかの判定は方向を問わず `OR` で両方を見る（[friends.service.ts:45-51](backend/src/friends/friends.service.ts#L45-L51)）
+- `@@unique([applicantId, approverId])` は**方向ありの一意制約**。DB制約だけでは A→B と B→A の2行が同時に存在しうるため、重複はアプリ層の `findFirst` + `OR` 検索で防いでいる（[friends.service.ts:104-113](backend/src/friends/friends.service.ts#L104-L113)）。DB側で完全に防ぐには `LEAST/GREATEST` を使った関数インデックスが必要だが、Prismaで表現できないため**アプリ層でのガードを正とする**
 
 ### 決定: `status` は `PENDING` / `ACCEPTED` の2値とする
 
-- スキーマコメントには `REJECTED` が書かれている（[schema.prisma:43](backend/prisma/schema.prisma#L43)）が、拒否時は行を `delete` するため（[friends.controller.ts:169-171](backend/src/friends/friends.controller.ts#L169-L171)）この値は**永久に到達しない**
+- スキーマコメントには `REJECTED` が書かれている（[schema.prisma:43](backend/prisma/schema.prisma#L43)）が、拒否時は行を `delete` するため（[friends.service.ts:195](backend/src/friends/friends.service.ts#L195)）この値は**永久に到達しない**
 - **拒否 = 行削除で統一する。** `REJECTED` はスキーマコメントから削除する
-- これに伴い、既存行の `status` が `PENDING` でも `ACCEPTED` でもない場合に再申請として行を再利用する分岐（[friends.controller.ts:113-121](backend/src/friends/friends.controller.ts#L113-L121)）は**到達不能なデッドコードなので削除する**
+- これに伴い、既存行の `status` が `PENDING` でも `ACCEPTED` でもない場合に再申請として行を再利用する分岐は**到達不能なデッドコードなので削除した**（実装済み）
 
 ### 決定: ブロックは `Block` テーブルを新設する
 
@@ -92,7 +94,7 @@ status: 既存6件は実装済み（一部要修正）／ブロック関連3件�
 
 - レスポンス: `{ id, username, bio, profileImage }` の配列
 - `status: 'ACCEPTED'` の関係だけを対象とし、自分ではない側のユーザーを返す
-- **変更予定**: 現状の select には `email` が含まれている（[friends.controller.ts:22-27](backend/src/friends/friends.controller.ts#L22-L27)）が、UIで使っておらずフレンド全員のメールアドレスを配ることになるため**外す**。`GET /api/friends/requests` も同様（セクション3）
+- **実装済み**: `email` を select から外した。UIで使っておらず、フレンド全員のメールアドレスを配ることになるため。`GET /api/friends/requests` も同じ `USER_SELECT` を共有している（[friends.service.ts:23-28](backend/src/friends/friends.service.ts#L23-L28)）
 - ページングは導入しない。代わりにフレンド数を1000件で上限管理する（セクション3）
 
 ### `GET /api/friends/requests`
@@ -141,7 +143,7 @@ status: 既存6件は実装済み（一部要修正）／ブロック関連3件�
 
 - リクエスト: `{ friendshipId: number }`
 - 該当行を**削除**する
-- **受信申請の「拒否」と、送信申請の「キャンセル」を1つのエンドポイントで兼ねる。** `approverId` / `applicantId` のどちらかが自分であれば許可する（[friends.controller.ts:165](backend/src/friends/friends.controller.ts#L165)）
+- **受信申請の「拒否」と、送信申請の「キャンセル」を1つのエンドポイントで兼ねる。** `approverId` / `applicantId` のどちらかが自分であれば許可する（[friends.service.ts:188-191](backend/src/friends/friends.service.ts#L188-L191)）
 - **決定: この兼用を仕様として追認する。** エンドポイントを `cancel` に分割はしない。フロント側はUI上「拒否」「キャンセル」と出し分けているため利用者に混乱はなく、実処理（行削除）が完全に同一であるため
 
 ### `POST /api/friends/remove`
@@ -172,9 +174,9 @@ status: 既存6件は実装済み（一部要修正）／ブロック関連3件�
 - `Block` 行を削除するだけ。**削除されたフレンド関係は復活しない**（セクション3）
 - ブロックしていない相手を指定した場合も `{ success: true }`（冪等）
 
-### 要修正: service層への切り出し
+### service層への切り出し（実装済み）
 
-`FriendsController` は他モジュール（[auth.service.ts](backend/src/auth/auth.service.ts)）と異なり service 層を持たず `PrismaService` を直接叩いている。セクション5でコントローラから `PresenceService` を参照する必要が生じるため、そのタイミングで `FriendsService` を新設し、Prisma アクセスとビジネスロジックをすべて移す。
+`FriendsController` は service 層を持たず `PrismaService` を直接叩いていたが、[friends.service.ts](backend/src/friends/friends.service.ts) を新設して Prisma アクセスとビジネスロジックをすべて移した。コントローラは9エンドポイントの受け口だけになっている。上限値（`FRIEND_LIMIT` / `PENDING_LIMIT` / `BLOCK_LIMIT`）もこのファイル冒頭の定数に集約した。
 
 ---
 
@@ -185,7 +187,7 @@ status: 決定済み
 ### 決定: 検索は username の完全一致のみ
 
 - `POST /api/friends/request` の `query` は **username の完全一致**でのみ解決する
-- **email での検索は廃止する。** 現状は `OR: [{ username: query }, { email: query }]` で両方を見ている（[friends.controller.ts:80-87](backend/src/friends/friends.controller.ts#L80-L87)）が、`username` 単独の `findUnique` に変更する
+- **email での検索は廃止する。** 以前は `OR: [{ username: query }, { email: query }]` で両方を見ていたが、`username` 単独の `findUnique` に変更した（実装済み、[friends.service.ts:80-82](backend/src/friends/friends.service.ts#L80-L82)）
 - 部分一致のユーザー検索API（`GET /api/users/search?q=` 等）は**作らない**。総当たりによるユーザー列挙を避けつつ実装を単純に保つため
 - 相手の username を知っている前提の設計とする。フレンド追加を username で行うのは一般的な UX であり、email 検索の廃止による損失は小さいと判断した
 
@@ -248,11 +250,15 @@ status: 決定済み
    - **`PUT /api/users/me` は `@Body() body: any` で DTO を通していないため、グローバル `ValidationPipe`（[main.ts:9](backend/src/main.ts#L9)）が一切効いていない**（[users.controller.ts:31](backend/src/users/users.controller.ts#L31)）
    - `profileImage` は `<img src>` にそのまま渡される（[page.tsx:361-370](frontend/src/app/page.tsx#L361-L370)）ため data: URI を入れられる
 
-   → **`bio` 200文字 / `profileImage` 512文字**を上限とし、`UpdateMeDto` を新設して `PUT /api/users/me` に適用する。これが無いと「1000件 × 無制限」でレスポンスサイズが青天井になる
+   → **`username` 30文字 / `bio` 500文字 / `profileImage` 512文字**を上限とし、`UpdateMeDto` を新設して `PUT /api/users/me` に適用する。これが無いと「1000件 × 無制限」でレスポンスサイズが青天井になる（実装済み: [update-me.dto.ts](backend/src/users/dto/update-me.dto.ts)）
+
+   **上限値を 200 ではなく 500 にした理由**: 上限導入前に登録されたアカウントに長い `bio` / `username` が既に入っている可能性がある。プロフィール更新は編集していない項目も含めて全フィールドを送る実装（[page.tsx:329-334](frontend/src/app/page.tsx#L329-L334)）なので、上限を厳しくしすぎると**該当ユーザーがプロフィールを一切保存できなくなる**。500文字なら1000件で約1.6MBに収まり、無制限とは桁が違うのでガードレールとしては十分機能する。
+
+   同じ理由で、`POST /api/friends/request` の `query` には `@MaxLength` を付けない。付けると上限導入前の長い username のユーザーが検索できなくなるため（[friends.dto.ts](backend/src/friends/dto/friends.dto.ts)）。`username` は `@unique` インデックス付きの完全一致検索なので、長さ制限が無くても危険はない。
 
 2. **`GET /api/friends` の select から `email` を外す。** フレンド一覧に相手のメールアドレスを載せる必要が無く（UIでも使っていない）、サイズも約30KB/1000件減る。`GET /api/friends/requests` も同様
 
-3. **`PENDING` にも上限をかける。** `ACCEPTED` だけを数えると、申請中の行が上限チェックの対象外になり **5000件申請を送っておいて後から承認させる**という迂回ができる。受信側は「同一相手からは1件まで」が既に効いている（[friends.controller.ts:97-112](backend/src/friends/friends.controller.ts#L97-L112)）ためアカウント数以上には増えず、送信側だけを 100 件で抑えれば足りる
+3. **`PENDING` にも上限をかける。** `ACCEPTED` だけを数えると、申請中の行が上限チェックの対象外になり **5000件申請を送っておいて後から承認させる**という迂回ができる。受信側は「同一相手からは1件まで」が既に効いている（[friends.service.ts:104-120](backend/src/friends/friends.service.ts#L104-L120)）ためアカウント数以上には増えず、送信側だけを 100 件で抑えれば足りる
 
 4. **チェック箇所は2つ。** `POST /api/friends/request` で申請者の `ACCEPTED` 数と `PENDING` 数を、`POST /api/friends/accept` で**承認者と申請者の双方**の `ACCEPTED` 数を検証する。承認時に見落とすと上限を超えられる
 
@@ -264,7 +270,7 @@ status: 決定済み
 
 ## 4. オンライン状態（presence）
 
-status: 未着手（設計確定）
+status: サーバー側は実装済み（[presence/](backend/src/presence/)）／フロント側は未着手
 
 subject の「see their online status」を満たすための設計。現状は [page.tsx:785](frontend/src/app/page.tsx#L785) の緑ドットが**全フレンドに対して常時点灯**しており、要件を満たしていないのに満たしているように見える状態になっている。
 
@@ -298,6 +304,12 @@ subject の「see their online status」を満たすための設計。現状は 
 
 C→S のイベントは無い。クライアントは接続を維持するだけでよい。
 
+#### 実装時に判明: 承認直後にも `presence:changed` が要る
+
+`presence:snapshot` は接続時点のフレンドしか含まない。申請が承認されて**新たにフレンドになった相手**は、双方のスナップショットのどちらにも入っていないため、何もしないと**リロードするまで新しいフレンドが常にオフライン表示**になる。
+
+`POST /api/friends/accept` の成功時に、`friend:accepted` とは別に**双方へ相手の現在の在席を `presence:changed` で送る**（`PresenceService.notifyNewFriendship`）。ブロック時の即時オフライン化（`notifyBlocked`）と対になる処理。
+
 ### ブロックとの関係
 
 ブロックすると `Friendship` 行が削除される（セクション3）ため、**presence 側では特別な処理をしなくても自動的に相手が通知対象から外れる**。「`ACCEPTED` フレンドにのみ配信する」というルールがそのままブロックの遮断として働く。
@@ -329,7 +341,7 @@ presence 接続をホーム画面コンポーネントで張るため、ito ル�
 
 ## 5. リアルタイム反映と通知
 
-status: 未着手（設計確定）
+status: サーバー側は実装済み（[friends.service.ts](backend/src/friends/friends.service.ts)）／フロント側は未着手
 
 ### 現状の問題
 

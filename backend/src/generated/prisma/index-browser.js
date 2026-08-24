@@ -144,6 +144,13 @@ exports.Prisma.FriendshipScalarFieldEnum = {
   createdAt: 'createdAt'
 };
 
+exports.Prisma.BlockScalarFieldEnum = {
+  id: 'id',
+  blockerId: 'blockerId',
+  blockedId: 'blockedId',
+  createdAt: 'createdAt'
+};
+
 exports.Prisma.DirectMessageScalarFieldEnum = {
   id: 'id',
   senderId: 'senderId',
@@ -172,6 +179,7 @@ exports.Prisma.ModelName = {
   User: 'User',
   ItoGameRecord: 'ItoGameRecord',
   Friendship: 'Friendship',
+  Block: 'Block',
   DirectMessage: 'DirectMessage'
 };
 
