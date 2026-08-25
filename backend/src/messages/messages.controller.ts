@@ -11,7 +11,11 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { MessagesService } from './messages.service';
-import { SendMessageDto, HistoryQueryDto } from './dto/messages.dto';
+import {
+  SendMessageDto,
+  HistoryQueryDto,
+  MarkReadDto,
+} from './dto/messages.dto';
 
 @Controller('messages')
 @UseGuards(AuthGuard)
@@ -21,6 +25,21 @@ export class MessagesController {
   @Get('conversations')
   getConversations(@Request() req: any) {
     return this.messagesService.getConversations(req.user.id);
+  }
+
+  // ':userId' より先に宣言すること。後ろに置くと /messages/unread がそちらに吸われる
+  @Get('unread')
+  getUnreadCounts(@Request() req: any) {
+    return this.messagesService.getUnreadCounts(req.user.id);
+  }
+
+  @Post('read')
+  markRead(@Request() req: any, @Body() body: MarkReadDto) {
+    return this.messagesService.markRead(
+      req.user.id,
+      body.userId,
+      body.lastMessageId,
+    );
   }
 
   @Get(':userId')

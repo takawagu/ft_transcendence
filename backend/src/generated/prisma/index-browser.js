@@ -159,6 +159,14 @@ exports.Prisma.DirectMessageScalarFieldEnum = {
   createdAt: 'createdAt'
 };
 
+exports.Prisma.ConversationReadScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  partnerId: 'partnerId',
+  lastReadMessageId: 'lastReadMessageId',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -180,7 +188,8 @@ exports.Prisma.ModelName = {
   ItoGameRecord: 'ItoGameRecord',
   Friendship: 'Friendship',
   Block: 'Block',
-  DirectMessage: 'DirectMessage'
+  DirectMessage: 'DirectMessage',
+  ConversationRead: 'ConversationRead'
 };
 
 /**

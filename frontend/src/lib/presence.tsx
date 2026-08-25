@@ -34,6 +34,8 @@ export interface PresenceEventPayloads {
   'friend:accepted': { user: User };
   /** user は会話の相手。受信者には送信者、送信者には受信者が入る */
   'dm:received': { message: DirectMessage; user: User };
+  /** 自分が別タブで会話を既読にした時。userId は会話の相手 */
+  'dm:read': { userId: number; lastReadMessageId: number };
 }
 
 export type PresenceEventName = keyof PresenceEventPayloads;
@@ -44,6 +46,7 @@ const PRESENCE_EVENT_NAMES: PresenceEventName[] = [
   'friend:requestReceived',
   'friend:accepted',
   'dm:received',
+  'dm:read',
 ];
 
 type Handler = (payload: any) => void;
@@ -54,12 +57,15 @@ interface PresenceContextValue {
   /**
    * 相手のID → その相手からの未読件数。
    * 「誰から何件見逃しているか」を出せるよう、有無ではなく件数で持つ。
-   * DBに既読列を持たないため、この情報はリロードで消える
-   * （docs/dm-requirements.md セクション1・4）。
+   * 初期値はサーバーの既読カーソルから取得するので、リロードしても残る
+   * （docs/dm-requirements.md セクション4）。
    */
   unreadCounts: Map<number, number>;
-  /** その相手との会話を開いた時に呼ぶ。未読から外す */
-  markConversationRead: (userId: number) => void;
+  /**
+   * その相手との会話を lastMessageId まで読んだことにする。
+   * 表示は即座に消し、サーバーへも記録する。
+   */
+  markConversationRead: (userId: number, lastMessageId: number) => void;
   /** サーバーイベントの購読。戻り値の関数を呼ぶと解除する */
   subscribe: <E extends PresenceEventName>(
     event: E,
@@ -86,11 +92,20 @@ export function usePresence(): PresenceContextValue {
  * itoルームの `/ito` とは名前空間が違うので、2本が並存しても競合しない。
  */
 export function PresenceProvider({ children }: { children: React.ReactNode }) {
-  const { token } = useSession();
+  const { token, apiCall } = useSession();
   const [onlineFriendIds, setOnlineFriendIds] = useState<Set<number>>(new Set());
   const [unreadCounts, setUnreadCounts] = useState<Map<number, number>>(new Map());
 
-  const markConversationRead = useCallback((userId: number) => {
+  /**
+   * 初期取得（/api/messages/unread）の応答待ちの間に既読にした相手。
+   * 応答が後から届いて未読を復活させてしまうのを防ぐために覚えておく。
+   * 取得していない間は null。
+   */
+  const clearedWhileFetchingRef = useRef<Set<number> | null>(null);
+
+  /** サーバーへの記録を待たずにバッジを消す（往復を待つとタップの手応えが鈍るため） */
+  const clearUnreadLocally = useCallback((userId: number) => {
+    clearedWhileFetchingRef.current?.add(userId);
     setUnreadCounts(prev => {
       if (!prev.has(userId)) return prev;
       const next = new Map(prev);
@@ -98,6 +113,53 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
   }, []);
+
+  const markConversationRead = useCallback(
+    (userId: number, lastMessageId: number) => {
+      clearUnreadLocally(userId);
+      // 失敗しても画面は既読のまま。次回の取得でサーバーの値に戻るだけなので握りつぶす
+      apiCall('/api/messages/read', 'POST', { userId, lastMessageId }).catch(
+        () => {},
+      );
+    },
+    [apiCall, clearUnreadLocally],
+  );
+
+  /*
+   * ログイン時と再ログイン時に、サーバーの既読カーソルから未読件数を取り直す。
+   *
+   * この応答は、/messages を直接開いた時に「履歴取得 → 既読POST」と競合する。
+   * 素直に上書きすると、既読にしたばかりの相手の未読が復活してしまうため、
+   * 取得中に既読にした相手は結果から取り除く。
+   */
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    const clearedDuringFetch = new Set<number>();
+    clearedWhileFetchingRef.current = clearedDuringFetch;
+
+    apiCall('/api/messages/unread')
+      .then((rows: { userId: number; count: number }[]) => {
+        if (cancelled) return;
+        setUnreadCounts(
+          new Map(
+            rows
+              .filter(r => !clearedDuringFetch.has(r.userId))
+              .map(r => [r.userId, r.count]),
+          ),
+        );
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (clearedWhileFetchingRef.current === clearedDuringFetch) {
+          clearedWhileFetchingRef.current = null;
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, apiCall]);
 
   /**
    * 購読者一覧。socket本体はトークン変化時に張り直すが、
@@ -162,6 +224,11 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
       });
     });
 
+    // 別タブで既読にした分をこのタブにも反映する
+    socket.on('dm:read', (p: PresenceEventPayloads['dm:read']) => {
+      clearUnreadLocally(p.userId);
+    });
+
     // 全イベントを購読者へ中継する。何に反応するかは各ページ側の判断に委ねる
     for (const event of PRESENCE_EVENT_NAMES) {
       socket.on(event, (payload: unknown) => {
@@ -172,7 +239,7 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
     return () => {
       socket.disconnect();
     };
-  }, [token]);
+  }, [token, clearUnreadLocally]);
 
   return (
     <PresenceContext.Provider

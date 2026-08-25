@@ -20,10 +20,11 @@ ft_transcendence subject の以下の要件に対応するための定義書。
 - `DirectMessage` モデル（[schema.prisma:70-79](backend/prisma/schema.prisma#L70-L79)）は着手前は**定義だけあり、API・UI ともに未実装**だった。バックエンドから参照している箇所もゼロだった
 - API（[messages/](backend/src/messages/)）・UI（[messages/page.tsx](frontend/src/app/messages/page.tsx)）ともに実装済み
 - リアルタイム配信は既存の `/presence` WebSocket 名前空間（[presence/](backend/src/presence/)）に相乗りしている
-- マイグレーション [20260825051312_add_dm_indexes](backend/prisma/migrations/20260825051312_add_dm_indexes/) 適用済み
+- マイグレーション [20260825051312_add_dm_indexes](backend/prisma/migrations/20260825051312_add_dm_indexes/) / [20260825063000_add_conversation_read](backend/prisma/migrations/20260825063000_add_conversation_read/) 適用済み
 
 本書のスコープ: **フレンド間の1対1テキストメッセージの送受信・履歴表示**。
-スコープ外（セクション6参照）: グループチャット、メッセージの編集/削除、既読管理、添付ファイル。
+スコープ外（セクション6参照）: グループチャット、メッセージの編集/削除、**相手への既読表示（read receipts）**、添付ファイル。
+未読件数の永続化は本書の範囲内（セクション1）。
 
 ---
 
@@ -51,11 +52,30 @@ status: 実装済み（マイグレーション適用済み）
 
 1本では `OR` の片側しか使われず、もう片側がフルスキャンになる。マイグレーションが1本必要（[migrations/](backend/prisma/migrations/) に追加）。
 
-### 決定: 既読管理のカラムは追加しない
+### 決定: 既読は「会話ごとのカーソル」で持つ（`ConversationRead`）
 
-`readAt` 等は持たせない。subject の basic chat 要件は「send/receive messages」までであり、**既読表示（read receipts）は上位の「Advanced chat features」モジュール側に明記された機能**のため。そちらを取る段階で改めて設計する。
+当初は既読管理を持たず、未読はセッション中のみの表示にしていた。しかし**リロードで未読が消えると「誰からのメッセージを見逃しているか」が分からなくなる**ため、永続化した。
 
-セッション中の未読通知については セクション4 を参照。
+`DirectMessage` に `readAt` を足す案は採らない。既読にするたびに該当メッセージを**全行 UPDATE** することになるため。会話ごとに1行のカーソルを持てば、既読化は1回の UPDATE で済み、得られる情報は変わらない。
+
+```prisma
+model ConversationRead {
+  id                Int      @id @default(autoincrement())
+  userId            Int      // 読んだ人
+  partnerId         Int      // 会話の相手
+  lastReadMessageId Int
+  updatedAt         DateTime @updatedAt
+
+  @@unique([userId, partnerId])
+}
+```
+
+- マイグレーション [20260825063000_add_conversation_read](backend/prisma/migrations/20260825063000_add_conversation_read/) 適用済み
+- **カーソルは後退させない。** 別タブで過去を遡っている間に巻き戻ると、読んだはずのメッセージが未読へ戻ってしまう。`Math.max(現在値, 受け取ったid)` で更新する
+- `createdAt` ではなく `id` を基準にするのは、履歴のページングと同じ理由（同時刻の取りこぼしを避ける）
+- **read receipts（相手に既読を見せる機能）はまだ実装しない**が、このカーソルは相手のぶんも引けるので、「自分のメッセージが読まれたか」の判定材料としてそのまま使える。Advanced chat features を取る段階で UI だけ足せばよい
+
+未読の表示については セクション4 を参照。
 
 ### 要修正: `content` の長さが無制限
 
@@ -74,8 +94,12 @@ status: 実装済み
 | エンドポイント | 内容 |
 |---|---|
 | `GET /api/messages/conversations` | 会話一覧（相手ごとの最新メッセージ） |
+| `GET /api/messages/unread` | 相手ごとの未読件数 |
 | `GET /api/messages/:userId` | 特定の相手との履歴（ページング） |
 | `POST /api/messages` | 送信 |
+| `POST /api/messages/read` | そこまで読んだことにする |
+
+**ルートの宣言順に注意。** `unread` / `read` は `:userId` より先に宣言する。後ろに置くと `/messages/unread` が `:userId` に吸われる。
 
 ### `GET /api/messages/conversations`
 
@@ -106,6 +130,19 @@ status: 実装済み
 | **相手がフレンドでない** | **403** | ブロック・フレンド解除もここで弾かれる（セクション3） |
 
 送信成功時に `/presence` 経由で相手と自分へ配信する（セクション4）。
+
+### `GET /api/messages/unread`
+
+- レスポンス: `{ userId: number, count: number }[]`（未読0の相手は含めない）
+- 既読カーソルより新しい受信メッセージを `LEFT JOIN` + `GROUP BY` で数える。カーソルが無い相手は `COALESCE(..., 0)` で「1件も読んでいない」として扱う
+- 会話一覧に混ぜず独立させたのは、**全ページで動く `PresenceProvider` がこれだけを引く**ため。ヘッダーのバッジのために会話一覧まるごとを毎回取りにいく必要はない
+
+### `POST /api/messages/read`
+
+- リクエスト: `{ userId: number, lastMessageId: number }`
+- レスポンス: `{ userId, lastReadMessageId }`（後退防止の結果、送った値より大きくなることがある）
+- エラー: `userId` が自分自身 → 400 / `lastMessageId` が1未満・型不正 → 400
+- 成功時に**自分の全ソケットへ** `dm:read` を送り、別タブのバッジを揃える
 
 ---
 
@@ -145,6 +182,7 @@ DM 専用の名前空間は新設しない。既にオンライン状態とフ�
 | 方向 | イベント | ペイロード | タイミング |
 |---|---|---|---|
 | S→C | `dm:received` | `{ message, user }` | メッセージが作成された時 |
+| S→C | `dm:read` | `{ userId, lastReadMessageId }` | 会話を既読にした時（**本人の全タブへのみ**） |
 
 - `message` は作成された `DirectMessage`、`user` は**相手**の公開情報（`{ id, username, bio, profileImage }`）
 - **受信者と送信者の両方へ送る。** 送信者にも送るのは、同じアカウントで開いている別タブの画面を同期させるため（`PresenceService.emitToUser` は該当ユーザーの全ソケットへ配信する）
@@ -174,9 +212,14 @@ DM 専用の名前空間は新設しない。既にオンライン状態とフ�
 - **`apiCall` も Provider へ移した。** `/messages` からも同じリトライ・401ログアウトの挙動が要るため。起動待ちバナー（`apiWaiting`）は Provider が1箇所で描画するので、ページ側に置く必要がなくなった
 - **イベントは `subscribe(event, handler)` で中継する。** Provider が保持するのは `onlineFriendIds` と未読だけにとどめ、`dm:received` などに何をするかはページ側の判断に委ねる。購読者一覧は接続とは別に ref で持つため、再接続しても購読は外れない
 
-### セッション中のみの未読表示
+### 未読表示
 
-`readAt` を持たないため永続的な未読管理はできない（セクション1）。代わりに、`dm:received` を受け取ったらヘッダーのメッセージ導線にバッジを出す。**リロードすると消える**ことを制約として明記する。
+未読は `ConversationRead`（セクション1）で永続化してあるため、**リロードしても残る**。
+
+- 初期値は `PresenceProvider` が `GET /api/messages/unread` から取得する（ログイン時・再ログイン時）
+- 以降は `dm:received` で加算し、会話を開いたら `POST /api/messages/read` で消す
+- バッジはサーバーの応答を待たずに先に消す。往復を待つと操作の手応えが鈍るため。記録に失敗しても次回の取得でサーバーの値に戻るだけなので、エラーは握りつぶす
+- **初期取得と既読POSTの競合に注意。** `/messages` を直接開くと「未読の初期取得」と「履歴取得→既読POST」が同時に走る。初期取得の応答で素直に上書きすると、**既読にしたばかりの相手の未読が復活する**。取得中に既読にした相手を覚えておき、応答から取り除くことで防ぐ
 
 未読の判定は `PresenceProvider` が行い、**`unreadCounts: Map<相手のID, 件数>`** として保持する。有無ではなく件数で持つのは、**誰から何件見逃しているか**を会話一覧で出すため。
 
@@ -272,9 +315,9 @@ status: 未着手
 
 - **グループチャット**: 1対1のみ。`DirectMessage` は `senderId`/`receiverId` の2者構造なので、対応するならモデルから作り直しになる
 - **メッセージの編集・削除**: 実装しない
-- **永続的な既読管理**: セクション1のとおり Advanced chat features 側の課題
+- **相手への既読表示（read receipts）**: 判定に必要なカーソルはセクション1で用意済みだが、UIは出さない。Advanced chat features 側の課題
 - **添付ファイル**: 実装しない。subject では別 Minor モジュール（File upload）扱い
-- **通知の永続化**: セッション中のバッジのみ（セクション4）
+- **通知の永続化**: 未読件数はDBで永続化済み（セクション1）。それ以外の通知（フレンド申請など）はセッション中の表示のみ
 
 ### 将来: Advanced chat features（Minor 1点）との関係
 
@@ -287,7 +330,7 @@ status: 未着手
 | Chat history persistence | ✅ 本書の実装で満たす |
 | Invite users to play games directly from chat | ❌ ito ルームへの招待導線が必要 |
 | Game/tournament notifications in chat | ❌ 未着手 |
-| Typing indicators and read receipts | ❌ 未着手 |
+| Typing indicators and read receipts | ⏳ 既読カーソル（`ConversationRead`）は実装済み。UIとtyping通知が未着手 |
 
 前半3つは本書の実装でほぼ揃うため、**追加1点の獲得は残り3項目の実装次第**になる。
 

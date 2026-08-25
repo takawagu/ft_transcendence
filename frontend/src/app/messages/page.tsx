@@ -157,7 +157,6 @@ function MessagesView() {
     let cancelled = false;
     setHistoryLoading(true);
     setSendError('');
-    markConversationRead(selectedId);
     (async () => {
       try {
         const history: DirectMessage[] = await apiCall(
@@ -166,6 +165,9 @@ function MessagesView() {
         if (cancelled) return;
         setMessages(history || []);
         setHasMore((history?.length ?? 0) === HISTORY_PAGE_SIZE);
+        // 既読は履歴が取れてから打つ。どこまで読んだかを表すIDが要るため
+        const last = history?.[history.length - 1];
+        if (last) markConversationRead(selectedId, last.id);
       } catch (err: any) {
         if (cancelled) return;
         setMessages([]);
@@ -195,7 +197,8 @@ function MessagesView() {
       ]);
 
       if (selectedIdRef.current !== partner.id) return;
-      markConversationRead(partner.id);
+      // 開いている会話に届いた分はその場で既読にする
+      markConversationRead(partner.id, message.id);
       // 自分の送信は POST の応答で既に足しているので、idで重複を弾く
       setMessages(prev =>
         prev.some(m => m.id === message.id) ? prev : [...prev, message],

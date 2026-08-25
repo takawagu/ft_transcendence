@@ -27,6 +27,17 @@ export class SendMessageDto {
   content: string;
 }
 
+export class MarkReadDto {
+  /** 会話の相手 */
+  @IsInt()
+  userId: number;
+
+  /** ここまで読んだ、というメッセージID */
+  @IsInt()
+  @Min(1)
+  lastMessageId: number;
+}
+
 /**
  * 会話履歴のカーソルページング。
  * クエリ文字列は文字列で届くため、@Type で数値へ変換してから検証する

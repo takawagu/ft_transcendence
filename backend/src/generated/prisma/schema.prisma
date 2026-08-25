@@ -21,12 +21,14 @@ model User {
   bio          String?
 
   gameRecord          ItoGameRecord?
-  sentMessages        DirectMessage[] @relation("SentMessages")
-  receivedMessages    DirectMessage[] @relation("ReceivedMessages")
-  appliedFriendships  Friendship[]    @relation("Applicant")
-  receivedFriendships Friendship[]    @relation("Approver")
-  blocksMade          Block[]         @relation("Blocker")
-  blocksReceived      Block[]         @relation("Blocked")
+  sentMessages        DirectMessage[]    @relation("SentMessages")
+  receivedMessages    DirectMessage[]    @relation("ReceivedMessages")
+  appliedFriendships  Friendship[]       @relation("Applicant")
+  receivedFriendships Friendship[]       @relation("Approver")
+  blocksMade          Block[]            @relation("Blocker")
+  blocksReceived      Block[]            @relation("Blocked")
+  readCursors         ConversationRead[] @relation("ReadCursorUser")
+  readCursorsOfMe     ConversationRead[] @relation("ReadCursorPartner")
 }
 
 model ItoGameRecord {
@@ -81,4 +83,21 @@ model DirectMessage {
   // 両方向のインデックスが要る。1本だと OR の片側がフルスキャンになる
   @@index([senderId, receiverId, createdAt])
   @@index([receiverId, senderId, createdAt])
+}
+
+/// 誰がどの相手との会話をどこまで読んだかのカーソル。
+/// DirectMessage に readAt を持たせると既読化のたびに該当行を全UPDATEすることになるため、
+/// 会話ごとに1行だけ持って1回のUPDATEで済ませる。
+/// 相手のカーソルを見れば「自分のメッセージが読まれたか」も判定できる。
+model ConversationRead {
+  id                Int      @id @default(autoincrement())
+  userId            Int
+  partnerId         Int
+  lastReadMessageId Int
+  updatedAt         DateTime @updatedAt
+
+  user    User @relation("ReadCursorUser", fields: [userId], references: [id], onDelete: Cascade)
+  partner User @relation("ReadCursorPartner", fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, partnerId])
 }

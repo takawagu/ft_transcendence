@@ -22,6 +22,12 @@ interface ConversationRow {
   senderId: number;
 }
 
+interface UnreadRow {
+  partner: number;
+  /** Postgres の count() は bigint で返るため、Prisma 側では BigInt になる */
+  unread: bigint;
+}
+
 @Injectable()
 export class MessagesService {
   constructor(
@@ -55,6 +61,60 @@ export class MessagesService {
         createdAt: r.createdAt,
         senderId: r.senderId,
       }));
+  }
+
+  /**
+   * 相手ごとの未読件数。
+   * 既読カーソル（ConversationRead）より新しい受信メッセージを数える。
+   * カーソルが無い相手は1件も読んでいないので COALESCE で 0 として扱う。
+   */
+  async getUnreadCounts(myId: number) {
+    const rows = await this.prisma.$queryRaw<UnreadRow[]>`
+      SELECT dm."senderId" AS partner, count(*) AS unread
+      FROM "DirectMessage" dm
+      LEFT JOIN "ConversationRead" cr
+        ON cr."userId" = ${myId} AND cr."partnerId" = dm."senderId"
+      WHERE dm."receiverId" = ${myId}
+        AND dm.id > COALESCE(cr."lastReadMessageId", 0)
+      GROUP BY dm."senderId"
+    `;
+
+    return rows.map((r) => ({ userId: r.partner, count: Number(r.unread) }));
+  }
+
+  /**
+   * その相手との会話を lastMessageId まで読んだことにする。
+   * カーソルは後退させない。別タブで過去を遡っている間に巻き戻ると、
+   * 読んだはずのメッセージが未読に戻ってしまうため。
+   */
+  async markRead(myId: number, partnerId: number, lastMessageId: number) {
+    if (partnerId === myId) {
+      throw new BadRequestException('自分自身との会話はありません');
+    }
+
+    const current = await this.prisma.conversationRead.findUnique({
+      where: { userId_partnerId: { userId: myId, partnerId } },
+      select: { lastReadMessageId: true },
+    });
+
+    const lastReadMessageId = Math.max(
+      current?.lastReadMessageId ?? 0,
+      lastMessageId,
+    );
+
+    await this.prisma.conversationRead.upsert({
+      where: { userId_partnerId: { userId: myId, partnerId } },
+      create: { userId: myId, partnerId, lastReadMessageId },
+      update: { lastReadMessageId },
+    });
+
+    // 同じアカウントで開いている別タブのバッジを揃える
+    this.presence.emitToUser(myId, PRESENCE_EVENTS.DM_READ, {
+      userId: partnerId,
+      lastReadMessageId,
+    });
+
+    return { userId: partnerId, lastReadMessageId };
   }
 
   /**

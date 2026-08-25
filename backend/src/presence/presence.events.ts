@@ -30,6 +30,9 @@ export const PRESENCE_EVENTS = {
 
   /** DMが作成された時。受信者と送信者の両方に送る（別タブの同期のため） */
   DM_RECEIVED: 'dm:received',
+
+  /** 会話を既読にした時。本人の全タブへ送り、未読バッジを揃える */
+  DM_READ: 'dm:read',
 } as const;
 
 export interface PresenceSnapshotPayload {
@@ -60,4 +63,10 @@ export interface DmReceivedPayload {
   };
   /** 会話の相手。受信者には送信者、送信者には受信者が入る */
   user: PublicUser;
+}
+
+export interface DmReadPayload {
+  /** 既読にした会話の相手 */
+  userId: number;
+  lastReadMessageId: number;
 }
