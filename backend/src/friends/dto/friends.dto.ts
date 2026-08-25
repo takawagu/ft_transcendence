@@ -1,4 +1,15 @@
-import { IsInt, IsNotEmpty, IsString } from 'class-validator';
+import { IsInt, IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator';
+
+/**
+ * ユーザー検索（部分一致）。
+ * 1文字での総当たりを避けるため最低2文字を要求する。
+ */
+export class SearchUsersDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(30)
+  q: string;
+}
 
 /**
  * フレンド申請の送信。usernameの完全一致のみ（email検索は廃止）。

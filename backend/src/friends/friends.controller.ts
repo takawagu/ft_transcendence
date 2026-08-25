@@ -1,8 +1,17 @@
-import { Controller, Get, Post, Body, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { FriendsService } from './friends.service';
 import {
   SendFriendRequestDto,
+  SearchUsersDto,
   FriendshipIdDto,
   FriendIdDto,
   UserIdDto,
@@ -26,6 +35,11 @@ export class FriendsController {
   @Get('blocks')
   getBlocks(@Request() req: any) {
     return this.friendsService.getBlocks(req.user.id);
+  }
+
+  @Get('search')
+  searchUsers(@Request() req: any, @Query() query: SearchUsersDto) {
+    return this.friendsService.searchUsers(req.user.id, query.q);
   }
 
   @Post('request')

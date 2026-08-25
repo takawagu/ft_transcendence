@@ -23,6 +23,24 @@ interface FriendshipRequest {
   user: User;
 }
 
+/** 検索候補。relation は自分から見たその相手との関係 */
+interface SearchResult extends User {
+  relation: 'friend' | 'pending' | 'none';
+}
+
+/** 検索を開始する最小文字数（バックエンドの @MinLength(2) と揃える） */
+const SEARCH_MIN_LENGTH = 2;
+
+/**
+ * APIリトライ設定。
+ * `make up` 直後はフロントが先に起動し、バックエンドのコンパイル完了まで
+ * 30〜40秒ほど nginx が 502 を返す。その間の操作を自動で吸収するためのもの。
+ * 実測の起動時間に余裕を持たせて締め切りを60秒に置く（回数ではなく経過時間で打ち切る）。
+ */
+const API_RETRY_DEADLINE_MS = 60_000;
+const API_RETRY_BASE_DELAY_MS = 500;
+const API_RETRY_MAX_DELAY_MS = 5_000;
+
 const AVATAR_PRESETS = [
   '🦊', '🐱', '🐼', '🐯', '🐸', '🐨', '🐙', '👾', '🚀', '🔮'
 ];
@@ -61,6 +79,8 @@ export default function HomePage() {
   const [friendQuery, setFriendQuery] = useState('');
   const [friendError, setFriendError] = useState('');
   const [friendSuccess, setFriendSuccess] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [activeFriendTab, setActiveFriendTab] = useState<'list' | 'requests' | 'blocks'>('list');
   const [roomCreateRounds, setRoomCreateRounds] = useState(3);
 
@@ -89,6 +109,9 @@ export default function HomePage() {
   const [editError, setEditError] = useState('');
   const [editSuccess, setEditSuccess] = useState('');
   const [gameRecord, setGameRecord] = useState<GameRecord | null>(null);
+
+  /** バックエンド起動待ちでリトライ中か。表示専用 */
+  const [apiWaiting, setApiWaiting] = useState(false);
 
   // Hydration state check
   const [mounted, setMounted] = useState(false);
@@ -165,6 +188,28 @@ export default function HomePage() {
     }
   }, [token]);
 
+  // フレンド追加フォームの候補検索（既存の重複チェックと同じ400msデバウンス）
+  useEffect(() => {
+    const q = friendQuery.trim();
+    if (!token || q.length < SEARCH_MIN_LENGTH) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+    setSearchLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await apiCall(`/api/friends/search?q=${encodeURIComponent(q)}`);
+        setSearchResults(results || []);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [friendQuery, token]);
+
   /**
    * オンライン状態と申請通知を受け取る /presence への接続。
    * ログイン中はホーム画面にいる間だけ張る。itoルームへ遷移すると
@@ -210,26 +255,61 @@ export default function HomePage() {
     if (activeToken) {
       headers['Authorization'] = `Bearer ${activeToken}`;
     }
-    const res = await fetch(endpoint, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (!res.ok) {
-      if (res.status === 401) {
-        localStorage.removeItem('ft_token');
-        localStorage.removeItem('ft_user');
-        sessionStorage.removeItem('ito_player_name');
-        setToken(null);
-        setUser(null);
+
+    const deadline = Date.now() + API_RETRY_DEADLINE_MS;
+
+    for (let attempt = 0; ; attempt++) {
+      if (attempt > 0) {
+        if (Date.now() >= deadline) break;
+        setApiWaiting(true);
+        // 指数バックオフ（上限あり）。締め切りを超えないよう待ち時間を切り詰める
+        const delay = Math.min(
+          API_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1),
+          API_RETRY_MAX_DELAY_MS,
+          deadline - Date.now(),
+        );
+        await new Promise(r => setTimeout(r, delay));
       }
-      const errorData = await res.json().catch(() => ({}));
-      const message = Array.isArray(errorData.message)
-        ? errorData.message.join(' / ')
-        : errorData.message;
-      throw new Error(message || 'エラーが発生しました');
+
+      let res: Response;
+      try {
+        res = await fetch(endpoint, {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : undefined,
+        });
+      } catch {
+        // fetch自体が失敗＝サーバーに届いていないので、副作用の二重実行にはならない
+        continue;
+      }
+
+      // 502/503 はnginxがバックエンドに到達できなかった状態。リクエストは処理されていない。
+      // 504（Gateway Timeout）は処理済みの可能性があるため、あえてリトライしない
+      if (res.status === 502 || res.status === 503) continue;
+
+      setApiWaiting(false);
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem('ft_token');
+          localStorage.removeItem('ft_user');
+          sessionStorage.removeItem('ito_player_name');
+          setToken(null);
+          setUser(null);
+        }
+        const errorData = await res.json().catch(() => ({}));
+        const message = Array.isArray(errorData.message)
+          ? errorData.message.join(' / ')
+          : errorData.message;
+        throw new Error(message || 'エラーが発生しました');
+      }
+      return res.json();
     }
-    return res.json();
+
+    setApiWaiting(false);
+    throw new Error(
+      'サーバーに接続できません。起動中の可能性があるため、少し待ってから再度お試しください。',
+    );
   };
 
   // Auth handlers
@@ -319,20 +399,24 @@ export default function HomePage() {
   };
 
   // Friend actions
-  const handleAddFriend = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const sendFriendRequest = async (username: string) => {
     setFriendError('');
     setFriendSuccess('');
-    if (!friendQuery.trim()) return;
-
     try {
-      await apiCall('/api/friends/request', 'POST', { query: friendQuery.trim() });
+      await apiCall('/api/friends/request', 'POST', { query: username });
       setFriendSuccess('フレンド申請を送信しました！');
       setFriendQuery('');
+      setSearchResults([]);
       fetchFriendsData();
     } catch (err: any) {
       setFriendError(err.message || '申請に失敗しました。');
     }
+  };
+
+  const handleAddFriend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!friendQuery.trim()) return;
+    await sendFriendRequest(friendQuery.trim());
   };
 
   const handleAcceptFriend = async (friendshipId: number) => {
@@ -483,6 +567,13 @@ export default function HomePage() {
   if (!token || !user) {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center bg-zinc-950 text-white relative overflow-hidden px-4">
+        {/* バックエンド起動待ちの表示。make up 直後の502をリトライで吸収している間に出る */}
+        {apiWaiting && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 px-4 py-2 bg-zinc-900/95 border border-indigo-800/60 rounded-full shadow-xl">
+            <span className="h-3 w-3 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+            <span className="text-[11px] font-semibold text-zinc-300">サーバーの起動を待っています…</span>
+          </div>
+        )}
         {/* Decorative background glow */}
         <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-indigo-900/20 rounded-full blur-[120px] pointer-events-none"></div>
         <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-purple-900/20 rounded-full blur-[120px] pointer-events-none"></div>
@@ -674,6 +765,13 @@ export default function HomePage() {
   // --- HOME SCREEN (Logged in) ---
   return (
     <main className="min-h-screen bg-zinc-950 text-white flex flex-col relative overflow-hidden">
+      {/* バックエンド起動待ちの表示。make up 直後の502をリトライで吸収している間に出る */}
+      {apiWaiting && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 px-4 py-2 bg-zinc-900/95 border border-indigo-800/60 rounded-full shadow-xl">
+          <span className="h-3 w-3 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
+          <span className="text-[11px] font-semibold text-zinc-300">サーバーの起動を待っています…</span>
+        </div>
+      )}
       {/* Background decorations */}
       <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-900/10 rounded-full blur-[100px] pointer-events-none"></div>
       <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-900/10 rounded-full blur-[100px] pointer-events-none"></div>
@@ -1051,6 +1149,45 @@ export default function HomePage() {
             <div className="p-4 border-t border-zinc-800/80 bg-zinc-900/30">
               <form onSubmit={handleAddFriend} className="space-y-2">
                 <h3 className="text-xs font-semibold text-zinc-300">フレンドを追加</h3>
+
+                {/* 候補リスト。入力欄がパネル最下部にあるため上側に開く */}
+                {friendQuery.trim().length >= SEARCH_MIN_LENGTH && (
+                  <div className="rounded-lg bg-zinc-950/60 border border-zinc-800/60 divide-y divide-zinc-800/60 overflow-hidden">
+                    {searchLoading ? (
+                      <p className="px-3 py-2 text-[10px] text-zinc-600">検索中…</p>
+                    ) : searchResults.length === 0 ? (
+                      <p className="px-3 py-2 text-[10px] text-zinc-600">一致するユーザーはいません</p>
+                    ) : (
+                      searchResults.map(result => (
+                        <div key={result.id} className="flex items-center justify-between px-2.5 py-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {renderAvatar(result.profileImage, 'w-7 h-7 text-xs')}
+                            <div className="min-w-0">
+                              <div className="text-[11px] font-semibold text-zinc-200 truncate">{result.username}</div>
+                              {result.bio && (
+                                <div className="text-[9px] text-zinc-600 max-w-[120px] truncate">{result.bio}</div>
+                              )}
+                            </div>
+                          </div>
+                          {result.relation === 'friend' ? (
+                            <span className="px-2 py-1 text-[9px] font-bold text-zinc-500 shrink-0">フレンド済み</span>
+                          ) : result.relation === 'pending' ? (
+                            <span className="px-2 py-1 text-[9px] font-bold text-zinc-500 shrink-0">申請中</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => sendFriendRequest(result.username)}
+                              className="px-2.5 py-1 text-[10px] font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-all cursor-pointer shrink-0"
+                            >
+                              申請
+                            </button>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   <input
                     type="text"

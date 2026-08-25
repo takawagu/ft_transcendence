@@ -8,7 +8,7 @@ ft_transcendence subject の以下の要件に対応するための定義書。
   > A friends system (add/remove friends, see friends list).
 
 現状の実装（[schema.prisma](backend/prisma/schema.prisma) / [friends.controller.ts](backend/src/friends/friends.controller.ts) / [page.tsx](frontend/src/app/page.tsx)）:
-- `Friendship` / `Block` テーブル、フレンドAPI 9エンドポイント（申請・承認・拒否・削除・ブロック3件・一覧2件）は実装済み
+- `Friendship` / `Block` テーブル、フレンドAPI 10エンドポイント（申請・承認・拒否・削除・ブロック3件・一覧2件・候補検索）は実装済み
 - オンライン状態と申請通知を配信する `/presence` WebSocket 名前空間（[presence/](backend/src/presence/)）も実装済み
 - ホーム画面のフレンドパネル（一覧 / 申請待ち / ブロック中タブ、フレンド詳細ウィンドウ、追加フォーム）も実装済み
 - マイグレーション [20260824050813_add_block](backend/prisma/migrations/20260824050813_add_block/) 適用済み
@@ -71,7 +71,7 @@ model Block {
 
 ## 2. API 仕様
 
-status: 実装済み（9エンドポイント）
+status: 実装済み（10エンドポイント）
 
 全エンドポイントが `AuthGuard`（[auth.guard.ts](backend/src/auth/auth.guard.ts)）必須。`Authorization: Bearer <JWT>` を要求し、`req.user.id` を「自分」として扱う。ベースパスは `/api/friends`（グローバルプレフィックス `api` は [main.ts:8](backend/src/main.ts#L8)）。
 
@@ -84,6 +84,7 @@ status: 実装済み（9エンドポイント）
 | `POST /api/friends/reject` | 実装済み（変更なし） |
 | `POST /api/friends/remove` | 実装済み（変更なし） |
 | `GET /api/friends/blocks` | 実装済み（新規） |
+| `GET /api/friends/search` | 実装済み（新規、部分一致の候補検索） |
 | `POST /api/friends/block` | 実装済み（新規） |
 | `POST /api/friends/unblock` | 実装済み（新規） |
 
@@ -175,22 +176,46 @@ status: 実装済み（9エンドポイント）
 
 ### service層への切り出し（実装済み）
 
-`FriendsController` は service 層を持たず `PrismaService` を直接叩いていたが、[friends.service.ts](backend/src/friends/friends.service.ts) を新設して Prisma アクセスとビジネスロジックをすべて移した。コントローラは9エンドポイントの受け口だけになっている。上限値（`FRIEND_LIMIT` / `PENDING_LIMIT` / `BLOCK_LIMIT`）もこのファイル冒頭の定数に集約した。
+`FriendsController` は service 層を持たず `PrismaService` を直接叩いていたが、[friends.service.ts](backend/src/friends/friends.service.ts) を新設して Prisma アクセスとビジネスロジックをすべて移した。コントローラは10エンドポイントの受け口だけになっている。上限値（`FRIEND_LIMIT` / `PENDING_LIMIT` / `BLOCK_LIMIT`）もこのファイル冒頭の定数に集約した。
 
 ---
 
 ## 3. ユーザー検索と申請フロー
 
-status: 決定済み
+status: 実装済み
 
-### 決定: 検索は username の完全一致のみ
+### 決定: 申請時の解決は username の完全一致のみ
 
 - `POST /api/friends/request` の `query` は **username の完全一致**でのみ解決する
 - **email での検索は廃止する。** 以前は `OR: [{ username: query }, { email: query }]` で両方を見ていたが、`username` 単独の `findUnique` に変更した（実装済み、[friends.service.ts:80-82](backend/src/friends/friends.service.ts#L80-L82)）
-- 部分一致のユーザー検索API（`GET /api/users/search?q=` 等）は**作らない**。総当たりによるユーザー列挙を避けつつ実装を単純に保つため
 - 相手の username を知っている前提の設計とする。フレンド追加を username で行うのは一般的な UX であり、email 検索の廃止による損失は小さいと判断した
 
 理由は次項のユーザー列挙対策を兼ねる。
+
+### 決定（変更）: 部分一致の候補検索を追加する
+
+**当初は「部分一致のユーザー検索APIは作らない」と決定していたが、これを撤回した。** フレンド追加フォームで入力中に候補を出す UX を優先する。
+
+撤回にあたって影響を再評価した結果、**当初の懸念のうち本質的な部分は既に別の手段で解消済み**だった。
+
+- 守りたかったのは主に **email の列挙**であり、それは前項の「username 限定検索」で解消している。**検索対象は username のみ**なので、部分一致を許しても email は一切漏れない
+- username の列挙が容易になるのは事実だが、本書は前項で既に「username はユーザー同士が教え合う前提の公開識別子なので（存在有無が分かることを）許容する」と決めている。**その決定と矛盾しない**
+
+そのうえで、総当たりを助けすぎないよう次の制約を課す。
+
+| 制約 | 値 | 理由 |
+|---|---|---|
+| 最小文字数 | **2文字** | 1文字だと総当たりの起点になりやすい。`SearchUsersDto` の `@MinLength(2)` で強制 |
+| 返却件数 | **3件** | 一覧的に舐められないよう少数に絞る（`SEARCH_LIMIT`） |
+| 認証 | 必須 | 他のフレンドAPIと同じく `AuthGuard` |
+
+### `GET /api/friends/search?q=`（新規）
+
+- クエリ: `q` — username の**部分一致**（大文字小文字は区別しない、`mode: 'insensitive'`）
+- レスポンス: `{ id, username, bio, profileImage, relation }` の配列（最大3件、username 昇順）
+- `relation` は自分から見た関係: `'friend'` / `'pending'` / `'none'`
+- **ブロック関係にある相手は向きを問わず結果に含めない。** 相手が自分をブロックしている場合も、自分が相手をブロックしている場合も除外する
+- **既にフレンド・申請中の相手は除外せず `relation` を付けて返す。** 除外すると「名前を入力したのに何も出ない」状態になり、利用者が理由を判断できないため。UI 側でボタンを出さずラベル（「フレンド済み」「申請中」）を表示する
 
 ### 決定: ユーザー列挙は email 検索の廃止で緩和する
 
@@ -461,6 +486,7 @@ status: 実装済み
 ### 追加フォーム（フッター固定）
 
 - **username を**入力して送信 → `POST /api/friends/request`
+- **2文字以上入力すると候補が最大3件表示される**（400msデバウンス、`GET /api/friends/search`）。候補の「申請」ボタンから直接申請でき、既にフレンド・申請中の相手はボタンの代わりにラベルを出す
 - 成功時「フレンド申請を送信しました！」、失敗時はサーバーのエラーメッセージを表示
 - **変更**: プレースホルダと説明文から「メールアドレス」の記述を削除する（セクション3で email 検索を廃止したため）
 

@@ -19,6 +19,9 @@ const FRIEND_LIMIT = 1000;
 const PENDING_LIMIT = 100;
 const BLOCK_LIMIT = 1000;
 
+/** 検索候補の表示件数。列挙を助けないよう少数に絞る */
+const SEARCH_LIMIT = 3;
+
 /** 一覧・申請で返すユーザー情報。emailは含めない（フレンド全員に配ることになるため） */
 const USER_SELECT = {
   id: true,
@@ -74,6 +77,51 @@ export class FriendsService {
       incoming: incoming.map((f) => ({ id: f.id, user: f.applicant })),
       outgoing: outgoing.map((f) => ({ id: f.id, user: f.approver })),
     };
+  }
+
+  /**
+   * usernameの部分一致でフレンド候補を返す。
+   * ブロック関係にある相手（どちらの向きでも）は結果に含めない。
+   * 既にフレント/申請中の相手は除外せず relation を付けて返す。
+   * 除外すると「入力したのに何も出ない」状態になり、理由が分からないため。
+   */
+  async searchUsers(myId: number, q: string) {
+    const users = await this.prisma.user.findMany({
+      where: {
+        username: { contains: q, mode: 'insensitive' },
+        id: { not: myId },
+        // 相手が自分をブロックしている / 自分が相手をブロックしている
+        blocksMade: { none: { blockedId: myId } },
+        blocksReceived: { none: { blockerId: myId } },
+      },
+      select: USER_SELECT,
+      orderBy: { username: 'asc' },
+      take: SEARCH_LIMIT,
+    });
+
+    if (users.length === 0) return [];
+
+    const ids = users.map((u) => u.id);
+    const friendships = await this.prisma.friendship.findMany({
+      where: {
+        OR: [
+          { applicantId: myId, approverId: { in: ids } },
+          { applicantId: { in: ids }, approverId: myId },
+        ],
+      },
+      select: { applicantId: true, approverId: true, status: true },
+    });
+
+    const relationOf = new Map<number, 'friend' | 'pending'>();
+    for (const f of friendships) {
+      const otherId = f.applicantId === myId ? f.approverId : f.applicantId;
+      relationOf.set(otherId, f.status === 'ACCEPTED' ? 'friend' : 'pending');
+    }
+
+    return users.map((u) => ({
+      ...u,
+      relation: relationOf.get(u.id) ?? ('none' as const),
+    }));
   }
 
   async sendRequest(myId: number, query: string) {
