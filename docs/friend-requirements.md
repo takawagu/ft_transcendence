@@ -9,11 +9,10 @@ ft_transcendence subject の以下の要件に対応するための定義書。
 
 現状の実装（[schema.prisma](backend/prisma/schema.prisma) / [friends.controller.ts](backend/src/friends/friends.controller.ts) / [page.tsx](frontend/src/app/page.tsx)）:
 - `Friendship` / `Block` テーブル、フレンドAPI 9エンドポイント（申請・承認・拒否・削除・ブロック3件・一覧2件）は実装済み
-- オンライン状態と申請通知を配信する `/presence` WebSocket 名前空間（[presence/](backend/src/presence/)）も**サーバー側は実装済み**
-- ホーム画面のフレンドパネル（一覧タブ / 申請待ちタブ / 追加フォーム）は実装済みだが、**フロント側は本書の変更をまだ反映していない**
-  - UIの緑ドットは依然として常時点灯のダミーで、`/presence` に接続していない
-  - ブロックの導線（infoウィンドウ・拒否後の提示・ブロック中タブ）が無い
-- **`Block` テーブルのマイグレーションは未生成**。`npx prisma migrate dev --name add_block` の実行が必要
+- オンライン状態と申請通知を配信する `/presence` WebSocket 名前空間（[presence/](backend/src/presence/)）も実装済み
+- ホーム画面のフレンドパネル（一覧 / 申請待ち / ブロック中タブ、フレンド詳細ウィンドウ、追加フォーム）も実装済み
+- マイグレーション [20260824050813_add_block](backend/prisma/migrations/20260824050813_add_block/) 適用済み
+- **本書に記載した内容はすべて実装・実機検証済み**
 
 本書のスコープ: **フレンド機能 + オンライン状態表示 + ブロック機能**。
 ブロックは subject の要件には無いが、拒否後の再申請を止める手段として本書で採用を決定した（セクション3）。
@@ -23,7 +22,7 @@ ft_transcendence subject の以下の要件に対応するための定義書。
 
 ## 1. データモデル
 
-status: 決定済み（一部要修正）
+status: 実装済み
 
 `Friendship`（[schema.prisma:39-51](backend/prisma/schema.prisma#L39-L51)）:
 
@@ -40,7 +39,7 @@ status: 決定済み（一部要修正）
 ### 決定: `status` は `PENDING` / `ACCEPTED` の2値とする
 
 - スキーマコメントには `REJECTED` が書かれている（[schema.prisma:43](backend/prisma/schema.prisma#L43)）が、拒否時は行を `delete` するため（[friends.service.ts:195](backend/src/friends/friends.service.ts#L195)）この値は**永久に到達しない**
-- **拒否 = 行削除で統一する。** `REJECTED` はスキーマコメントから削除する
+- **拒否 = 行削除で統一する。** `REJECTED` はスキーマコメントから削除した（実装済み）
 - これに伴い、既存行の `status` が `PENDING` でも `ACCEPTED` でもない場合に再申請として行を再利用する分岐は**到達不能なデッドコードなので削除した**（実装済み）
 
 ### 決定: ブロックは `Block` テーブルを新設する
@@ -65,28 +64,28 @@ model Block {
 - **方向あり。** A→B のブロックと B→A のブロックは別の行。`Friendship` と違いここは意図的に片方向で、`@@unique` も方向ありのままでよい
 - `@@index([blockedId])` は「自分がブロックされているか」を引く検索（申請時に毎回走る）のために必要
 - `User` 側に `blocksMade Block[] @relation("Blocker")` と `blocksReceived Block[] @relation("Blocked")` を追加する
-- マイグレーションが1本必要（既存の2本は [migrations/](backend/prisma/migrations/) を参照）
+- マイグレーション [20260824050813_add_block](backend/prisma/migrations/20260824050813_add_block/) を追加・適用済み
 - ブロック数の上限も 1000 件とする（理由はセクション3のフレンド上限と同じ）
 
 ---
 
 ## 2. API 仕様
 
-status: 既存6件は実装済み（一部要修正）／ブロック関連3件は新規
+status: 実装済み（9エンドポイント）
 
 全エンドポイントが `AuthGuard`（[auth.guard.ts](backend/src/auth/auth.guard.ts)）必須。`Authorization: Bearer <JWT>` を要求し、`req.user.id` を「自分」として扱う。ベースパスは `/api/friends`（グローバルプレフィックス `api` は [main.ts:8](backend/src/main.ts#L8)）。
 
 | エンドポイント | 状態 |
 |---|---|
-| `GET /api/friends` | 実装済み（`email` を外す） |
-| `GET /api/friends/requests` | 実装済み（`email` を外す） |
-| `POST /api/friends/request` | 実装済み（email検索廃止・ブロック判定・上限追加） |
-| `POST /api/friends/accept` | 実装済み（上限判定を追加） |
+| `GET /api/friends` | 実装済み（`email` を除外済み） |
+| `GET /api/friends/requests` | 実装済み（`email` を除外済み） |
+| `POST /api/friends/request` | 実装済み（email検索廃止・ブロック判定・上限を反映済み） |
+| `POST /api/friends/accept` | 実装済み（双方の上限判定を反映済み） |
 | `POST /api/friends/reject` | 実装済み（変更なし） |
 | `POST /api/friends/remove` | 実装済み（変更なし） |
-| `GET /api/friends/blocks` | **新規** |
-| `POST /api/friends/block` | **新規** |
-| `POST /api/friends/unblock` | **新規** |
+| `GET /api/friends/blocks` | 実装済み（新規） |
+| `POST /api/friends/block` | 実装済み（新規） |
+| `POST /api/friends/unblock` | 実装済み（新規） |
 
 ### `GET /api/friends`
 
@@ -270,7 +269,7 @@ status: 決定済み
 
 ## 4. オンライン状態（presence）
 
-status: サーバー側は実装済み（[presence/](backend/src/presence/)）／フロント側は未着手
+status: 実装済み（サーバー: [presence/](backend/src/presence/) ／ フロント: [page.tsx](frontend/src/app/page.tsx)）
 
 subject の「see their online status」を満たすための設計。現状は [page.tsx:785](frontend/src/app/page.tsx#L785) の緑ドットが**全フレンドに対して常時点灯**しており、要件を満たしていないのに満たしているように見える状態になっている。
 
@@ -341,7 +340,7 @@ presence 接続をホーム画面コンポーネントで張るため、ito ル�
 
 ## 5. リアルタイム反映と通知
 
-status: サーバー側は実装済み（[friends.service.ts](backend/src/friends/friends.service.ts)）／フロント側は未着手
+status: 実装済み（サーバー: [friends.service.ts](backend/src/friends/friends.service.ts) ／ フロント: [page.tsx](frontend/src/app/page.tsx)）
 
 ### 現状の問題
 
@@ -369,7 +368,7 @@ presence 用に張ったソケットをそのまま通知チャネルに使う�
 
 ## 6. 画面仕様
 
-status: 実装済み（一部変更予定）
+status: 実装済み
 
 ホーム画面のフレンドパネル（[page.tsx:740-880](frontend/src/app/page.tsx#L740-L880)）。ログイン済みの時のみ表示される。
 

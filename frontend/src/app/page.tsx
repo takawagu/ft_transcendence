@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { io, Socket } from 'socket.io-client';
 
 interface User {
   id: number;
-  email: string;
+  /** /api/friends は email を返さない（フレンド全員に配らないため）ので optional */
+  email?: string;
   username: string;
   bio?: string;
   profileImage?: string;
@@ -24,6 +26,9 @@ interface FriendshipRequest {
 const AVATAR_PRESETS = [
   '🦊', '🐱', '🐼', '🐯', '🐸', '🐨', '🐙', '👾', '🚀', '🔮'
 ];
+
+/** nginxが同一オリジンで配信するため通常は空。itoルーム側と同じ扱い */
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? '';
 
 export default function HomePage() {
   const router = useRouter();
@@ -56,8 +61,24 @@ export default function HomePage() {
   const [friendQuery, setFriendQuery] = useState('');
   const [friendError, setFriendError] = useState('');
   const [friendSuccess, setFriendSuccess] = useState('');
-  const [activeFriendTab, setActiveFriendTab] = useState<'list' | 'requests'>('list');
+  const [activeFriendTab, setActiveFriendTab] = useState<'list' | 'requests' | 'blocks'>('list');
   const [roomCreateRounds, setRoomCreateRounds] = useState(3);
+
+  // Presence (online status) — /presence 名前空間から配信される
+  const [onlineFriendIds, setOnlineFriendIds] = useState<Set<number>>(new Set());
+
+  // Block states
+  const [blockedUsers, setBlockedUsers] = useState<User[]>([]);
+  /** フレンド詳細ウィンドウ。null なら非表示 */
+  const [infoTarget, setInfoTarget] = useState<User | null>(null);
+  /** 詳細ウィンドウ内でブロックの確認ステップを表示中か */
+  const [infoConfirmBlock, setInfoConfirmBlock] = useState(false);
+  /**
+   * 拒否した直後にブロックを提示するための退避先。
+   * 拒否するとFriendship行が消えてuserIdをサーバーから取り直せないため、
+   * 拒否を実行する前にここへ保存しておく。
+   */
+  const [rejectedUser, setRejectedUser] = useState<User | null>(null);
 
   // Options / Profile edit modal states
   const [showOptionsModal, setShowOptionsModal] = useState(false);
@@ -120,7 +141,7 @@ export default function HomePage() {
     return () => clearTimeout(timer);
   }, [email, isLoginTab]);
 
-  // Fetch Friends and Requests
+  // Fetch Friends, Requests and Blocks
   const fetchFriendsData = async () => {
     if (!token) return;
     try {
@@ -130,6 +151,9 @@ export default function HomePage() {
       const reqs = await apiCall('/api/friends/requests');
       setIncomingRequests(reqs.incoming || []);
       setOutgoingRequests(reqs.outgoing || []);
+
+      const blocks = await apiCall('/api/friends/blocks');
+      setBlockedUsers(blocks || []);
     } catch (e: any) {
       console.error(e);
     }
@@ -139,6 +163,42 @@ export default function HomePage() {
     if (token) {
       fetchFriendsData();
     }
+  }, [token]);
+
+  /**
+   * オンライン状態と申請通知を受け取る /presence への接続。
+   * ログイン中はホーム画面にいる間だけ張る。itoルームへ遷移すると
+   * このコンポーネントがアンマウントされて切断されるため、
+   * ゲーム中のフレンドはオフライン表示になる（既知の制約）。
+   */
+  useEffect(() => {
+    if (!token) {
+      setOnlineFriendIds(new Set());
+      return;
+    }
+
+    const socket: Socket = io(`${WS_URL}/presence`, { auth: { token } });
+
+    socket.on('presence:snapshot', (p: { onlineFriendIds: number[] }) => {
+      setOnlineFriendIds(new Set(p.onlineFriendIds));
+    });
+
+    socket.on('presence:changed', (p: { userId: number; online: boolean }) => {
+      setOnlineFriendIds(prev => {
+        const next = new Set(prev);
+        if (p.online) next.add(p.userId);
+        else next.delete(p.userId);
+        return next;
+      });
+    });
+
+    // 通知はトリガーとしてのみ使い、差分適用はせず取り直す（状態の二重管理を避けるため）
+    socket.on('friend:requestReceived', () => fetchFriendsData());
+    socket.on('friend:accepted', () => fetchFriendsData());
+
+    return () => {
+      socket.disconnect();
+    };
   }, [token]);
 
   // API helper
@@ -284,9 +344,14 @@ export default function HomePage() {
     }
   };
 
-  const handleRejectFriend = async (friendshipId: number) => {
+  /**
+   * 受信申請の拒否。拒否は即座に実行し、その後ブロックの選択肢を提示する（2段階目）。
+   * 拒否でFriendship行が消えるため、userIdをここで退避しておく必要がある。
+   */
+  const handleRejectFriend = async (friendshipId: number, user?: User) => {
     try {
       await apiCall('/api/friends/reject', 'POST', { friendshipId });
+      if (user) setRejectedUser(user);
       fetchFriendsData();
     } catch (e) {
       console.error(e);
@@ -294,13 +359,46 @@ export default function HomePage() {
   };
 
   const handleRemoveFriend = async (friendId: number) => {
-    if (!confirm('フレンドを削除してもよろしいですか？')) return;
     try {
       await apiCall('/api/friends/remove', 'POST', { friendId });
+      setInfoTarget(null);
       fetchFriendsData();
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleBlockUser = async (userId: number) => {
+    try {
+      await apiCall('/api/friends/block', 'POST', { userId });
+      setInfoTarget(null);
+      setInfoConfirmBlock(false);
+      setRejectedUser(null);
+      fetchFriendsData();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleUnblockUser = async (userId: number) => {
+    if (!confirm('ブロックを解除しますか？\n解除してもフレンド関係は元に戻りません。')) return;
+    try {
+      await apiCall('/api/friends/unblock', 'POST', { userId });
+      fetchFriendsData();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const openInfo = (friend: User) => {
+    setInfoTarget(friend);
+    setInfoConfirmBlock(false);
+  };
+
+  /** タブを離れたら拒否後のブロック提示は消す */
+  const switchFriendTab = (tab: 'list' | 'requests' | 'blocks') => {
+    setActiveFriendTab(tab);
+    setRejectedUser(null);
   };
 
   // Profile Edit Action
@@ -478,6 +576,7 @@ export default function HomePage() {
                   type="text"
                   required
                   placeholder="ゲームに表示される名前"
+                  maxLength={30}
                   value={username}
                   onChange={e => setUsername(e.target.value)}
                   className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
@@ -732,7 +831,7 @@ export default function HomePage() {
             <div className="border-b border-zinc-800/80 bg-zinc-900/40 px-4 py-1.5 flex items-center justify-between">
               <div className="flex gap-2">
                 <button
-                  onClick={() => setActiveFriendTab('list')}
+                  onClick={() => switchFriendTab('list')}
                   className={`px-3 py-3 text-xs font-bold transition-all relative ${
                     activeFriendTab === 'list' ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'
                   }`}
@@ -743,7 +842,7 @@ export default function HomePage() {
                   )}
                 </button>
                 <button
-                  onClick={() => setActiveFriendTab('requests')}
+                  onClick={() => switchFriendTab('requests')}
                   className={`px-3 py-3 text-xs font-bold transition-all relative flex items-center gap-1.5 ${
                     activeFriendTab === 'requests' ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'
                   }`}
@@ -758,6 +857,20 @@ export default function HomePage() {
                     <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500"></div>
                   )}
                 </button>
+                {/* ブロック中が1件以上ある時のみ表示（常設すると普段使わないタブが場所を取るため） */}
+                {blockedUsers.length > 0 && (
+                  <button
+                    onClick={() => switchFriendTab('blocks')}
+                    className={`px-3 py-3 text-xs font-bold transition-all relative ${
+                      activeFriendTab === 'blocks' ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    ブロック中 ({blockedUsers.length})
+                    {activeFriendTab === 'blocks' && (
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500"></div>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -782,7 +895,17 @@ export default function HomePage() {
                         <div className="flex items-center gap-3">
                           <div className="relative">
                             {renderAvatar(friend.profileImage, 'w-9 h-9 text-base')}
-                            <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-zinc-900 animate-pulse"></span>
+                            {onlineFriendIds.has(friend.id) ? (
+                              <span
+                                className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-zinc-900"
+                                title="オンライン"
+                              ></span>
+                            ) : (
+                              <span
+                                className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-zinc-600 ring-2 ring-zinc-900"
+                                title="オフライン"
+                              ></span>
+                            )}
                           </div>
                           <div>
                             <div className="text-sm font-semibold text-zinc-100">{friend.username}</div>
@@ -793,25 +916,58 @@ export default function HomePage() {
                             )}
                           </div>
                         </div>
+                        {/* 削除とブロックは詳細ウィンドウに集約する（破壊的操作を1クリック圏に並べない） */}
                         <button
-                          onClick={() => handleRemoveFriend(friend.id)}
-                          className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-950/20 border border-transparent hover:border-red-900/30 rounded-lg transition-all"
-                          title="フレンド削除"
+                          onClick={() => openInfo(friend)}
+                          className="p-1.5 text-zinc-500 hover:text-indigo-400 hover:bg-indigo-950/20 border border-transparent hover:border-indigo-900/30 rounded-lg transition-all cursor-pointer"
+                          title="詳細"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
                         </button>
                       </div>
                     ))}
                   </div>
                 )
-              ) : (
+              ) : activeFriendTab === 'requests' ? (
                 /* Requests Tab */
                 <div className="space-y-4">
                   {/* Incoming */}
                   <div>
                     <h4 className="text-[10px] uppercase font-black tracking-wider text-zinc-500 mb-2">受信した申請 ({incomingRequests.length})</h4>
+                    {/* 拒否直後のブロック提示（2段階目）。自動では消さず、閉じる/タブ切替/実行でのみ消える */}
+                    {rejectedUser && (
+                      <div className="mb-2 p-3 bg-zinc-950/60 border border-indigo-900/40 rounded-xl">
+                        <div className="flex items-start gap-2">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <div className="flex-1">
+                            <p className="text-[11px] font-semibold text-zinc-200">
+                              {rejectedUser.username} の申請を拒否しました
+                            </p>
+                            <p className="text-[10px] text-zinc-500 mt-0.5 leading-relaxed">
+                              このままでは再び申請が届く可能性があります。ブロックすると今後この人からの申請を受け取らなくなります。
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-1.5 mt-2">
+                          <button
+                            onClick={() => handleBlockUser(rejectedUser.id)}
+                            className="px-2.5 py-1 text-[10px] font-bold text-white bg-red-700 hover:bg-red-600 rounded-lg transition-all cursor-pointer"
+                          >
+                            ブロック
+                          </button>
+                          <button
+                            onClick={() => setRejectedUser(null)}
+                            className="px-2.5 py-1 text-[10px] font-bold text-zinc-400 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-all cursor-pointer"
+                          >
+                            閉じる
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     {incomingRequests.length === 0 ? (
                       <p className="text-[10px] text-zinc-600 pl-1">受信した申請はありません</p>
                     ) : (
@@ -830,7 +986,7 @@ export default function HomePage() {
                                 承認
                               </button>
                               <button
-                                onClick={() => handleRejectFriend(req.id)}
+                                onClick={() => handleRejectFriend(req.id, req.user)}
                                 className="px-2.5 py-1 text-[10px] font-bold text-zinc-400 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-all cursor-pointer"
                               >
                                 拒否
@@ -867,6 +1023,27 @@ export default function HomePage() {
                     )}
                   </div>
                 </div>
+              ) : (
+                /* Blocks Tab */
+                <div className="space-y-2">
+                  <p className="text-[10px] text-zinc-600 mb-2 leading-relaxed">
+                    ブロック中のユーザーからは申請が届きません。解除してもフレンド関係は元に戻りません。
+                  </p>
+                  {blockedUsers.map(blocked => (
+                    <div key={blocked.id} className="flex items-center justify-between p-2.5 bg-zinc-950/40 border border-zinc-800/40 rounded-xl">
+                      <div className="flex items-center gap-2 opacity-70">
+                        {renderAvatar(blocked.profileImage, 'w-8 h-8 text-sm')}
+                        <div className="text-xs font-semibold text-zinc-200">{blocked.username}</div>
+                      </div>
+                      <button
+                        onClick={() => handleUnblockUser(blocked.id)}
+                        className="px-2.5 py-1 text-[10px] font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-all cursor-pointer"
+                      >
+                        解除
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
@@ -878,7 +1055,7 @@ export default function HomePage() {
                   <input
                     type="text"
                     required
-                    placeholder="ユーザー名 または メールアドレス"
+                    placeholder="ユーザー名"
                     value={friendQuery}
                     onChange={e => setFriendQuery(e.target.value)}
                     className="flex-1 rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs text-white placeholder-zinc-600 outline-none focus:border-indigo-500 transition-all"
@@ -897,6 +1074,91 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* --- FRIEND INFO MODAL --- */}
+      {/* 表示するのは GET /api/friends が既に返している情報のみ。戦績は含めない
+          （含めると GET /api/users/:id が必要になり、プロフィール閲覧がスコープに入るため） */}
+      {infoTarget && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center px-4"
+          onClick={() => setInfoTarget(null)}
+        >
+          <div
+            className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-6 py-6 flex flex-col items-center text-center">
+              {renderAvatar(infoTarget.profileImage, 'w-20 h-20 text-4xl')}
+              <h3 className="mt-3 text-lg font-bold text-zinc-100">{infoTarget.username}</h3>
+              <div className="mt-1 flex items-center gap-1.5">
+                <span
+                  className={`block h-2 w-2 rounded-full ${
+                    onlineFriendIds.has(infoTarget.id) ? 'bg-emerald-500' : 'bg-zinc-600'
+                  }`}
+                ></span>
+                <span className="text-[11px] text-zinc-400">
+                  {onlineFriendIds.has(infoTarget.id) ? 'オンライン' : 'オフライン'}
+                </span>
+              </div>
+              {/* 一覧では1行省略されるので、ここで全文が読めることがこのウィンドウの情報価値 */}
+              {infoTarget.bio ? (
+                <p className="mt-4 text-xs text-zinc-300 whitespace-pre-wrap break-words leading-relaxed w-full">
+                  {infoTarget.bio}
+                </p>
+              ) : (
+                <p className="mt-4 text-xs text-zinc-600">自己紹介は設定されていません</p>
+              )}
+            </div>
+
+            <div className="px-6 pb-6">
+              {infoConfirmBlock ? (
+                <div className="p-3 bg-red-950/20 border border-red-900/40 rounded-xl">
+                  <p className="text-[11px] text-zinc-300 leading-relaxed">
+                    <span className="font-bold text-red-300">{infoTarget.username}</span> をブロックします。
+                    フレンド関係が解除され、相手からの申請も届かなくなります。
+                    <span className="block mt-1 text-zinc-400">解除してもフレンド関係は元に戻りません。</span>
+                  </p>
+                  <div className="flex justify-end gap-2 mt-3">
+                    <button
+                      onClick={() => setInfoConfirmBlock(false)}
+                      className="px-3 py-1.5 text-[11px] font-bold text-zinc-400 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-all cursor-pointer"
+                    >
+                      やめる
+                    </button>
+                    <button
+                      onClick={() => handleBlockUser(infoTarget.id)}
+                      className="px-3 py-1.5 text-[11px] font-bold text-white bg-red-700 hover:bg-red-600 rounded-lg transition-all cursor-pointer"
+                    >
+                      ブロックする
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleRemoveFriend(infoTarget.id)}
+                    className="flex-1 px-3 py-2 text-xs font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-all cursor-pointer"
+                  >
+                    フレンド削除
+                  </button>
+                  <button
+                    onClick={() => setInfoConfirmBlock(true)}
+                    className="flex-1 px-3 py-2 text-xs font-bold text-red-300 bg-red-950/30 hover:bg-red-950/60 border border-red-900/40 rounded-lg transition-all cursor-pointer"
+                  >
+                    ブロック
+                  </button>
+                </div>
+              )}
+              <button
+                onClick={() => setInfoTarget(null)}
+                className="w-full mt-2 px-3 py-2 text-[11px] font-semibold text-zinc-500 hover:text-zinc-300 transition-all cursor-pointer"
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- OPTIONS / PROFILE EDIT MODAL --- */}
       {showOptionsModal && (
@@ -938,6 +1200,7 @@ export default function HomePage() {
                 <input
                   type="text"
                   required
+                  maxLength={30}
                   value={editUsername}
                   onChange={e => setEditUsername(e.target.value)}
                   className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:border-indigo-500 transition-all"
@@ -949,6 +1212,7 @@ export default function HomePage() {
                   自己紹介
                 </label>
                 <textarea
+                  maxLength={500}
                   value={editBio}
                   onChange={e => setEditBio(e.target.value)}
                   rows={2}
@@ -979,6 +1243,7 @@ export default function HomePage() {
                 <input
                   type="text"
                   placeholder="または画像URLを入力"
+                  maxLength={512}
                   value={editProfileImage}
                   onChange={e => setEditProfileImage(e.target.value)}
                   className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2 text-xs text-white placeholder-zinc-600 outline-none focus:border-indigo-500 transition-all"
