@@ -144,12 +144,27 @@ exports.Prisma.FriendshipScalarFieldEnum = {
   createdAt: 'createdAt'
 };
 
+exports.Prisma.BlockScalarFieldEnum = {
+  id: 'id',
+  blockerId: 'blockerId',
+  blockedId: 'blockedId',
+  createdAt: 'createdAt'
+};
+
 exports.Prisma.DirectMessageScalarFieldEnum = {
   id: 'id',
   senderId: 'senderId',
   receiverId: 'receiverId',
   content: 'content',
   createdAt: 'createdAt'
+};
+
+exports.Prisma.ConversationReadScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  partnerId: 'partnerId',
+  lastReadMessageId: 'lastReadMessageId',
+  updatedAt: 'updatedAt'
 };
 
 exports.Prisma.SortOrder = {
@@ -172,7 +187,9 @@ exports.Prisma.ModelName = {
   User: 'User',
   ItoGameRecord: 'ItoGameRecord',
   Friendship: 'Friendship',
-  DirectMessage: 'DirectMessage'
+  Block: 'Block',
+  DirectMessage: 'DirectMessage',
+  ConversationRead: 'ConversationRead'
 };
 
 /**

@@ -21,10 +21,14 @@ model User {
   bio          String?
 
   gameRecord          ItoGameRecord?
-  sentMessages        DirectMessage[] @relation("SentMessages")
-  receivedMessages    DirectMessage[] @relation("ReceivedMessages")
-  appliedFriendships  Friendship[]    @relation("Applicant")
-  receivedFriendships Friendship[]    @relation("Approver")
+  sentMessages        DirectMessage[]    @relation("SentMessages")
+  receivedMessages    DirectMessage[]    @relation("ReceivedMessages")
+  appliedFriendships  Friendship[]       @relation("Applicant")
+  receivedFriendships Friendship[]       @relation("Approver")
+  blocksMade          Block[]            @relation("Blocker")
+  blocksReceived      Block[]            @relation("Blocked")
+  readCursors         ConversationRead[] @relation("ReadCursorUser")
+  readCursorsOfMe     ConversationRead[] @relation("ReadCursorPartner")
 }
 
 model ItoGameRecord {
@@ -40,13 +44,29 @@ model Friendship {
   id          Int      @id @default(autoincrement())
   applicantId Int
   approverId  Int
-  status      String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
+  status      String   @default("PENDING") // PENDING, ACCEPTED（拒否は行削除で表現するためREJECTEDは持たない）
   createdAt   DateTime @default(now())
 
   applicant User @relation("Applicant", fields: [applicantId], references: [id], onDelete: Cascade)
   approver  User @relation("Approver", fields: [approverId], references: [id], onDelete: Cascade)
 
   @@unique([applicantId, approverId])
+}
+
+/// ブロック関係。方向あり（A→B と B→A は別の行）。
+/// ブロックすると該当ペアのFriendshipは全削除されるため、両者が同時に存在することはない。
+model Block {
+  id        Int      @id @default(autoincrement())
+  blockerId Int
+  blockedId Int
+  createdAt DateTime @default(now())
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  // 「自分がブロックされているか」の検索が申請のたびに走るため
+  @@index([blockedId])
 }
 
 model DirectMessage {
@@ -58,4 +78,26 @@ model DirectMessage {
 
   sender   User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
   receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  // 会話履歴は OR: [{sender:A,receiver:B}, {sender:B,receiver:A}] で引くため、
+  // 両方向のインデックスが要る。1本だと OR の片側がフルスキャンになる
+  @@index([senderId, receiverId, createdAt])
+  @@index([receiverId, senderId, createdAt])
+}
+
+/// 誰がどの相手との会話をどこまで読んだかのカーソル。
+/// DirectMessage に readAt を持たせると既読化のたびに該当行を全UPDATEすることになるため、
+/// 会話ごとに1行だけ持って1回のUPDATEで済ませる。
+/// 相手のカーソルを見れば「自分のメッセージが読まれたか」も判定できる。
+model ConversationRead {
+  id                Int      @id @default(autoincrement())
+  userId            Int
+  partnerId         Int
+  lastReadMessageId Int
+  updatedAt         DateTime @updatedAt
+
+  user    User @relation("ReadCursorUser", fields: [userId], references: [id], onDelete: Cascade)
+  partner User @relation("ReadCursorPartner", fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, partnerId])
 }

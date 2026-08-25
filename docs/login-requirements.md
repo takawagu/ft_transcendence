@@ -41,6 +41,11 @@ status: 実装済み
   - 送信時の最終チェック（既存の409 `ConflictException`）も引き続き有効（レース条件対策）
 - `schema.prisma`の`username`に`@unique`を追加し、マイグレーション`20260730092155_add_username_unique`で反映済み
 - ブラウザ実機で一連の流れ（短いパスワード拒否・重複ユーザー名拒否・正常登録）を確認済み
+- **プロフィール更新のバリデーション（対応済み、#63）**: `PUT /api/users/me` は`@Body() body: any`でDTOを通しておらず、metatypeが`Object`になるためグローバル`ValidationPipe`が**スキップされていた**。登録時の`@MinLength(8)`を回避して1文字パスワードに変更できる状態だった
+  - [update-me.dto.ts](backend/src/users/dto/update-me.dto.ts)を新設し、`username` 30文字 / `bio` 500文字 / `profileImage` 512文字 / `password` 8文字以上を検証するようにした。[register.dto.ts](backend/src/auth/dto/register.dto.ts)にも同じ`@MaxLength`を追加して登録側と揃えている
+  - `if (username && ...)`と`if (username !== undefined)`の条件ズレ（空文字が重複チェックをすり抜けて保存される）も`!== undefined`に統一して修正
+  - レース条件で`@unique`に衝突した場合の`P2002`を`ConflictException`（409）に変換。以前は捕捉されず500になっていた
+  - 上限値の根拠は[friend-requirements.md](docs/friend-requirements.md)セクション3を参照
 
 ---
 
@@ -79,3 +84,9 @@ status: 実装済み
 
 - 登録成功時に「🎉 登録が完了しました！」を約900ms表示してからホーム画面に自動遷移するよう実装（[page.tsx](frontend/src/app/page.tsx)の`handleAuthSubmit`register分岐、`registerSuccessMsg`）
 - ブラウザ実機で表示・遷移を確認済み
+
+---
+
+## 関連ドキュメント
+
+- [friend-requirements.md](docs/friend-requirements.md) — フレンド機能とオンライン状態表示。subject Usersモジュールの「Users can add other users as friends and see their online status」に対応する部分はそちらで定義している

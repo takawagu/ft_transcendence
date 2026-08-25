@@ -1,6 +1,7 @@
 import { Controller, Get, Put, Body, UseGuards, Request, ConflictException } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
+import { UpdateMeDto } from './dto/update-me.dto';
 import * as bcrypt from 'bcryptjs';
 
 @Controller('users')
@@ -26,11 +27,13 @@ export class UsersController {
   }
 
   @Put('me')
-  async updateMe(@Request() req: any, @Body() body: any) {
+  async updateMe(@Request() req: any, @Body() body: UpdateMeDto) {
     const userId = req.user.id;
     const { username, bio, profileImage, password } = body;
 
-    if (username && username !== req.user.username) {
+    // 事前チェックと書き込みの条件を揃える。ズレていると空文字が重複チェックを
+    // すり抜けて保存されてしまう
+    if (username !== undefined && username !== req.user.username) {
       const existing = await this.prisma.user.findFirst({
         where: { username },
       });
@@ -47,18 +50,24 @@ export class UsersController {
       updateData.password = await bcrypt.hash(password, 10);
     }
 
-    const updatedUser = await this.prisma.user.update({
-      where: { id: userId },
-      data: updateData,
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        bio: true,
-        profileImage: true,
-      },
-    });
-
-    return updatedUser;
+    try {
+      return await this.prisma.user.update({
+        where: { id: userId },
+        data: updateData,
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          bio: true,
+          profileImage: true,
+        },
+      });
+    } catch (e: any) {
+      // 上の重複チェックを通っても、同時更新で @unique に衝突しうる
+      if (e?.code === 'P2002') {
+        throw new ConflictException('Username is already taken');
+      }
+      throw e;
+    }
   }
 }
