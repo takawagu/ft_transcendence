@@ -52,11 +52,12 @@ interface PresenceContextValue {
   /** オンライン中のフレンドのID。未ログイン時は空 */
   onlineFriendIds: Set<number>;
   /**
-   * 未読のDMが届いている相手のID。
+   * 相手のID → その相手からの未読件数。
+   * 「誰から何件見逃しているか」を出せるよう、有無ではなく件数で持つ。
    * DBに既読列を持たないため、この情報はリロードで消える
    * （docs/dm-requirements.md セクション1・4）。
    */
-  unreadSenderIds: Set<number>;
+  unreadCounts: Map<number, number>;
   /** その相手との会話を開いた時に呼ぶ。未読から外す */
   markConversationRead: (userId: number) => void;
   /** サーバーイベントの購読。戻り値の関数を呼ぶと解除する */
@@ -87,12 +88,12 @@ export function usePresence(): PresenceContextValue {
 export function PresenceProvider({ children }: { children: React.ReactNode }) {
   const { token } = useSession();
   const [onlineFriendIds, setOnlineFriendIds] = useState<Set<number>>(new Set());
-  const [unreadSenderIds, setUnreadSenderIds] = useState<Set<number>>(new Set());
+  const [unreadCounts, setUnreadCounts] = useState<Map<number, number>>(new Map());
 
   const markConversationRead = useCallback((userId: number) => {
-    setUnreadSenderIds(prev => {
+    setUnreadCounts(prev => {
       if (!prev.has(userId)) return prev;
-      const next = new Set(prev);
+      const next = new Map(prev);
       next.delete(userId);
       return next;
     });
@@ -126,7 +127,7 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!token) {
       setOnlineFriendIds(new Set());
-      setUnreadSenderIds(new Set());
+      setUnreadCounts(new Map());
       return;
     }
 
@@ -154,7 +155,11 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
      */
     socket.on('dm:received', (p: PresenceEventPayloads['dm:received']) => {
       if (p.message.senderId !== p.user.id) return;
-      setUnreadSenderIds(prev => new Set(prev).add(p.user.id));
+      setUnreadCounts(prev => {
+        const next = new Map(prev);
+        next.set(p.user.id, (next.get(p.user.id) ?? 0) + 1);
+        return next;
+      });
     });
 
     // 全イベントを購読者へ中継する。何に反応するかは各ページ側の判断に委ねる
@@ -171,7 +176,7 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <PresenceContext.Provider
-      value={{ onlineFriendIds, unreadSenderIds, markConversationRead, subscribe }}
+      value={{ onlineFriendIds, unreadCounts, markConversationRead, subscribe }}
     >
       {children}
     </PresenceContext.Provider>

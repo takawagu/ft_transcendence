@@ -19,6 +19,9 @@ const MESSAGE_MAX_LENGTH = 1000;
 /** 1回に読む履歴の件数。HistoryQueryDto の @Max(100) 以下であること */
 const HISTORY_PAGE_SIZE = 50;
 
+/** 残り何文字から文字数表示を出すか。常に出すと普段の入力の邪魔になる */
+const COUNTER_VISIBLE_FROM = 100;
+
 /** GET /api/messages/conversations の1件 */
 interface Conversation {
   userId: number;
@@ -50,7 +53,7 @@ function MessagesView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { mounted, token, user, apiCall } = useSession();
-  const { onlineFriendIds, subscribe, markConversationRead } = usePresence();
+  const { onlineFriendIds, unreadCounts, subscribe, markConversationRead } = usePresence();
 
   const [friends, setFriends] = useState<User[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -132,19 +135,18 @@ function MessagesView() {
       .map(f => ({ friend: f, lastMessage: null })),
   ];
 
-  // ?to=<userId> があればその相手を開く。無ければ直近の会話
+  /*
+   * ?to=<userId> が指す相手だけを自動で開く。
+   * 指定が無い時は何も開かない（ヘッダーのボタンからは一覧を見せたいため。
+   * 直近の会話を勝手に開くと、狭い画面ではその会話画面に着地してしまう）。
+   */
   useEffect(() => {
     if (listLoading || initialSelectionDoneRef.current) return;
     initialSelectionDoneRef.current = true;
 
     const to = Number(searchParams.get('to'));
-    if (to && friends.some(f => f.id === to)) {
-      setSelectedId(to);
-      return;
-    }
-    const latest = conversations.find(c => friends.some(f => f.id === c.userId));
-    setSelectedId(latest?.userId ?? friends[0]?.id ?? null);
-  }, [listLoading, friends, conversations, searchParams]);
+    if (to && friends.some(f => f.id === to)) setSelectedId(to);
+  }, [listLoading, friends, searchParams]);
 
   // 選んだ相手の履歴
   useEffect(() => {
@@ -284,11 +286,13 @@ function MessagesView() {
   }
 
   const selectedFriend = selectedId !== null ? friendMap.get(selectedId) : undefined;
+  // maxLength と同じ数え方（UTF-16のコード単位）で残量を出す
+  const remaining = MESSAGE_MAX_LENGTH - draft.length;
 
   return (
     <main className="h-screen flex flex-col bg-zinc-950 text-white">
       {/* Header */}
-      <header className="shrink-0 border-b border-zinc-900 bg-zinc-950/70 backdrop-blur-md px-4 sm:px-6 py-3 flex items-center gap-3">
+      <header className="shrink-0 border-b border-zinc-700 bg-zinc-950/70 backdrop-blur-md px-4 sm:px-6 py-3 flex items-center gap-3">
         <button
           onClick={() => router.push('/')}
           className="p-2 text-zinc-400 hover:text-white bg-zinc-900/60 hover:bg-zinc-800 rounded-full border border-zinc-800/80 transition-all cursor-pointer"
@@ -303,11 +307,12 @@ function MessagesView() {
       </header>
 
       <div className="flex-1 min-h-0 flex">
-        {/* Left: conversation list. 狭い画面では会話を開いている間は隠す */}
+        {/* Left: conversation list. 狭い画面では会話を開いている間は隠す。
+            境界を線1本に頼らず、一覧側の面を一段明るくして分ける */}
         <aside
           className={`${
             selectedId !== null ? 'hidden md:flex' : 'flex'
-          } w-full md:w-72 shrink-0 flex-col border-r border-zinc-900 bg-zinc-950`}
+          } w-full md:w-80 shrink-0 flex-col border-r border-zinc-700 bg-zinc-900/60`}
         >
           <div className="flex-1 overflow-y-auto">
             {listLoading ? (
@@ -326,20 +331,22 @@ function MessagesView() {
                 </button>
               </div>
             ) : (
-              rows.map(({ friend, lastMessage }) => (
+              rows.map(({ friend, lastMessage }) => {
+                const unread = unreadCounts.get(friend.id) ?? 0;
+                return (
                 <button
                   key={friend.id}
                   onClick={() => selectConversation(friend.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-3 text-left border-b border-zinc-900/60 transition-all cursor-pointer ${
+                  className={`w-full flex items-center gap-3 px-3 py-3 text-left border-b border-zinc-700/60 transition-all cursor-pointer ${
                     selectedId === friend.id
-                      ? 'bg-indigo-950/30 border-l-2 border-l-indigo-500'
-                      : 'hover:bg-zinc-900/50 border-l-2 border-l-transparent'
+                      ? 'bg-indigo-950/50 border-l-2 border-l-indigo-500'
+                      : 'hover:bg-zinc-800/60 border-l-2 border-l-transparent'
                   }`}
                 >
                   <div className="relative shrink-0">
                     {renderAvatar(friend.profileImage, 'w-9 h-9 text-base')}
                     <span
-                      className={`absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full ring-2 ring-zinc-950 ${
+                      className={`absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full ring-2 ring-zinc-900 ${
                         onlineFriendIds.has(friend.id) ? 'bg-emerald-500' : 'bg-zinc-600'
                       }`}
                       title={onlineFriendIds.has(friend.id) ? 'オンライン' : 'オフライン'}
@@ -347,7 +354,11 @@ function MessagesView() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
-                      <span className="text-xs font-semibold text-zinc-100 truncate">
+                      <span
+                        className={`text-xs truncate ${
+                          unread > 0 ? 'font-bold text-white' : 'font-semibold text-zinc-100'
+                        }`}
+                      >
                         {friend.username}
                       </span>
                       {lastMessage && (
@@ -356,14 +367,27 @@ function MessagesView() {
                         </span>
                       )}
                     </div>
-                    <p className="text-[10px] text-zinc-500 truncate">
-                      {lastMessage
-                        ? `${lastMessage.senderId === user.id ? 'あなた: ' : ''}${lastMessage.content}`
-                        : 'まだメッセージはありません'}
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p
+                        className={`text-[10px] truncate ${
+                          unread > 0 ? 'text-zinc-300' : 'text-zinc-500'
+                        }`}
+                      >
+                        {lastMessage
+                          ? `${lastMessage.senderId === user.id ? 'あなた: ' : ''}${lastMessage.content}`
+                          : 'まだメッセージはありません'}
+                      </p>
+                      {/* 誰から何件見逃しているかが一覧で分かるようにする */}
+                      {unread > 0 && (
+                        <span className="shrink-0 min-w-[18px] h-[18px] px-1.5 bg-indigo-600 text-white text-[9px] font-extrabold rounded-full flex items-center justify-center">
+                          {unread > 99 ? '99+' : unread}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
-              ))
+                );
+              })
             )}
           </div>
         </aside>
@@ -380,7 +404,7 @@ function MessagesView() {
             </div>
           ) : (
             <>
-              <div className="shrink-0 px-4 py-3 border-b border-zinc-900 flex items-center gap-3">
+              <div className="shrink-0 px-4 py-3 border-b border-zinc-700 bg-zinc-900/50 flex items-center gap-3">
                 <button
                   onClick={() => setSelectedId(null)}
                   className="md:hidden p-1.5 text-zinc-400 hover:text-white transition-all cursor-pointer"
@@ -404,7 +428,7 @@ function MessagesView() {
               <div
                 ref={scrollRef}
                 onScroll={handleScroll}
-                className="flex-1 overflow-y-auto px-4 py-4 space-y-2"
+                className="flex-1 overflow-y-auto px-4 py-4"
               >
                 {loadingMore && (
                   <p className="text-center text-[10px] text-zinc-600">読み込み中...</p>
@@ -417,14 +441,36 @@ function MessagesView() {
                     </p>
                   </div>
                 )}
-                {messages.map(message => {
+                {messages.map((message, i) => {
                   const mine = message.senderId === user.id;
+                  const speaker = mine ? user : selectedFriend;
+                  /*
+                   * 連投は1つのまとまりとして扱い、アバターと名前は先頭にだけ出す。
+                   * 毎行に出すと縦に間延びして、かえって誰の発言か追いにくくなる。
+                   */
+                  const startsGroup =
+                    i === 0 || messages[i - 1].senderId !== message.senderId;
                   return (
                     <div
                       key={message.id}
-                      className={`flex ${mine ? 'justify-end' : 'justify-start'}`}
+                      className={`flex gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'} ${
+                        startsGroup ? 'pt-3' : 'pt-0.5'
+                      }`}
                     >
-                      <div className={`max-w-[75%] ${mine ? 'items-end' : 'items-start'} flex flex-col`}>
+                      {/* 連投の2件目以降もこの幅を空けて、吹き出しの左端を揃える */}
+                      <div className="w-8 shrink-0">
+                        {startsGroup && renderAvatar(speaker.profileImage, 'w-8 h-8 text-base')}
+                      </div>
+                      <div
+                        className={`max-w-[75%] flex flex-col ${
+                          mine ? 'items-end' : 'items-start'
+                        }`}
+                      >
+                        {startsGroup && (
+                          <span className="mb-1 px-1 text-[10px] font-semibold text-zinc-400">
+                            {speaker.username}
+                          </span>
+                        )}
                         <div
                           className={`px-3 py-2 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap break-words ${
                             mine
@@ -443,7 +489,7 @@ function MessagesView() {
                 })}
               </div>
 
-              <div className="shrink-0 border-t border-zinc-900 p-3">
+              <div className="shrink-0 border-t border-zinc-700 bg-zinc-900/50 p-3">
                 {sendError && (
                   <p className="mb-2 text-[10px] text-red-400">{sendError}</p>
                 )}
@@ -455,7 +501,7 @@ function MessagesView() {
                     rows={1}
                     maxLength={MESSAGE_MAX_LENGTH}
                     placeholder="メッセージを入力（Enterで送信 / Shift+Enterで改行）"
-                    className="flex-1 resize-none rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2.5 text-xs text-white placeholder-zinc-600 outline-none focus:border-indigo-500 transition-all max-h-32"
+                    className="flex-1 resize-none rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-2.5 text-xs text-white placeholder-zinc-600 outline-none focus:border-indigo-500 transition-all max-h-32"
                   />
                   <button
                     onClick={handleSend}
@@ -465,6 +511,19 @@ function MessagesView() {
                     送信
                   </button>
                 </div>
+                {/* maxLength は上限に達すると無言で入力を受け付けなくなるので、
+                    近づいたら残量を出して打ち止めの理由が分かるようにする */}
+                {remaining <= COUNTER_VISIBLE_FROM && (
+                  <p
+                    className={`mt-1.5 text-right text-[10px] tabular-nums ${
+                      remaining === 0 ? 'text-red-400 font-bold' : 'text-zinc-500'
+                    }`}
+                  >
+                    {remaining === 0
+                      ? `上限の ${MESSAGE_MAX_LENGTH} 文字に達しました`
+                      : `残り ${remaining} 文字`}
+                  </p>
+                )}
               </div>
             </>
           )}

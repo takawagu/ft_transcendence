@@ -34,7 +34,9 @@ export default function HomePage() {
   // Auth states — 遷移をまたいで保つため layout の SessionProvider が持つ
   const { mounted, token, user, login, logout, updateUser, apiCall } = useSession();
   // Presence (online status) — /presence 名前空間から配信される。接続も Provider 側
-  const { onlineFriendIds, unreadSenderIds, subscribe } = usePresence();
+  const { onlineFriendIds, unreadCounts, subscribe } = usePresence();
+  /** ヘッダーのバッジは「未読メッセージの総件数」。内訳は /messages の一覧で出す */
+  const totalUnread = [...unreadCounts.values()].reduce((sum, n) => sum + n, 0);
 
   const [isLoginTab, setIsLoginTab] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -623,9 +625,9 @@ export default function HomePage() {
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
-            {unreadSenderIds.size > 0 && (
+            {totalUnread > 0 && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-indigo-600 text-white text-[9px] font-extrabold rounded-full flex items-center justify-center">
-                {unreadSenderIds.size}
+                {totalUnread > 99 ? '99+' : totalUnread}
               </span>
             )}
           </button>

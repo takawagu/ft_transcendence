@@ -101,7 +101,7 @@ status: 実装済み
 
 | 条件 | ステータス | 備考 |
 |---|---|---|
-| `content` が空 / 1000文字超 | 400 | DTO で検証 |
+| `content` が空 / 空白のみ / 1000文字超 | 400 | DTO で検証。**検証前に `@Transform` で trim する**ため、空白だけの本文も「空」として弾かれる（保存される本文も trim 済み） |
 | `receiverId` が自分自身 | 400 | |
 | **相手がフレンドでない** | **403** | ブロック・フレンド解除もここで弾かれる（セクション3） |
 
@@ -165,7 +165,7 @@ DM 専用の名前空間は新設しない。既にオンライン状態とフ�
 | ファイル | 役割 |
 |---|---|
 | [session.tsx](frontend/src/lib/session.tsx) | `SessionProvider` / `useSession`。`token` `user` `login` `logout` `updateUser` `apiCall` と、起動待ちバナーの表示 |
-| [presence.tsx](frontend/src/lib/presence.tsx) | `PresenceProvider` / `usePresence`。`/presence` 接続、`onlineFriendIds`、`unreadSenderIds`、`subscribe` |
+| [presence.tsx](frontend/src/lib/presence.tsx) | `PresenceProvider` / `usePresence`。`/presence` 接続、`onlineFriendIds`、`unreadCounts`、`subscribe` |
 | [avatar.tsx](frontend/src/lib/avatar.tsx) | `renderAvatar`。ホーム画面と `/messages` で共有 |
 
 `PresenceProvider` は `SessionProvider` の内側に置く（接続条件が `token` のため）。
@@ -178,11 +178,12 @@ DM 専用の名前空間は新設しない。既にオンライン状態とフ�
 
 `readAt` を持たないため永続的な未読管理はできない（セクション1）。代わりに、`dm:received` を受け取ったらヘッダーのメッセージ導線にバッジを出す。**リロードすると消える**ことを制約として明記する。
 
-未読の判定は `PresenceProvider` が行い、`unreadSenderIds: Set<number>` として保持する（バッジの数字は「未読のある相手の人数」）。
+未読の判定は `PresenceProvider` が行い、**`unreadCounts: Map<相手のID, 件数>`** として保持する。有無ではなく件数で持つのは、**誰から何件見逃しているか**を会話一覧で出すため。
 
 - `dm:received` は送信者本人にも届くため、**`message.senderId` が `user.id`（＝会話の相手）と一致する時だけ**未読にする。一致しなければ自分が送ったメッセージの echo なので無視する
 - Provider 内のハンドラは購読者への中継より先に登録してあるので、その会話を開いている `/messages` が直後に `markConversationRead(userId)` を呼んで取り消せる
-- 会話を選択した時と、開いている会話にメッセージが届いた時に既読扱いにする
+- 会話を選択した時と、開いている会話にメッセージが届いた時に既読扱いにする（その相手のキーごと削除する）
+- ホームのヘッダーには**総件数**、`/messages` の会話一覧には**相手ごとの件数**を出す。3桁以上は `99+` に丸める
 
 ---
 
@@ -211,7 +212,8 @@ status: 実装済み（[messages/page.tsx](frontend/src/app/messages/page.tsx)�
 ### 左ペイン: 会話一覧
 
 - `GET /api/friends` と `GET /api/messages/conversations` を突き合わせて表示
-- 1件ごとに アバター・username・**オンライン状態**（`presence:snapshot` / `presence:changed` から、フレンドパネルと同じ扱い）・最新メッセージの抜粋
+- 1件ごとに アバター・username・**オンライン状態**（`presence:snapshot` / `presence:changed` から、フレンドパネルと同じ扱い）・最新メッセージの抜粋・**未読件数バッジ**（セクション4）
+- 未読がある行は username を白の太字、抜粋を明るめにして、バッジ以外でも気づけるようにする
 - メッセージのある会話を上に、未送信のフレンドをその下に置く
 - フレンドが0件のときは「フレンドがいません」＋ホームへの導線
 - **`conversations` に含まれていても、現在フレンドでない相手は一覧から除く。** フレンド解除・ブロック後の会話がここに残るが、履歴取得が403になるので開けないため（セクション3）
@@ -219,11 +221,23 @@ status: 実装済み（[messages/page.tsx](frontend/src/app/messages/page.tsx)�
 ### 右ペイン: メッセージ
 
 - 自分の発言は右寄せ、相手は左寄せ
+- **アバターと発言者名を吹き出しのすぐ隣に置く。** 左右の寄せだけでは、スクロール中にどちらの発言か追いにくいため
+- **同じ人の連投は1つのまとまりとして扱い、アバターと名前は先頭の1件にだけ出す。** 毎行に出すと縦に間延びして、かえって読みにくくなる。2件目以降もアバター幅の余白は空けて吹き出しの端を揃える
 - 上方向スクロールで `before` を使って過去を追加読み込み（セクション2）
 - 送信フォームは下部固定。Enter で送信、Shift+Enter で改行。**IME変換確定のEnterで誤送信しないよう `isComposing` を見る**
 - 送信中は入力欄を無効化しない（連投できるようにする）が、`content` が空なら送信ボタンを無効化
 - 送信は `POST` の応答でその場に描き、届いた `dm:received` は `id` で重複を弾く。WebSocketの往復を待たないため、接続が一時的に切れていても自分の発言は表示される
 - 狭い画面では2ペインを同時に出さず、会話を開いている間は一覧を隠す（戻るボタンを置く）
+
+#### 配色の方針
+
+背景 `zinc-950` に対して境界線を `zinc-900` にすると、両者の差が小さすぎて線が見えない。**境界を線1本に頼らせず、面で分ける**。
+
+- 左ペインは `bg-zinc-900/60`、メッセージ領域は `bg-zinc-950` と、面の明るさを変える
+- 会話ヘッダーと入力エリアも `bg-zinc-900/50` を敷き、メッセージ領域と区別する
+- 構造的な境界線は `zinc-700`、一覧の行区切りは `zinc-700/60`
+- 一覧のホバーは `zinc-800/60`（面が明るくなった分、`zinc-900` 系では反応が見えない）
+- 入力欄は明るくなった台座に沈まないよう `bg-zinc-950` + `border-zinc-700` と明暗を反転させる
 
 #### スクロール制御
 
@@ -236,6 +250,7 @@ status: 実装済み（[messages/page.tsx](frontend/src/app/messages/page.tsx)�
 
 - ヘッダーに「メッセージ」ボタンを追加し `/messages` へ遷移。未読があればバッジを重ねる（セクション4）
 - フレンド詳細ウィンドウにも「メッセージ」ボタンを置き、`/messages?to=<userId>` でその相手を開いた状態にする
+- **会話を自動で開くのは `?to=` がある時だけ。** ヘッダーからの遷移では何も選択せず一覧を見せる（直近の会話を勝手に開くと、狭い画面ではその会話画面に着地してしまうため）
 - `useSearchParams` はプリレンダリング時に Suspense 境界を要求するため、ページ本体を `<Suspense>` で包んでいる
 
 ### アバター描画の共通化
@@ -244,7 +259,10 @@ status: 実装済み（[messages/page.tsx](frontend/src/app/messages/page.tsx)�
 
 ### 入力の上限
 
-`content` の入力欄に `maxLength={1000}` を付ける（セクション1の DTO と揃える）。サーバー任せにすると、超過時に英語のバリデーションメッセージがそのまま出るため。
+`content` の入力欄に `maxLength={1000}` を付ける（セクション1の DTO と揃える）。**残り100文字を切ったら残量を表示し、0で赤字に変える。** `maxLength` は上限に達すると無言で入力を受け付けなくなるため、打ち止めの理由が分かるようにする。
+サーバー任せにすると、超過時に英語のバリデーションメッセージ（`content must be shorter than or equal to 1000 characters`）がそのまま出るため。
+
+`maxLength` も `@MaxLength` も UTF-16 のコード単位で数えるので、両者の数え方はずれない（BMP外の絵文字は双方で2文字扱い）。
 
 ---
 

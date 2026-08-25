@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsInt,
   IsNotEmpty,
@@ -16,7 +16,12 @@ export class SendMessageDto {
   @IsInt()
   receiverId: number;
 
+  /**
+   * 検証の前に trim する。空白だけの本文は `@IsNotEmpty` を素通りしてしまうため、
+   * 「空なら400」を空白だけの入力にも効かせる。保存される本文も trim 済みになる。
+   */
   @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsNotEmpty()
   @MaxLength(MESSAGE_MAX_LENGTH)
   content: string;
