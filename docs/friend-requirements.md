@@ -272,11 +272,11 @@ status: 実装済み
    - `bio String?`（[schema.prisma:21](backend/prisma/schema.prisma#L21)）は Postgres の `text` に落ちるため事実上無制限
    - `RegisterDto` の `bio` に `@MaxLength` が無い（[register.dto.ts:17](backend/src/auth/dto/register.dto.ts#L17)）
    - **`PUT /api/users/me` は `@Body() body: any` で DTO を通していないため、グローバル `ValidationPipe`（[main.ts:9](backend/src/main.ts#L9)）が一切効いていない**（[users.controller.ts:31](backend/src/users/users.controller.ts#L31)）
-   - `profileImage` は `<img src>` にそのまま渡される（[page.tsx:361-370](frontend/src/app/page.tsx#L361-L370)）ため data: URI を入れられる
+   - `profileImage` は `<img src>` にそのまま渡される（[page.tsx:405-414](frontend/src/app/page.tsx#L405-L414)）ため data: URI を入れられる
 
    → **`username` 30文字 / `bio` 500文字 / `profileImage` 512文字**を上限とし、`UpdateMeDto` を新設して `PUT /api/users/me` に適用する。これが無いと「1000件 × 無制限」でレスポンスサイズが青天井になる（実装済み: [update-me.dto.ts](backend/src/users/dto/update-me.dto.ts)）
 
-   **上限値を 200 ではなく 500 にした理由**: 上限導入前に登録されたアカウントに長い `bio` / `username` が既に入っている可能性がある。プロフィール更新は編集していない項目も含めて全フィールドを送る実装（[page.tsx:329-334](frontend/src/app/page.tsx#L329-L334)）なので、上限を厳しくしすぎると**該当ユーザーがプロフィールを一切保存できなくなる**。500文字なら1000件で約1.6MBに収まり、無制限とは桁が違うのでガードレールとしては十分機能する。
+   **上限値を 200 ではなく 500 にした理由**: 上限導入前に登録されたアカウントに長い `bio` / `username` が既に入っている可能性がある。プロフィール更新は編集していない項目も含めて全フィールドを送る実装（[page.tsx:373-378](frontend/src/app/page.tsx#L373-L378)）なので、上限を厳しくしすぎると**該当ユーザーがプロフィールを一切保存できなくなる**。500文字なら1000件で約1.6MBに収まり、無制限とは桁が違うのでガードレールとしては十分機能する。
 
    同じ理由で、`POST /api/friends/request` の `query` には `@MaxLength` を付けない。付けると上限導入前の長い username のユーザーが検索できなくなるため（[friends.dto.ts](backend/src/friends/dto/friends.dto.ts)）。`username` は `@unique` インデックス付きの完全一致検索なので、長さ制限が無くても危険はない。
 
@@ -294,9 +294,9 @@ status: 実装済み
 
 ## 4. オンライン状態（presence）
 
-status: 実装済み（サーバー: [presence/](backend/src/presence/) ／ フロント: [page.tsx](frontend/src/app/page.tsx)）
+status: 実装済み（サーバー: [presence/](backend/src/presence/) ／ フロント: [presence.tsx](frontend/src/lib/presence.tsx)）
 
-subject の「see their online status」を満たすための設計。現状は [page.tsx:785](frontend/src/app/page.tsx#L785) の緑ドットが**全フレンドに対して常時点灯**しており、要件を満たしていないのに満たしているように見える状態になっている。
+subject の「see their online status」を満たすための設計。着手前は [page.tsx](frontend/src/app/page.tsx) の緑ドットが**全フレンドに対して常時点灯**しており、要件を満たしていないのに満たしているように見える状態だった。
 
 ### 方式: 専用 WebSocket 名前空間 `/presence` を新設する
 
@@ -342,19 +342,21 @@ C→S のイベントは無い。クライアントは接続を維持するだ�
 
 ### フロント側
 
-- ログイン済み（`token` あり）の間、ホーム画面から `io(`${BACKEND_URL}/presence`, { auth: { token } })` で接続する。`BACKEND_URL` は ito ルームと同じ `NEXT_PUBLIC_WS_URL`（[page.tsx:18](frontend/src/app/ito/room/[roomCode]/page.tsx#L18)）を使う
-- `onlineFriendIds: Set<number>` を state に持ち、`presence:snapshot` で初期化、`presence:changed` で差分更新する
-- 緑ドット（[page.tsx:785](frontend/src/app/page.tsx#L785)）を**オンライン時のみ緑・オフライン時はグレー**に切り替える。ダミーの常時 `animate-pulse` は廃止する
-- ログアウト時・アンマウント時に `socket.disconnect()`
+接続は [presence.tsx](frontend/src/lib/presence.tsx) の `PresenceProvider` が持ち、[layout.tsx](frontend/src/app/layout.tsx) に配置している（後述）。
 
-### 既知の制約: ゲーム中はオフライン表示になる
+- ログイン済み（`token` あり）の間、`io(`${WS_URL}/presence`, { auth: { token } })` で接続する。`WS_URL` は ito ルームと同じ `NEXT_PUBLIC_WS_URL`（[page.tsx:18](frontend/src/app/ito/room/[roomCode]/page.tsx#L18)）を使う
+- `onlineFriendIds: Set<number>` を Provider の state に持ち、`presence:snapshot` で初期化、`presence:changed` で差分更新する。各ページは `usePresence()` で読むだけ
+- サーバーイベントは Provider が `subscribe(event, handler)` で中継する。何に反応するかはページ側が決める（ホーム画面はフレンド通知を受けて `fetchFriendsData()` を呼ぶ）
+- 緑ドット（[page.tsx](frontend/src/app/page.tsx)）を**オンライン時のみ緑・オフライン時はグレー**に切り替える。ダミーの常時 `animate-pulse` は廃止した
+- ログアウト時（`token` が null になった時）に `socket.disconnect()`
 
-presence 接続をホーム画面コンポーネントで張るため、ito ルームへ遷移するとホーム画面がアンマウントされて presence も切断される。**ゲームをプレイ中のフレンドはオフラインと表示される。**
+### 解消済みの制約: ゲーム中もオンライン表示になる
 
-- 許容する場合: 本書に制約として記録するだけ
-- 解消する場合: presence 接続を [layout.tsx](frontend/src/app/layout.tsx) 側の Context / Provider へ持ち上げ、ログイン中は全ページで維持する。ito ルームと presence の2本のソケットが並存することになるが、名前空間が違うので競合しない
+当初は presence 接続をホーム画面コンポーネントで張っていたため、ito ルームへ遷移するとホーム画面がアンマウントされて切断され、**ゲームをプレイ中のフレンドがオフラインと表示されていた。**
 
-→ まず制約付きで実装し、必要になったら持ち上げる
+DM 実装（[dm-requirements.md](docs/dm-requirements.md) セクション4）で `/messages` を新設するにあたり、同じ接続コードを複数ページに書くことになるため、**接続を layout の Provider へ持ち上げて解消した**。ログイン中は全ページで接続を1本だけ維持する。ito ルームの `/ito` と presence の2本のソケットが並存するが、名前空間が違うので競合しない。
+
+あわせて、ログイン状態（`token` / `user`）と `apiCall` も [session.tsx](frontend/src/lib/session.tsx) の `SessionProvider` へ移した。presence の接続条件が `token` であり、ページ単位で持っていると遷移のたびに認証状態が作り直されるため。
 
 ### インフラ
 
@@ -369,7 +371,7 @@ status: 実装済み（サーバー: [friends.service.ts](backend/src/friends/fr
 
 ### 現状の問題
 
-`fetchFriendsData()` は `token` の変化時にしか実行されない（[page.tsx:138-142](frontend/src/app/page.tsx#L138-L142)）。そのため:
+`fetchFriendsData()` は `token` の変化時にしか実行されない（[page.tsx:147-151](frontend/src/app/page.tsx#L147-L151)）。そのため:
 - フレンド申請が届いても「申請待ち」バッジが増えない
 - 自分の申請が承認されてもフレンド一覧に現れない
 - 画面をリロードするか再ログインするまで気づけない
@@ -395,7 +397,7 @@ presence 用に張ったソケットをそのまま通知チャネルに使う�
 
 status: 実装済み
 
-ホーム画面のフレンドパネル（[page.tsx:740-880](frontend/src/app/page.tsx#L740-L880)）。ログイン済みの時のみ表示される。
+ホーム画面のフレンドパネル（[page.tsx:772-960](frontend/src/app/page.tsx#L772-L960)）。ログイン済みの時のみ表示される。
 
 ### タブ
 
@@ -410,7 +412,7 @@ status: 実装済み
 
 #### 決定: 削除ボタンを info ボタンに置き換える
 
-現状は行に削除ボタン（ゴミ箱アイコン）が直接置かれている（[page.tsx:796-804](frontend/src/app/page.tsx#L796-L804)）。ここにブロックボタンを足すと行が窮屈になり、かつ**破壊的な操作が2つ、1クリックで届く場所に並ぶ**ことになる。
+現状は行に削除ボタン（ゴミ箱アイコン）が直接置かれている（[page.tsx](frontend/src/app/page.tsx)）。ここにブロックボタンを足すと行が窮屈になり、かつ**破壊的な操作が2つ、1クリックで届く場所に並ぶ**ことになる。
 
 代わりに **info ボタン（ⓘ）1つに集約し、押すとフレンド詳細ウィンドウを開く**。削除もブロックもその中から行う。
 
@@ -442,7 +444,7 @@ status: 実装済み
 - **「ブロック」** → **ウィンドウ内で確認ステップを1つ挟む**。「ブロックするとフレンド関係が解除され、相手からの申請も届かなくなります。解除してもフレンド関係は元に戻りません。」を表示してから `POST /api/friends/block`
   - 削除より影響が大きく（関係の削除 + 今後の遮断）、かつ解除しても元に戻らないため、削除と同じ1クリックにはしない
 - どちらも成功したらウィンドウを閉じて `fetchFriendsData()` で再取得する
-- 既存の `confirm()`（[page.tsx:297](frontend/src/app/page.tsx#L297)）は廃止する
+- 既存の `confirm()`（[page.tsx](frontend/src/app/page.tsx)）は廃止する
 
 ### 申請待ちタブ
 
@@ -474,7 +476,7 @@ status: 実装済み
 - **提示は拒否した行があった位置にインラインで残す。** トーストのように数秒で自動的に消すことはしない。見逃すと二度と出せない導線になるため
 - 消えるのは「閉じる」を押した時、タブを切り替えた時、ブロックを実行した時の3つ
 - **拒否は既に実行済み**。ここで「閉じる」を押しても拒否は取り消されない。文言を過去形（「拒否しました」）にして、この提示が追加の選択肢であって確認ダイアログではないことを明確にする
-- **実装上の注意**: 拒否すると `Friendship` 行が消えるので、`POST /api/friends/block` に渡す `userId` はサーバーから取り直せない。**拒否を実行する前に、その行の `user` オブジェクトをフロント側の state に退避しておく**必要がある（`incomingRequests` の要素は `{ id, user }` 形式、[page.tsx:19-22](frontend/src/app/page.tsx#L19-L22)）
+- **実装上の注意**: 拒否すると `Friendship` 行が消えるので、`POST /api/friends/block` に渡す `userId` はサーバーから取り直せない。**拒否を実行する前に、その行の `user` オブジェクトをフロント側の state に退避しておく**必要がある（`incomingRequests` の要素は `{ id, user }` 形式、[page.tsx:13-16](frontend/src/app/page.tsx#L13-L16)）
 - ブロック実行時の確認ステップは不要。**この提示自体が既に2段階目**であり、文言でブロックの効果を説明済みのため
 
 ### ブロック中タブ（新規）
@@ -508,7 +510,11 @@ status: 未着手
 
 ### DM（ダイレクトメッセージ）
 
-`DirectMessage` モデル（[schema.prisma:53-62](backend/prisma/schema.prisma#L53-L62)）は定義だけあり、API・UIともに未実装。subject の Web モジュール Major「A basic chat system (send/receive messages between users)」に対応するため、別途 `docs/dm-requirements.md` を起こす。
+`DirectMessage` モデル（[schema.prisma:70-79](backend/prisma/schema.prisma#L70-L79)）は定義だけあり、API・UIともに未実装。subject の Web モジュール Major「A basic chat system (send/receive messages between users)」に対応するため、**[dm-requirements.md](docs/dm-requirements.md) に切り出して定義済み**。
+
+本書で決めた次の仕様が、DM 側の設計の前提になっている。
+- **ブロック時に `Friendship` を全削除する**（セクション3）ため、DM 側はブロック判定を持たずに「フレンド限定」だけで遮断が成立する
+- **`/presence` 名前空間**（セクション4）に `dm:received` を相乗りさせる
 
 ### プロフィール閲覧
 

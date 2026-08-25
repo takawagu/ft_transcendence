@@ -333,6 +333,29 @@ export class FriendsService {
     return { success: true };
   }
 
+  /**
+   * 2人が現在フレンドかどうか。DM の送信・履歴取得の可否判定に使う。
+   * ブロック時に Friendship を全削除する仕様のため、これが false ならブロック相手も含めて遮断される。
+   */
+  async areFriends(userIdA: number, userIdB: number): Promise<boolean> {
+    const friendship = await this.prisma.friendship.findFirst({
+      where: {
+        OR: [
+          { applicantId: userIdA, approverId: userIdB },
+          { applicantId: userIdB, approverId: userIdA },
+        ],
+        status: 'ACCEPTED',
+      },
+      select: { id: true },
+    });
+    return friendship !== null;
+  }
+
+  /** 他モジュールから相手の公開情報を引くための入口 */
+  async getPublicUserById(userId: number) {
+    return this.getPublicUser(userId);
+  }
+
   /** 通知ペイロードに載せる自分の公開情報 */
   private async getPublicUser(userId: number) {
     return this.prisma.user.findUniqueOrThrow({

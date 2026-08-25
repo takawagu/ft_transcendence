@@ -2,16 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { io, Socket } from 'socket.io-client';
-
-interface User {
-  id: number;
-  /** /api/friends は email を返さない（フレンド全員に配らないため）ので optional */
-  email?: string;
-  username: string;
-  bio?: string;
-  profileImage?: string;
-}
+import { useSession, type User } from '@/lib/session';
+import { usePresence } from '@/lib/presence';
+import { renderAvatar } from '@/lib/avatar';
 
 interface GameRecord {
   totalGames: number;
@@ -31,29 +24,18 @@ interface SearchResult extends User {
 /** 検索を開始する最小文字数（バックエンドの @MinLength(2) と揃える） */
 const SEARCH_MIN_LENGTH = 2;
 
-/**
- * APIリトライ設定。
- * `make up` 直後はフロントが先に起動し、バックエンドのコンパイル完了まで
- * 30〜40秒ほど nginx が 502 を返す。その間の操作を自動で吸収するためのもの。
- * 実測の起動時間に余裕を持たせて締め切りを60秒に置く（回数ではなく経過時間で打ち切る）。
- */
-const API_RETRY_DEADLINE_MS = 60_000;
-const API_RETRY_BASE_DELAY_MS = 500;
-const API_RETRY_MAX_DELAY_MS = 5_000;
-
 const AVATAR_PRESETS = [
   '🦊', '🐱', '🐼', '🐯', '🐸', '🐨', '🐙', '👾', '🚀', '🔮'
 ];
 
-/** nginxが同一オリジンで配信するため通常は空。itoルーム側と同じ扱い */
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? '';
-
 export default function HomePage() {
   const router = useRouter();
 
-  // Auth states
-  const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  // Auth states — 遷移をまたいで保つため layout の SessionProvider が持つ
+  const { mounted, token, user, login, logout, updateUser, apiCall } = useSession();
+  // Presence (online status) — /presence 名前空間から配信される。接続も Provider 側
+  const { onlineFriendIds, unreadSenderIds, subscribe } = usePresence();
+
   const [isLoginTab, setIsLoginTab] = useState(true);
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState('');
@@ -84,9 +66,6 @@ export default function HomePage() {
   const [activeFriendTab, setActiveFriendTab] = useState<'list' | 'requests' | 'blocks'>('list');
   const [roomCreateRounds, setRoomCreateRounds] = useState(3);
 
-  // Presence (online status) — /presence 名前空間から配信される
-  const [onlineFriendIds, setOnlineFriendIds] = useState<Set<number>>(new Set());
-
   // Block states
   const [blockedUsers, setBlockedUsers] = useState<User[]>([]);
   /** フレンド詳細ウィンドウ。null なら非表示 */
@@ -109,22 +88,6 @@ export default function HomePage() {
   const [editError, setEditError] = useState('');
   const [editSuccess, setEditSuccess] = useState('');
   const [gameRecord, setGameRecord] = useState<GameRecord | null>(null);
-
-  /** バックエンド起動待ちでリトライ中か。表示専用 */
-  const [apiWaiting, setApiWaiting] = useState(false);
-
-  // Hydration state check
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    const storedToken = localStorage.getItem('ft_token');
-    const storedUser = localStorage.getItem('ft_user');
-    if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
-    }
-  }, []);
 
   // Real-time username availability check (register tab only)
   useEffect(() => {
@@ -211,106 +174,20 @@ export default function HomePage() {
   }, [friendQuery, token]);
 
   /**
-   * オンライン状態と申請通知を受け取る /presence への接続。
-   * ログイン中はホーム画面にいる間だけ張る。itoルームへ遷移すると
-   * このコンポーネントがアンマウントされて切断されるため、
-   * ゲーム中のフレンドはオフライン表示になる（既知の制約）。
+   * フレンド関連の通知でフレンド一覧を取り直す。
+   * 通知はトリガーとしてのみ使い、差分適用はしない（状態の二重管理を避けるため）。
+   * 接続そのものは PresenceProvider が持つので、ここでは購読するだけ。
    */
   useEffect(() => {
-    if (!token) {
-      setOnlineFriendIds(new Set());
-      return;
-    }
-
-    const socket: Socket = io(`${WS_URL}/presence`, { auth: { token } });
-
-    socket.on('presence:snapshot', (p: { onlineFriendIds: number[] }) => {
-      setOnlineFriendIds(new Set(p.onlineFriendIds));
-    });
-
-    socket.on('presence:changed', (p: { userId: number; online: boolean }) => {
-      setOnlineFriendIds(prev => {
-        const next = new Set(prev);
-        if (p.online) next.add(p.userId);
-        else next.delete(p.userId);
-        return next;
-      });
-    });
-
-    // 通知はトリガーとしてのみ使い、差分適用はせず取り直す（状態の二重管理を避けるため）
-    socket.on('friend:requestReceived', () => fetchFriendsData());
-    socket.on('friend:accepted', () => fetchFriendsData());
-
+    if (!token) return;
+    const refresh = () => fetchFriendsData();
+    const unsubscribeRequest = subscribe('friend:requestReceived', refresh);
+    const unsubscribeAccepted = subscribe('friend:accepted', refresh);
     return () => {
-      socket.disconnect();
+      unsubscribeRequest();
+      unsubscribeAccepted();
     };
-  }, [token]);
-
-  // API helper
-  const apiCall = async (endpoint: string, method = 'GET', body?: any) => {
-    const activeToken = token || localStorage.getItem('ft_token');
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
-    if (activeToken) {
-      headers['Authorization'] = `Bearer ${activeToken}`;
-    }
-
-    const deadline = Date.now() + API_RETRY_DEADLINE_MS;
-
-    for (let attempt = 0; ; attempt++) {
-      if (attempt > 0) {
-        if (Date.now() >= deadline) break;
-        setApiWaiting(true);
-        // 指数バックオフ（上限あり）。締め切りを超えないよう待ち時間を切り詰める
-        const delay = Math.min(
-          API_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1),
-          API_RETRY_MAX_DELAY_MS,
-          deadline - Date.now(),
-        );
-        await new Promise(r => setTimeout(r, delay));
-      }
-
-      let res: Response;
-      try {
-        res = await fetch(endpoint, {
-          method,
-          headers,
-          body: body ? JSON.stringify(body) : undefined,
-        });
-      } catch {
-        // fetch自体が失敗＝サーバーに届いていないので、副作用の二重実行にはならない
-        continue;
-      }
-
-      // 502/503 はnginxがバックエンドに到達できなかった状態。リクエストは処理されていない。
-      // 504（Gateway Timeout）は処理済みの可能性があるため、あえてリトライしない
-      if (res.status === 502 || res.status === 503) continue;
-
-      setApiWaiting(false);
-
-      if (!res.ok) {
-        if (res.status === 401) {
-          localStorage.removeItem('ft_token');
-          localStorage.removeItem('ft_user');
-          sessionStorage.removeItem('ito_player_name');
-          setToken(null);
-          setUser(null);
-        }
-        const errorData = await res.json().catch(() => ({}));
-        const message = Array.isArray(errorData.message)
-          ? errorData.message.join(' / ')
-          : errorData.message;
-        throw new Error(message || 'エラーが発生しました');
-      }
-      return res.json();
-    }
-
-    setApiWaiting(false);
-    throw new Error(
-      'サーバーに接続できません。起動中の可能性があるため、少し待ってから再度お試しください。',
-    );
-  };
+  }, [token, subscribe]);
 
   // Auth handlers
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -322,10 +199,7 @@ export default function HomePage() {
       if (isLoginTab) {
         // Login
         const data = await apiCall('/api/auth/login', 'POST', { email, password });
-        localStorage.setItem('ft_token', data.token);
-        localStorage.setItem('ft_user', JSON.stringify(data.user));
-        setToken(data.token);
-        setUser(data.user);
+        login(data.token, data.user);
       } else {
         // Register
         const data = await apiCall('/api/auth/register', 'POST', {
@@ -335,13 +209,9 @@ export default function HomePage() {
           bio: '',
           profileImage: '🦊',
         });
-        localStorage.setItem('ft_token', data.token);
-        localStorage.setItem('ft_user', JSON.stringify(data.user));
+        // 完了メッセージを見せてからログイン状態にする（画面が切り替わるのは900ms後）
         setRegisterSuccessMsg('🎉 登録が完了しました！');
-        setTimeout(() => {
-          setToken(data.token);
-          setUser(data.user);
-        }, 900);
+        setTimeout(() => login(data.token, data.user), 900);
       }
     } catch (err: any) {
       setAuthError(err.message || '認証に失敗しました。入力内容を確認してください。');
@@ -357,10 +227,7 @@ export default function HomePage() {
       const email = `dev${num}@example.com`;
       const password = 'password123';
       const data = await apiCall('/api/auth/login', 'POST', { email, password });
-      localStorage.setItem('ft_token', data.token);
-      localStorage.setItem('ft_user', JSON.stringify(data.user));
-      setToken(data.token);
-      setUser(data.user);
+      login(data.token, data.user);
     } catch (err: any) {
       setAuthError(err.message || '開発者ログインに失敗しました。');
     } finally {
@@ -369,11 +236,7 @@ export default function HomePage() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('ft_token');
-    localStorage.removeItem('ft_user');
-    sessionStorage.removeItem('ito_player_name');
-    setToken(null);
-    setUser(null);
+    logout();
     // Clear forms
     setEmail('');
     setUsername('');
@@ -515,41 +378,12 @@ export default function HomePage() {
         password: editPassword || undefined,
       });
 
-      setUser(updated);
-      localStorage.setItem('ft_user', JSON.stringify(updated));
+      updateUser(updated);
       setEditSuccess('プロフィールを更新しました！');
       setTimeout(() => setShowOptionsModal(false), 1000);
     } catch (err: any) {
       setEditError(err.message || '更新に失敗しました。');
     }
-  };
-
-  // Avatar rendering helper
-  const renderAvatar = (avatar: string | undefined, sizeClass = 'w-10 h-10 text-xl') => {
-    if (!avatar) {
-      return (
-        <div className={`${sizeClass} rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-400 font-bold`}>
-          ?
-        </div>
-      );
-    }
-    if (avatar.length <= 4 && /\p{Emoji}/u.test(avatar)) {
-      return (
-        <div className={`${sizeClass} rounded-full bg-zinc-850 flex items-center justify-center border border-zinc-700 shadow-inner`}>
-          {avatar}
-        </div>
-      );
-    }
-    return (
-      <img
-        src={avatar}
-        alt="avatar"
-        className={`${sizeClass} rounded-full object-cover border border-zinc-700`}
-        onError={(e) => {
-          (e.target as HTMLElement).style.display = 'none';
-        }}
-      />
-    );
   };
 
   if (!mounted) {
@@ -567,13 +401,6 @@ export default function HomePage() {
   if (!token || !user) {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center bg-zinc-950 text-white relative overflow-hidden px-4">
-        {/* バックエンド起動待ちの表示。make up 直後の502をリトライで吸収している間に出る */}
-        {apiWaiting && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 px-4 py-2 bg-zinc-900/95 border border-indigo-800/60 rounded-full shadow-xl">
-            <span className="h-3 w-3 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
-            <span className="text-[11px] font-semibold text-zinc-300">サーバーの起動を待っています…</span>
-          </div>
-        )}
         {/* Decorative background glow */}
         <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-indigo-900/20 rounded-full blur-[120px] pointer-events-none"></div>
         <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-purple-900/20 rounded-full blur-[120px] pointer-events-none"></div>
@@ -765,13 +592,6 @@ export default function HomePage() {
   // --- HOME SCREEN (Logged in) ---
   return (
     <main className="min-h-screen bg-zinc-950 text-white flex flex-col relative overflow-hidden">
-      {/* バックエンド起動待ちの表示。make up 直後の502をリトライで吸収している間に出る */}
-      {apiWaiting && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 px-4 py-2 bg-zinc-900/95 border border-indigo-800/60 rounded-full shadow-xl">
-          <span className="h-3 w-3 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin"></span>
-          <span className="text-[11px] font-semibold text-zinc-300">サーバーの起動を待っています…</span>
-        </div>
-      )}
       {/* Background decorations */}
       <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-900/10 rounded-full blur-[100px] pointer-events-none"></div>
       <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-900/10 rounded-full blur-[100px] pointer-events-none"></div>
@@ -793,6 +613,22 @@ export default function HomePage() {
               {user.bio && <div className="text-[10px] text-zinc-500 truncate max-w-[100px]">{user.bio}</div>}
             </div>
           </div>
+
+          {/* 未読バッジはセッション中のみ（DBに既読列を持たないためリロードで消える） */}
+          <button
+            onClick={() => router.push('/messages')}
+            className="relative p-2 text-zinc-400 hover:text-white bg-zinc-900/60 hover:bg-zinc-800 rounded-full border border-zinc-800/80 transition-all cursor-pointer"
+            title="メッセージ"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            {unreadSenderIds.size > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-indigo-600 text-white text-[9px] font-extrabold rounded-full flex items-center justify-center">
+                {unreadSenderIds.size}
+              </span>
+            )}
+          </button>
 
           <button
             onClick={openOptions}
@@ -1271,19 +1107,30 @@ export default function HomePage() {
                   </div>
                 </div>
               ) : (
-                <div className="flex gap-2">
+                <div className="space-y-2">
                   <button
-                    onClick={() => handleRemoveFriend(infoTarget.id)}
-                    className="flex-1 px-3 py-2 text-xs font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-all cursor-pointer"
+                    onClick={() => router.push(`/messages?to=${infoTarget.id}`)}
+                    className="w-full px-3 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
-                    フレンド削除
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    メッセージ
                   </button>
-                  <button
-                    onClick={() => setInfoConfirmBlock(true)}
-                    className="flex-1 px-3 py-2 text-xs font-bold text-red-300 bg-red-950/30 hover:bg-red-950/60 border border-red-900/40 rounded-lg transition-all cursor-pointer"
-                  >
-                    ブロック
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleRemoveFriend(infoTarget.id)}
+                      className="flex-1 px-3 py-2 text-xs font-bold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-all cursor-pointer"
+                    >
+                      フレンド削除
+                    </button>
+                    <button
+                      onClick={() => setInfoConfirmBlock(true)}
+                      className="flex-1 px-3 py-2 text-xs font-bold text-red-300 bg-red-950/30 hover:bg-red-950/60 border border-red-900/40 rounded-lg transition-all cursor-pointer"
+                    >
+                      ブロック
+                    </button>
+                  </div>
                 </div>
               )}
               <button

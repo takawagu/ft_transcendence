@@ -27,6 +27,9 @@ export const PRESENCE_EVENTS = {
 
   /** 自分が送った申請が承認された時 */
   FRIEND_ACCEPTED: 'friend:accepted',
+
+  /** DMが作成された時。受信者と送信者の両方に送る（別タブの同期のため） */
+  DM_RECEIVED: 'dm:received',
 } as const;
 
 export interface PresenceSnapshotPayload {
@@ -44,5 +47,17 @@ export interface FriendRequestReceivedPayload {
 }
 
 export interface FriendAcceptedPayload {
+  user: PublicUser;
+}
+
+export interface DmReceivedPayload {
+  message: {
+    id: number;
+    senderId: number;
+    receiverId: number;
+    content: string;
+    createdAt: Date;
+  };
+  /** 会話の相手。受信者には送信者、送信者には受信者が入る */
   user: PublicUser;
 }

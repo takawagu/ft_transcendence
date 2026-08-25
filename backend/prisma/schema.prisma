@@ -76,4 +76,9 @@ model DirectMessage {
 
   sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
   receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  // 会話履歴は OR: [{sender:A,receiver:B}, {sender:B,receiver:A}] で引くため、
+  // 両方向のインデックスが要る。1本だと OR の片側がフルスキャンになる
+  @@index([senderId, receiverId, createdAt])
+  @@index([receiverId, senderId, createdAt])
 }

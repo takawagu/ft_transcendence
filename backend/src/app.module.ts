@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { FriendsModule } from './friends/friends.module';
 import { PresenceModule } from './presence/presence.module';
+import { MessagesModule } from './messages/messages.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { PresenceModule } from './presence/presence.module';
     UsersModule,
     PresenceModule,
     FriendsModule,
+    MessagesModule,
     ItoModule,
   ],
 })
