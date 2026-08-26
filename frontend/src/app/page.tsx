@@ -68,6 +68,9 @@ export default function HomePage() {
   const [activeFriendTab, setActiveFriendTab] = useState<'list' | 'requests' | 'blocks'>('list');
   const [roomCreateRounds, setRoomCreateRounds] = useState(3);
 
+  // Modal states
+  const [showTermsModal, setShowTermsModal] = useState(false);
+
   // Block states
   const [blockedUsers, setBlockedUsers] = useState<User[]>([]);
   /** フレンド詳細ウィンドウ。null なら非表示 */
@@ -293,10 +296,6 @@ export default function HomePage() {
     }
   };
 
-  /**
-   * 受信申請の拒否。拒否は即座に実行し、その後ブロックの選択肢を提示する（2段階目）。
-   * 拒否でFriendship行が消えるため、userIdをここで退避しておく必要がある。
-   */
   const handleRejectFriend = async (friendshipId: number, user?: User) => {
     try {
       await apiCall('/api/friends/reject', 'POST', { friendshipId });
@@ -344,7 +343,6 @@ export default function HomePage() {
     setInfoConfirmBlock(false);
   };
 
-  /** タブを離れたら拒否後のブロック提示は消す */
   const switchFriendTab = (tab: 'list' | 'requests' | 'blocks') => {
     setActiveFriendTab(tab);
     setRejectedUser(null);
@@ -423,170 +421,264 @@ export default function HomePage() {
               <p className="text-zinc-400 text-sm">ホーム画面に移動します...</p>
             </div>
           ) : (
-          <>
-          {/* Form Tabs */}
-          <div className="flex border-b border-zinc-800 mb-6">
-            <button
-              onClick={() => {
-                setIsLoginTab(true);
-                setAuthError('');
-                setRegisterSuccessMsg('');
-              }}
-              className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 ${
-                isLoginTab
-                  ? 'text-indigo-400 border-b-2 border-indigo-500 font-bold'
-                  : 'text-zinc-500 hover:text-zinc-300'
-              }`}
-            >
-              ログイン
-            </button>
-            <button
-              onClick={() => {
-                setIsLoginTab(false);
-                setAuthError('');
-                setRegisterSuccessMsg('');
-              }}
-              className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 ${
-                !isLoginTab
-                  ? 'text-indigo-400 border-b-2 border-indigo-500 font-bold'
-                  : 'text-zinc-500 hover:text-zinc-300'
-              }`}
-            >
-              新規登録
-            </button>
-          </div>
-
-          <form onSubmit={handleAuthSubmit} className="space-y-4">
-            {authError && (
-              <div className="p-3 bg-red-950/60 border border-red-800 text-red-300 rounded-lg text-xs leading-relaxed">
-                {authError}
+            <>
+              {/* Form Tabs */}
+              <div className="flex border-b border-zinc-800 mb-6">
+                <button
+                  onClick={() => {
+                    setIsLoginTab(true);
+                    setAuthError('');
+                    setRegisterSuccessMsg('');
+                  }}
+                  className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 ${isLoginTab
+                      ? 'text-indigo-400 border-b-2 border-indigo-500 font-bold'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                >
+                  ログイン
+                </button>
+                <button
+                  onClick={() => {
+                    setIsLoginTab(false);
+                    setAuthError('');
+                    setRegisterSuccessMsg('');
+                  }}
+                  className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 ${!isLoginTab
+                      ? 'text-indigo-400 border-b-2 border-indigo-500 font-bold'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                >
+                  新規登録
+                </button>
               </div>
-            )}
 
-            <div>
-              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-                メールアドレス
-              </label>
-              <input
-                type="email"
-                required
-                placeholder="example@email.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
-              />
-              {!isLoginTab && emailStatus !== 'idle' && (
-                <p className={`mt-1 text-xs ${
-                  emailStatus === 'taken' ? 'text-red-400' :
-                  emailStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
-                }`}>
-                  {emailStatus === 'checking' && '確認中...'}
-                  {emailStatus === 'taken' && 'そのメールアドレスはすでに使われています'}
-                  {emailStatus === 'available' && '使用可能です'}
-                </p>
-              )}
-            </div>
-
-            {!isLoginTab && (
-              <div>
-                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-                  ユーザー名
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="ゲームに表示される名前"
-                  maxLength={30}
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
-                />
-                {usernameStatus !== 'idle' && (
-                  <p className={`mt-1 text-xs ${
-                    usernameStatus === 'taken' ? 'text-red-400' :
-                    usernameStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
-                  }`}>
-                    {usernameStatus === 'checking' && '確認中...'}
-                    {usernameStatus === 'taken' && 'そのユーザー名はすでに使われています'}
-                    {usernameStatus === 'available' && '使用可能です'}
-                  </p>
+              <form onSubmit={handleAuthSubmit} className="space-y-4">
+                {authError && (
+                  <div className="p-3 bg-red-950/60 border border-red-800 text-red-300 rounded-lg text-xs leading-relaxed">
+                    {authError}
+                  </div>
                 )}
-              </div>
-            )}
 
-            <div>
-              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-                パスワード
-              </label>
-              <input
-                type="password"
-                required
-                placeholder="••••••••"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
-              />
-              {!isLoginTab && password.length > 0 && (
-                <p className={`mt-1 text-xs ${password.length >= 8 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {password.length >= 8 ? '使用可能な長さです' : `あと${8 - password.length}文字以上必要です（8文字以上）`}
-                </p>
-              )}
-            </div>
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+                    メールアドレス
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="example@email.com"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
+                  />
+                  {!isLoginTab && emailStatus !== 'idle' && (
+                    <p className={`mt-1 text-xs ${emailStatus === 'taken' ? 'text-red-400' :
+                        emailStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
+                      }`}>
+                      {emailStatus === 'checking' && '確認中...'}
+                      {emailStatus === 'taken' && 'そのメールアドレスはすでに使われています'}
+                      {emailStatus === 'available' && '使用可能です'}
+                    </p>
+                  )}
+                </div>
 
-            <button
-              type="submit"
-              disabled={
-                loading ||
-                (!isLoginTab && (
-                  usernameStatus === 'taken' ||
-                  usernameStatus === 'checking' ||
-                  emailStatus === 'taken' ||
-                  emailStatus === 'checking' ||
-                  password.length < 8
-                ))
-              }
-              className="w-full mt-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-4 py-3 font-semibold text-sm text-white disabled:opacity-50 transition-all shadow-lg hover:shadow-indigo-500/20 hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>
-                  通信中...
-                </>
-              ) : isLoginTab ? (
-                'ログイン'
-              ) : (
-                'アカウント登録して開始'
-              )}
-            </button>
+                {!isLoginTab && (
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+                      ユーザー名
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="ゲームに表示される名前"
+                      maxLength={30}
+                      value={username}
+                      onChange={e => setUsername(e.target.value)}
+                      className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
+                    />
+                    {usernameStatus !== 'idle' && (
+                      <p className={`mt-1 text-xs ${usernameStatus === 'taken' ? 'text-red-400' :
+                          usernameStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
+                        }`}>
+                        {usernameStatus === 'checking' && '確認中...'}
+                        {usernameStatus === 'taken' && 'そのユーザー名はすでに使われています'}
+                        {usernameStatus === 'available' && '使用可能です'}
+                      </p>
+                    )}
+                  </div>
+                )}
 
-            <div className="relative flex py-2 items-center">
-              <div className="flex-grow border-t border-zinc-800/80"></div>
-              <span className="flex-shrink mx-4 text-zinc-500 text-xs uppercase tracking-wider font-semibold">開発者テスト</span>
-              <div className="flex-grow border-t border-zinc-800/80"></div>
-            </div>
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+                    パスワード
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
+                  />
+                  {!isLoginTab && password.length > 0 && (
+                    <p className={`mt-1 text-xs ${password.length >= 8 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {password.length >= 8 ? '使用可能な長さです' : `あと${8 - password.length}文字以上必要です（8文字以上）`}
+                    </p>
+                  )}
+                </div>
 
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => handleDevLogin(1)}
-                disabled={loading}
-                className="flex-1 rounded-lg bg-zinc-850 hover:bg-zinc-800 border border-zinc-700 px-3 py-2.5 font-bold text-xs text-indigo-400 transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-1 cursor-pointer"
-              >
-                Dev1 🚀
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDevLogin(2)}
-                disabled={loading}
-                className="flex-1 rounded-lg bg-zinc-850 hover:bg-zinc-800 border border-zinc-700 px-3 py-2.5 font-bold text-xs text-purple-400 transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-1 cursor-pointer"
-              >
-                Dev2 👾
-              </button>
-            </div>
-          </form>
-          </>
+                {!isLoginTab && (
+                  <div className="text-xs text-zinc-500 text-center mt-2 mb-2">
+                    アカウントを登録することで、
+                    <button
+                      type="button"
+                      onClick={() => setShowTermsModal(true)}
+                      className="text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
+                    >
+                      利用規約
+                    </button>
+                    に同意したものとみなされます。
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={
+                    loading ||
+                    (!isLoginTab && (
+                      usernameStatus === 'taken' ||
+                      usernameStatus === 'checking' ||
+                      emailStatus === 'taken' ||
+                      emailStatus === 'checking' ||
+                      password.length < 8
+                    ))
+                  }
+                  className="w-full mt-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-4 py-3 font-semibold text-sm text-white disabled:opacity-50 transition-all shadow-lg hover:shadow-indigo-500/20 hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>
+                      通信中...
+                    </>
+                  ) : isLoginTab ? (
+                    'ログイン'
+                  ) : (
+                    'アカウント登録して開始'
+                  )}
+                </button>
+
+                <div className="relative flex py-2 items-center">
+                  <div className="flex-grow border-t border-zinc-800/80"></div>
+                  <span className="flex-shrink mx-4 text-zinc-500 text-xs uppercase tracking-wider font-semibold">開発者テスト</span>
+                  <div className="flex-grow border-t border-zinc-800/80"></div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDevLogin(1)}
+                    disabled={loading}
+                    className="flex-1 rounded-lg bg-zinc-850 hover:bg-zinc-800 border border-zinc-700 px-3 py-2.5 font-bold text-xs text-indigo-400 transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    Dev1 🚀
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDevLogin(2)}
+                    disabled={loading}
+                    className="flex-1 rounded-lg bg-zinc-850 hover:bg-zinc-800 border border-zinc-700 px-3 py-2.5 font-bold text-xs text-purple-400 transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    Dev2 👾
+                  </button>
+                </div>
+              </form>
+            </>
           )}
         </div>
+
+        <footer className="absolute bottom-6 w-full text-center z-10">
+          <button
+            onClick={() => setShowTermsModal(true)}
+            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+          >
+            利用規約
+          </button>
+        </footer>
+
+        {/* --- TERMS MODAL --- */}
+        {showTermsModal && (
+          <div
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center px-4"
+            onClick={() => setShowTermsModal(false)}
+          >
+            <div
+              className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in fade-in zoom-in-95 duration-200"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
+                <h3 className="text-lg font-bold text-zinc-100">利用規約</h3>
+                <button
+                  onClick={() => setShowTermsModal(false)}
+                  className="text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto flex-1 text-sm text-zinc-300 space-y-4 leading-relaxed">
+                <h4 className="font-bold text-white">第1条（適用）</h4>
+                <p>本規約は、ユーザーと運営者との間の本サービスの利用に関わる一切の関係に適用されるものとします。</p>
+                <h4 className="font-bold text-white mt-4">第2条（ユーザー登録）</h4>
+                <p>本サービスの利用を希望する者は、本規約に同意の上、運営者が定める方法によってユーザー登録を行うものとします。</p>
+                <h4 className="font-bold text-white mt-4">第3条（アカウントの管理）</h4>
+                <p>ユーザーは、自己の責任において、本サービスのアカウントおよびパスワードを適切に管理するものとします。いかなる場合にも、これらを第三者に譲渡または貸与することはできません。</p>
+                <h4 className="font-bold text-white mt-4">第4条（禁止事項）</h4>
+                <p>ユーザーは、本サービスの利用にあたり、以下の行為をしてはなりません。</p>
+                <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
+                  <li>法令または公序良俗に違反する行為</li>
+                  <li>犯罪行為に関連する行為</li>
+                  <li>運営者、他のユーザー、または第三者のサーバーまたはネットワークの機能を破壊したり、妨害したりする行為</li>
+                  <li>本サービスの運営を妨害するおそれのある行為</li>
+                  <li>他のユーザーに関する個人情報等を収集または蓄積する行為</li>
+                  <li>不正アクセスをし、またはこれを試みる行為</li>
+                  <li>他のユーザーに成りすます行為</li>
+                  <li>本サービス内でのチャット機能を利用した、他のユーザーに対する誹謗中傷、脅迫、いやがらせ、スパム送信、その他不適切な発言を行う行為</li>
+                  <li>ゲームの進行を意図的に妨害する、または本来のゲーム性から著しく逸脱する行為</li>
+                  <li>その他、運営者が不適切と判断する行為</li>
+                </ul>
+                <h4 className="font-bold text-white mt-4">第5条（本サービスの提供の停止等）</h4>
+                <p>運営者は、以下のいずれかの事由があると判断した場合、ユーザーに事前に通知することなく本サービスの全部または一部の提供を停止または中断することができるものとします。</p>
+                <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
+                  <li>本サービスにかかるコンピュータシステムの保守点検または更新を行う場合</li>
+                  <li>地震、落雷、火災、停電または天災などの不可抗力により、本サービスの提供が困難となった場合</li>
+                  <li>コンピュータまたは通信回線等が事故により停止した場合</li>
+                  <li>その他、運営者が本サービスの提供が困難と判断した場合</li>
+                </ul>
+                <h4 className="font-bold text-white mt-4">第6条（知的財産権）</h4>
+                <p>本サービスに関する知的財産権（「ITO」のゲームルール、名称、デザイン等の権利を含むがこれに限らない）は、正当な権利者に帰属します。ユーザーは、これらを無断で複製、転載、改変等することはできません。</p>
+                <h4 className="font-bold text-white mt-4">第7条（免責事項）</h4>
+                <p>運営者は、本サービスに事実上または法律上の瑕疵（安全性、信頼性、正確性、完全性、有効性、特定の目的への適合性、セキュリティなどに関する欠陥、エラーやバグ、権利侵害などを含みます）がないことを明示的にも黙示的にも保証しておりません。</p>
+                <p>運営者は、本サービスに起因してユーザーに生じたあらゆる損害について一切の責任を負いません。</p>
+                <h4 className="font-bold text-white mt-4">第8条（利用規約の変更）</h4>
+                <p>運営者は、必要と判断した場合には、ユーザーに通知することなくいつでも本規約を変更することができるものとします。</p>
+                <h4 className="font-bold text-white mt-4">第9条（準拠法・裁判管轄）</h4>
+                <p>本規約の解釈にあたっては、日本法を準拠法とします。</p>
+                <p>本サービスに関して紛争が生じた場合には、運営者の本店所在地を管轄する裁判所を専属的合意管轄とします。</p>
+              </div>
+
+              <div className="px-6 py-4 border-t border-zinc-800 shrink-0 flex justify-end">
+                <button
+                  onClick={() => setShowTermsModal(false)}
+                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-colors cursor-pointer"
+                >
+                  確認しました
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     );
   }
@@ -616,7 +708,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* 未読バッジはセッション中のみ（DBに既読列を持たないためリロードで消える） */}
           <button
             onClick={() => router.push('/messages')}
             className="relative p-2 text-zinc-400 hover:text-white bg-zinc-900/60 hover:bg-zinc-800 rounded-full border border-zinc-800/80 transition-all cursor-pointer"
@@ -657,8 +748,6 @@ export default function HomePage() {
 
       {/* Main Grid */}
       <div className="flex-1 max-w-6xl w-full mx-auto px-6 py-8 grid grid-cols-1 md:grid-cols-5 gap-8">
-        
-        {/* Left Column: Room Creation / Join (Span 3) */}
         <div className="md:col-span-3 space-y-6">
           {/* Create Room Card */}
           <div className="bg-gradient-to-br from-zinc-900/90 to-zinc-950 border border-zinc-800/80 rounded-2xl p-6 shadow-xl relative overflow-hidden group hover:border-indigo-500/50 transition-all duration-300">
@@ -687,11 +776,10 @@ export default function HomePage() {
                     key={r}
                     type="button"
                     onClick={() => setRoomCreateRounds(r)}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      roomCreateRounds === r
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${roomCreateRounds === r
                         ? 'bg-indigo-600 text-white shadow-md'
                         : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
-                    }`}
+                      }`}
                   >
                     {r}
                   </button>
@@ -744,7 +832,6 @@ export default function HomePage() {
             </form>
           </div>
 
-          {/* Quick instructions / Rule book summary */}
           <div className="bg-zinc-900/30 border border-zinc-800/40 rounded-2xl p-5 text-xs text-zinc-500 leading-relaxed">
             <h4 className="font-bold text-zinc-400 mb-2">💡 ito(イト)の基本ルール</h4>
             <p className="mb-1.5">
@@ -762,15 +849,12 @@ export default function HomePage() {
         {/* Right Column: Friends Section (Span 2) */}
         <div className="md:col-span-2 space-y-6">
           <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl shadow-xl flex flex-col min-h-[420px] overflow-hidden">
-            
-            {/* Friends Header with Tabs */}
             <div className="border-b border-zinc-800/80 bg-zinc-900/40 px-4 py-1.5 flex items-center justify-between">
               <div className="flex gap-2">
                 <button
                   onClick={() => switchFriendTab('list')}
-                  className={`px-3 py-3 text-xs font-bold transition-all relative ${
-                    activeFriendTab === 'list' ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'
-                  }`}
+                  className={`px-3 py-3 text-xs font-bold transition-all relative ${activeFriendTab === 'list' ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
                 >
                   フレンド ({friends.length})
                   {activeFriendTab === 'list' && (
@@ -779,9 +863,8 @@ export default function HomePage() {
                 </button>
                 <button
                   onClick={() => switchFriendTab('requests')}
-                  className={`px-3 py-3 text-xs font-bold transition-all relative flex items-center gap-1.5 ${
-                    activeFriendTab === 'requests' ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'
-                  }`}
+                  className={`px-3 py-3 text-xs font-bold transition-all relative flex items-center gap-1.5 ${activeFriendTab === 'requests' ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
                 >
                   申請待ち
                   {incomingRequests.length > 0 && (
@@ -793,13 +876,11 @@ export default function HomePage() {
                     <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500"></div>
                   )}
                 </button>
-                {/* ブロック中が1件以上ある時のみ表示（常設すると普段使わないタブが場所を取るため） */}
                 {blockedUsers.length > 0 && (
                   <button
                     onClick={() => switchFriendTab('blocks')}
-                    className={`px-3 py-3 text-xs font-bold transition-all relative ${
-                      activeFriendTab === 'blocks' ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
+                    className={`px-3 py-3 text-xs font-bold transition-all relative ${activeFriendTab === 'blocks' ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'
+                      }`}
                   >
                     ブロック中 ({blockedUsers.length})
                     {activeFriendTab === 'blocks' && (
@@ -810,7 +891,6 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Friend Tab Body */}
             <div className="flex-1 p-4 overflow-y-auto max-h-[300px]">
               {activeFriendTab === 'list' ? (
                 friends.length === 0 ? (
@@ -852,7 +932,6 @@ export default function HomePage() {
                             )}
                           </div>
                         </div>
-                        {/* 削除とブロックは詳細ウィンドウに集約する（破壊的操作を1クリック圏に並べない） */}
                         <button
                           onClick={() => openInfo(friend)}
                           className="p-1.5 text-zinc-500 hover:text-indigo-400 hover:bg-indigo-950/20 border border-transparent hover:border-indigo-900/30 rounded-lg transition-all cursor-pointer"
@@ -867,12 +946,9 @@ export default function HomePage() {
                   </div>
                 )
               ) : activeFriendTab === 'requests' ? (
-                /* Requests Tab */
                 <div className="space-y-4">
-                  {/* Incoming */}
                   <div>
                     <h4 className="text-[10px] uppercase font-black tracking-wider text-zinc-500 mb-2">受信した申請 ({incomingRequests.length})</h4>
-                    {/* 拒否直後のブロック提示（2段階目）。自動では消さず、閉じる/タブ切替/実行でのみ消える */}
                     {rejectedUser && (
                       <div className="mb-2 p-3 bg-zinc-950/60 border border-indigo-900/40 rounded-xl">
                         <div className="flex items-start gap-2">
@@ -933,8 +1009,6 @@ export default function HomePage() {
                       </div>
                     )}
                   </div>
-
-                  {/* Outgoing */}
                   <div className="pt-2 border-t border-zinc-800/40">
                     <h4 className="text-[10px] uppercase font-black tracking-wider text-zinc-500 mb-2">送信した申請 ({outgoingRequests.length})</h4>
                     {outgoingRequests.length === 0 ? (
@@ -960,7 +1034,6 @@ export default function HomePage() {
                   </div>
                 </div>
               ) : (
-                /* Blocks Tab */
                 <div className="space-y-2">
                   <p className="text-[10px] text-zinc-600 mb-2 leading-relaxed">
                     ブロック中のユーザーからは申請が届きません。解除してもフレンド関係は元に戻りません。
@@ -983,12 +1056,9 @@ export default function HomePage() {
               )}
             </div>
 
-            {/* Friend Request Footer Form */}
             <div className="p-4 border-t border-zinc-800/80 bg-zinc-900/30">
               <form onSubmit={handleAddFriend} className="space-y-2">
                 <h3 className="text-xs font-semibold text-zinc-300">フレンドを追加</h3>
-
-                {/* 候補リスト。入力欄がパネル最下部にあるため上側に開く */}
                 {friendQuery.trim().length >= SEARCH_MIN_LENGTH && (
                   <div className="rounded-lg bg-zinc-950/60 border border-zinc-800/60 divide-y divide-zinc-800/60 overflow-hidden">
                     {searchLoading ? (
@@ -1025,7 +1095,6 @@ export default function HomePage() {
                     )}
                   </div>
                 )}
-
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -1050,9 +1119,6 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* --- FRIEND INFO MODAL --- */}
-      {/* 表示するのは GET /api/friends が既に返している情報のみ。戦績は含めない
-          （含めると GET /api/users/:id が必要になり、プロフィール閲覧がスコープに入るため） */}
       {infoTarget && (
         <div
           className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center px-4"
@@ -1067,15 +1133,13 @@ export default function HomePage() {
               <h3 className="mt-3 text-lg font-bold text-zinc-100">{infoTarget.username}</h3>
               <div className="mt-1 flex items-center gap-1.5">
                 <span
-                  className={`block h-2 w-2 rounded-full ${
-                    onlineFriendIds.has(infoTarget.id) ? 'bg-emerald-500' : 'bg-zinc-600'
-                  }`}
+                  className={`block h-2 w-2 rounded-full ${onlineFriendIds.has(infoTarget.id) ? 'bg-emerald-500' : 'bg-zinc-600'
+                    }`}
                 ></span>
                 <span className="text-[11px] text-zinc-400">
                   {onlineFriendIds.has(infoTarget.id) ? 'オンライン' : 'オフライン'}
                 </span>
               </div>
-              {/* 一覧では1行省略されるので、ここで全文が読めることがこのウィンドウの情報価値 */}
               {infoTarget.bio ? (
                 <p className="mt-4 text-xs text-zinc-300 whitespace-pre-wrap break-words leading-relaxed w-full">
                   {infoTarget.bio}
@@ -1146,7 +1210,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* --- OPTIONS / PROFILE EDIT MODAL --- */}
       {showOptionsModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center px-4">
           <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -1216,11 +1279,10 @@ export default function HomePage() {
                       key={preset}
                       type="button"
                       onClick={() => setEditProfileImage(preset)}
-                      className={`w-9 h-9 text-lg rounded-full flex items-center justify-center transition-all ${
-                        editProfileImage === preset
+                      className={`w-9 h-9 text-lg rounded-full flex items-center justify-center transition-all ${editProfileImage === preset
                           ? 'bg-indigo-600 border border-indigo-400 scale-110 shadow-lg'
                           : 'bg-zinc-800 border border-zinc-700 hover:bg-zinc-700'
-                      }`}
+                        }`}
                     >
                       {preset}
                     </button>
@@ -1294,6 +1356,99 @@ export default function HomePage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* フッター */}
+      <footer className="mt-8 py-6 border-t border-zinc-900/80 text-center w-full">
+        <button
+          onClick={() => setShowTermsModal(true)}
+          className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+        >
+          利用規約
+        </button>
+      </footer>
+
+      {/* --- TERMS MODAL (ログイン後用) --- */}
+      {showTermsModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center px-4"
+          onClick={() => setShowTermsModal(false)}
+        >
+          <div
+            className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in fade-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
+              <h3 className="text-lg font-bold text-zinc-100">利用規約</h3>
+              <button
+                onClick={() => setShowTermsModal(false)}
+                className="text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 text-sm text-zinc-300 space-y-4 leading-relaxed">
+              <h4 className="font-bold text-white">第1条（適用）</h4>
+              <p>本規約は、ユーザーと運営者との間の本サービスの利用に関わる一切の関係に適用されるものとします。</p>
+
+              <h4 className="font-bold text-white mt-4">第2条（ユーザー登録）</h4>
+              <p>本サービスの利用を希望する者は、本規約に同意の上、運営者が定める方法によってユーザー登録を行うものとします。</p>
+
+              <h4 className="font-bold text-white mt-4">第3条（アカウントの管理）</h4>
+              <p>ユーザーは、自己の責任において、本サービスのアカウントおよびパスワードを適切に管理するものとします。いかなる場合にも、これらを第三者に譲渡または貸与することはできません。</p>
+
+              <h4 className="font-bold text-white mt-4">第4条（禁止事項）</h4>
+              <p>ユーザーは、本サービスの利用にあたり、以下の行為をしてはなりません。</p>
+              <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
+                <li>法令または公序良俗に違反する行為</li>
+                <li>犯罪行為に関連する行為</li>
+                <li>運営者、他のユーザー、または第三者のサーバーまたはネットワークの機能を破壊したり、妨害したりする行為</li>
+                <li>本サービスの運営を妨害するおそれのある行為</li>
+                <li>他のユーザーに関する個人情報等を収集または蓄積する行為</li>
+                <li>不正アクセスをし、またはこれを試みる行為</li>
+                <li>他のユーザーに成りすます行為</li>
+                <li>本サービス内でのチャット機能を利用した、他のユーザーに対する誹謗中傷、脅迫、いやがらせ、スパム送信、その他不適切な発言を行う行為</li>
+                <li>ゲームの進行を意図的に妨害する、または本来のゲーム性から著しく逸脱する行為</li>
+                <li>その他、運営者が不適切と判断する行為</li>
+              </ul>
+
+              <h4 className="font-bold text-white mt-4">第5条（本サービスの提供の停止等）</h4>
+              <p>運営者は、以下のいずれかの事由があると判断した場合、ユーザーに事前に通知することなく本サービスの全部または一部の提供を停止または中断することができるものとします。</p>
+              <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
+                <li>本サービスにかかるコンピュータシステムの保守点検または更新を行う場合</li>
+                <li>地震、落雷、火災、停電または天災などの不可抗力により、本サービスの提供が困難となった場合</li>
+                <li>コンピュータまたは通信回線等が事故により停止した場合</li>
+                <li>その他、運営者が本サービスの提供が困難と判断した場合</li>
+              </ul>
+
+              <h4 className="font-bold text-white mt-4">第6条（知的財産権）</h4>
+              <p>本サービスに関する知的財産権（「ITO」のゲームルール、名称、デザイン等の権利を含むがこれに限らない）は、正当な権利者に帰属します。ユーザーは、これらを無断で複製、転載、改変等することはできません。</p>
+
+              <h4 className="font-bold text-white mt-4">第7条（免責事項）</h4>
+              <p>運営者は、本サービスに事実上または法律上の瑕疵（安全性、信頼性、正確性、完全性、有効性、特定の目的への適合性、セキュリティなどに関する欠陥、エラーやバグ、権利侵害などを含みます）がないことを明示的にも黙示的にも保証しておりません。</p>
+              <p>運営者は、本サービスに起因してユーザーに生じたあらゆる損害について一切の責任を負いません。</p>
+
+              <h4 className="font-bold text-white mt-4">第8条（利用規約の変更）</h4>
+              <p>運営者は、必要と判断した場合には、ユーザーに通知することなくいつでも本規約を変更することができるものとします。</p>
+
+              <h4 className="font-bold text-white mt-4">第9条（準拠法・裁判管轄）</h4>
+              <p>本規約の解釈にあたっては、日本法を準拠法とします。</p>
+              <p>本サービスに関して紛争が生じた場合には、運営者の本店所在地を管轄する裁判所を専属的合意管轄とします。</p>
+            </div>
+
+            <div className="px-6 py-4 border-t border-zinc-800 shrink-0 flex justify-end">
+              <button
+                onClick={() => setShowTermsModal(false)}
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-colors cursor-pointer"
+              >
+                確認しました
+              </button>
+            </div>
           </div>
         </div>
       )}
