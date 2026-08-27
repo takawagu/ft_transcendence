@@ -24,10 +24,6 @@ interface SearchResult extends User {
 /** 検索を開始する最小文字数（バックエンドの @MinLength(2) と揃える） */
 const SEARCH_MIN_LENGTH = 2;
 
-const AVATAR_PRESETS = [
-  '🦊', '🐱', '🐼', '🐯', '🐸', '🐨', '🐙', '👾', '🚀', '🔮'
-];
-
 export default function HomePage() {
   const router = useRouter();
 
@@ -53,7 +49,6 @@ export default function HomePage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [bio, setBio] = useState('');
-  const [profileImage, setProfileImage] = useState(AVATAR_PRESETS[0]);
 
   // Home states
   const [roomCodeInput, setRoomCodeInput] = useState('');
@@ -89,6 +84,8 @@ export default function HomePage() {
   const [editUsername, setEditUsername] = useState('');
   const [editBio, setEditBio] = useState('');
   const [editProfileImage, setEditProfileImage] = useState('');
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string>('');
   const [editPassword, setEditPassword] = useState('');
   const [editError, setEditError] = useState('');
   const [editSuccess, setEditSuccess] = useState('');
@@ -212,7 +209,7 @@ export default function HomePage() {
           username,
           password,
           bio: '',
-          profileImage: '🦊',
+          profileImage: '',
         });
         // 完了メッセージを見せてからログイン状態にする（画面が切り替わるのは900ms後）
         setRegisterSuccessMsg('🎉 登録が完了しました！');
@@ -247,7 +244,6 @@ export default function HomePage() {
     setUsername('');
     setPassword('');
     setBio('');
-    setProfileImage(AVATAR_PRESETS[0]);
     setRegisterSuccessMsg('');
   };
 
@@ -354,6 +350,8 @@ export default function HomePage() {
     setEditUsername(user.username);
     setEditBio(user.bio || '');
     setEditProfileImage(user.profileImage || '');
+    setAvatarFile(null);
+    setAvatarPreview(user.profileImage || '');
     setEditPassword('');
     setEditError('');
     setEditSuccess('');
@@ -363,6 +361,20 @@ export default function HomePage() {
     apiCall('/api/users/me')
       .then(data => setGameRecord(data.gameRecord ?? { totalGames: 0, successCount: 0 }))
       .catch(() => setGameRecord({ totalGames: 0, successCount: 0 }));
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setEditProfileImage(event.target.result as string); // save as Base64
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -431,8 +443,8 @@ export default function HomePage() {
                     setRegisterSuccessMsg('');
                   }}
                   className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 ${isLoginTab
-                      ? 'text-indigo-400 border-b-2 border-indigo-500 font-bold'
-                      : 'text-zinc-500 hover:text-zinc-300'
+                    ? 'text-indigo-400 border-b-2 border-indigo-500 font-bold'
+                    : 'text-zinc-500 hover:text-zinc-300'
                     }`}
                 >
                   ログイン
@@ -444,8 +456,8 @@ export default function HomePage() {
                     setRegisterSuccessMsg('');
                   }}
                   className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 ${!isLoginTab
-                      ? 'text-indigo-400 border-b-2 border-indigo-500 font-bold'
-                      : 'text-zinc-500 hover:text-zinc-300'
+                    ? 'text-indigo-400 border-b-2 border-indigo-500 font-bold'
+                    : 'text-zinc-500 hover:text-zinc-300'
                     }`}
                 >
                   新規登録
@@ -473,7 +485,7 @@ export default function HomePage() {
                   />
                   {!isLoginTab && emailStatus !== 'idle' && (
                     <p className={`mt-1 text-xs ${emailStatus === 'taken' ? 'text-red-400' :
-                        emailStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
+                      emailStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
                       }`}>
                       {emailStatus === 'checking' && '確認中...'}
                       {emailStatus === 'taken' && 'そのメールアドレスはすでに使われています'}
@@ -498,7 +510,7 @@ export default function HomePage() {
                     />
                     {usernameStatus !== 'idle' && (
                       <p className={`mt-1 text-xs ${usernameStatus === 'taken' ? 'text-red-400' :
-                          usernameStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
+                        usernameStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
                         }`}>
                         {usernameStatus === 'checking' && '確認中...'}
                         {usernameStatus === 'taken' && 'そのユーザー名はすでに使われています'}
@@ -777,8 +789,8 @@ export default function HomePage() {
                     type="button"
                     onClick={() => setRoomCreateRounds(r)}
                     className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${roomCreateRounds === r
-                        ? 'bg-indigo-600 text-white shadow-md'
-                        : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
                       }`}
                   >
                     {r}
@@ -1273,29 +1285,25 @@ export default function HomePage() {
                 <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
                   プロフィールアイコン
                 </label>
-                <div className="flex flex-wrap gap-2 mb-2 p-3 bg-zinc-950 rounded-lg border border-zinc-800">
-                  {AVATAR_PRESETS.map(preset => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setEditProfileImage(preset)}
-                      className={`w-9 h-9 text-lg rounded-full flex items-center justify-center transition-all ${editProfileImage === preset
-                          ? 'bg-indigo-600 border border-indigo-400 scale-110 shadow-lg'
-                          : 'bg-zinc-800 border border-zinc-700 hover:bg-zinc-700'
-                        }`}
-                    >
-                      {preset}
-                    </button>
-                  ))}
+                <div className="flex items-center gap-4 mb-2 p-3 bg-zinc-950 rounded-lg border border-zinc-800">
+                  <div className="shrink-0">
+                    {editProfileImage ? (
+                      <img src={editProfileImage} alt="Preview" className="w-12 h-12 rounded-full object-cover border border-zinc-700" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-500 text-xs">
+                        No Image
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      accept="image/png, image/jpeg, image/gif, image/webp"
+                      onChange={handleImageSelect}
+                      className="w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-300 hover:file:bg-zinc-700 cursor-pointer"
+                    />
+                  </div>
                 </div>
-                <input
-                  type="text"
-                  placeholder="または画像URLを入力"
-                  maxLength={512}
-                  value={editProfileImage}
-                  onChange={e => setEditProfileImage(e.target.value)}
-                  className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2 text-xs text-white placeholder-zinc-600 outline-none focus:border-indigo-500 transition-all"
-                />
               </div>
 
               <div>
