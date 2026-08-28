@@ -1,12 +1,26 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { PhaseProps } from '@/lib/ito/types';
+import { InvitePanel } from './InvitePanel';
+
+/** 参加人数の上限。backend の room.service.ts の joinRoom と揃える */
+const MAX_PLAYERS = 6;
 
 export function WaitingRoom({ state, myId, emit }: PhaseProps) {
   const router = useRouter();
   const me = state.players.find(p => p.id === myId);
   const isOwner = me?.isRoomOwner ?? false;
+
+  const [inviteOpen, setInviteOpen] = useState(false);
+  /*
+   * 招待を送った相手。パネル側ではなくここに持つ。
+   * パネル内に置くと閉じて開き直すたびに「招待済み」が消えて未招待に見えてしまう
+   * （サーバーは冪等なので実害は無いが、表示が退行する）。
+   */
+  const [invitedIds, setInvitedIds] = useState<Set<number>>(new Set());
+  const isFull = state.players.length >= MAX_PLAYERS;
 
   const handleConfirmMembers = () => {
     emit('ito:confirmMembers');
@@ -59,6 +73,18 @@ export function WaitingRoom({ state, myId, emit }: PhaseProps) {
             <p className="text-xs text-zinc-600 text-center">2人以上必要です</p>
           )}
           <button
+            onClick={() => setInviteOpen(true)}
+            disabled={isFull}
+            className="w-full rounded-lg bg-zinc-800 px-4 py-3 font-semibold text-indigo-300 hover:bg-zinc-700 border border-indigo-900 disabled:opacity-40 transition-colors"
+          >
+            フレンドを招待
+          </button>
+          {isFull && (
+            <p className="text-xs text-zinc-600 text-center">
+              満員のため招待できません
+            </p>
+          )}
+          <button
             onClick={handleDissolve}
             className="w-full rounded-lg bg-zinc-800 px-4 py-3 font-semibold text-red-400 hover:bg-zinc-700 border border-red-900 transition-colors"
           >
@@ -75,6 +101,18 @@ export function WaitingRoom({ state, myId, emit }: PhaseProps) {
             退室する
           </button>
         </div>
+      )}
+
+      {inviteOpen && (
+        <InvitePanel
+          roomCode={state.roomCode}
+          players={state.players}
+          invitedIds={invitedIds}
+          onInvited={userId =>
+            setInvitedIds(prev => new Set(prev).add(userId))
+          }
+          onClose={() => setInviteOpen(false)}
+        />
       )}
     </div>
   );

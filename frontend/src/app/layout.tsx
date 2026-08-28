@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "@/lib/session";
 import { PresenceProvider } from "@/lib/presence";
+import { RoomInviteToast } from "@/lib/invite-toast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,7 +33,11 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         {/* ログイン状態と /presence 接続はページ遷移をまたいで維持する（docs/dm-requirements.md セクション4） */}
         <SessionProvider>
-          <PresenceProvider>{children}</PresenceProvider>
+          <PresenceProvider>
+            {children}
+            {/* ルーム招待はどの画面に居ても気づけるようにする（docs/room-invite-requirements.md セクション4-b） */}
+            <RoomInviteToast />
+          </PresenceProvider>
         </SessionProvider>
       </body>
     </html>

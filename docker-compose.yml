@@ -38,7 +38,10 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: ft_backend
-    command: sh -c "npx prisma migrate deploy && npm run start:dev"
+    # prisma generate はイメージビルド時にも走るが、下の ./backend:/app バインドマウントが
+    # その結果を覆い隠すため、ここで作り直す。Prisma Client はコミットしない生成物なので、
+    # クローン直後（ファイルが1つも無い状態）でもこれで揃う
+    command: sh -c "npx prisma generate && npx prisma migrate deploy && npm run start:dev"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-ft_transcendence}
       REDIS_URL: redis://redis:6379

@@ -21,6 +21,10 @@ export interface DirectMessage {
   receiverId: number;
   content: string;
   createdAt: string;
+  /** ROOM_INVITE はitoルームへの招待。バックエンドの DirectMessage.type と対応する */
+  type: 'TEXT' | 'ROOM_INVITE';
+  /** ROOM_INVITE のときのみ入る */
+  roomCode?: string | null;
 }
 
 /**

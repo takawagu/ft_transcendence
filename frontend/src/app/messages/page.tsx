@@ -12,6 +12,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession, type User } from '@/lib/session';
 import { usePresence, type DirectMessage } from '@/lib/presence';
 import { renderAvatar } from '@/lib/avatar';
+import { isInviteExpired, joinInvitedRoom } from '@/lib/room-invite';
+import { FriendInfoWindow } from '@/lib/friend-info';
 
 /** 本文の上限。SendMessageDto の @MaxLength と揃える */
 const MESSAGE_MAX_LENGTH = 1000;
@@ -49,6 +51,66 @@ function formatTime(iso: string) {
   return `${date.getMonth() + 1}/${date.getDate()} ${hh}:${mm}`;
 }
 
+/**
+ * スレッド内のルーム招待（docs/room-invite-requirements.md セクション4-c）。
+ * 自分が送った招待も同じカードで描く。ただし自分は既にその部屋に居るので参加ボタンは出さない。
+ */
+function RoomInviteCard({
+  roomCode,
+  mine,
+  expired,
+  onJoin,
+}: {
+  roomCode: string;
+  mine: boolean;
+  expired: boolean;
+  onJoin: () => void;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border px-3 py-2.5 ${
+        expired
+          ? 'border-zinc-700 bg-zinc-900/60'
+          : 'border-indigo-800/60 bg-indigo-950/40'
+      }`}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className="text-sm">🎮</span>
+        <span className="text-[11px] font-bold text-zinc-200">
+          ゲームルームへの招待
+        </span>
+        {expired && (
+          <span className="text-[9px] font-bold text-zinc-500 border border-zinc-700 rounded-full px-1.5 py-0.5">
+            期限切れ
+          </span>
+        )}
+      </div>
+
+      <p
+        className={`mt-1.5 text-center font-mono text-base font-bold tracking-widest ${
+          expired ? 'text-zinc-600' : 'text-indigo-300'
+        }`}
+      >
+        {roomCode}
+      </p>
+
+      {mine ? (
+        <p className="mt-1.5 text-center text-[10px] text-zinc-500">
+          招待を送信しました
+        </p>
+      ) : (
+        <button
+          onClick={onJoin}
+          disabled={expired}
+          className="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 transition-all cursor-pointer disabled:cursor-not-allowed"
+        >
+          参加
+        </button>
+      )}
+    </div>
+  );
+}
+
 function MessagesView() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -67,6 +129,9 @@ function MessagesView() {
 
   const [draft, setDraft] = useState('');
   const [sendError, setSendError] = useState('');
+
+  /** プロフィールウィンドウの対象。null なら非表示 */
+  const [infoTarget, setInfoTarget] = useState<User | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   /** ?to= による初期選択は最初の一度だけ行う（以降のクリックを上書きしないため） */
@@ -275,6 +340,27 @@ function MessagesView() {
     handleSend();
   };
 
+  /**
+   * フレンド削除・ブロックの後片付け。どちらも相手がフレンドでなくなるので、
+   * 一覧から消して会話も閉じる（開いたままだと履歴取得が403になる）。
+   * 失敗した時はウィンドウを閉じてから出す。開いたままだとメッセージが裏に隠れる。
+   */
+  const endFriendship = async (
+    endpoint: string,
+    body: Record<string, number>,
+    friendId: number,
+  ) => {
+    setSendError('');
+    setInfoTarget(null);
+    try {
+      await apiCall(endpoint, 'POST', body);
+      setFriends(prev => prev.filter(f => f.id !== friendId));
+      setSelectedId(null);
+    } catch (err: any) {
+      setSendError(err.message || '操作に失敗しました。');
+    }
+  };
+
   const selectConversation = (userId: number) => {
     setSelectedId(userId);
     setDraft('');
@@ -418,14 +504,24 @@ function MessagesView() {
                   </svg>
                 </button>
                 {renderAvatar(selectedFriend.profileImage, 'w-8 h-8 text-base')}
-                <div>
-                  <div className="text-sm font-semibold text-zinc-100">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-zinc-100 truncate">
                     {selectedFriend.username}
                   </div>
                   <div className="text-[10px] text-zinc-500">
                     {onlineFriendIds.has(selectedFriend.id) ? 'オンライン' : 'オフライン'}
                   </div>
                 </div>
+                {/* 会話画面から相手のプロフィールを開く。ホーム画面の「詳細」と同じウィンドウ */}
+                <button
+                  onClick={() => setInfoTarget(selectedFriend)}
+                  className="shrink-0 p-1.5 text-zinc-500 hover:text-indigo-400 hover:bg-indigo-950/20 border border-transparent hover:border-indigo-900/30 rounded-lg transition-all cursor-pointer"
+                  title="プロフィール"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
               </div>
 
               <div
@@ -474,15 +570,32 @@ function MessagesView() {
                             {speaker.username}
                           </span>
                         )}
-                        <div
-                          className={`px-3 py-2 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap break-words ${
-                            mine
-                              ? 'bg-indigo-600 text-white rounded-br-sm'
-                              : 'bg-zinc-800 text-zinc-100 rounded-bl-sm'
-                          }`}
-                        >
-                          {message.content}
-                        </div>
+                        {/* 招待は吹き出しではなくカードで描く。content（固定文言）は
+                            会話一覧のプレビュー専用なのでここでは使わない */}
+                        {message.type === 'ROOM_INVITE' && message.roomCode ? (
+                          <RoomInviteCard
+                            roomCode={message.roomCode}
+                            mine={mine}
+                            expired={isInviteExpired(message.createdAt)}
+                            onJoin={() =>
+                              joinInvitedRoom(
+                                message.roomCode!,
+                                user.username,
+                                router,
+                              )
+                            }
+                          />
+                        ) : (
+                          <div
+                            className={`px-3 py-2 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap break-words ${
+                              mine
+                                ? 'bg-indigo-600 text-white rounded-br-sm'
+                                : 'bg-zinc-800 text-zinc-100 rounded-bl-sm'
+                            }`}
+                          >
+                            {message.content}
+                          </div>
+                        )}
                         <span className="mt-0.5 text-[9px] text-zinc-600 px-1">
                           {formatTime(message.createdAt)}
                         </span>
@@ -532,6 +645,21 @@ function MessagesView() {
           )}
         </section>
       </div>
+
+      {infoTarget && (
+        <FriendInfoWindow
+          friend={infoTarget}
+          online={onlineFriendIds.has(infoTarget.id)}
+          onClose={() => setInfoTarget(null)}
+          /* onMessage は渡さない。今まさにその相手との会話を開いている */
+          onRemoveFriend={friendId =>
+            endFriendship('/api/friends/remove', { friendId }, friendId)
+          }
+          onBlock={userId =>
+            endFriendship('/api/friends/block', { userId }, userId)
+          }
+        />
+      )}
     </main>
   );
 }

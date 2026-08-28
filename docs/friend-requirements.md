@@ -533,4 +533,6 @@ status: 未着手
 ## 関連ドキュメント
 
 - [login-requirements.md](docs/login-requirements.md) — 認証・ユーザー管理全般
+- [dm-requirements.md](docs/dm-requirements.md) — DM。本書のブロック仕様と `/presence` の上に乗る
+- [room-invite-requirements.md](docs/room-invite-requirements.md) — ito ルームへの招待。フレンド限定・ブロック遮断を本書の仕様に依存する
 - [reconnect-design.md](docs/reconnect-design.md) — WebSocket 切断・再接続の扱い（presence 実装時の参考）
