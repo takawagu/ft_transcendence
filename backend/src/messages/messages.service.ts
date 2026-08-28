@@ -2,11 +2,17 @@ import {
   Injectable,
   BadRequestException,
   ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FriendsService } from '../friends/friends.service';
 import { PresenceService } from '../presence/presence.service';
-import { PRESENCE_EVENTS } from '../presence/presence.events';
+import {
+  PRESENCE_EVENTS,
+  type DmReceivedPayload,
+} from '../presence/presence.events';
+import { RoomStore } from '../ito/service/room.store';
+import { ROOM_INVITE_CONTENT } from './dto/messages.dto';
 
 /** 履歴取得の既定件数と上限（上限は HistoryQueryDto の @Max と揃える） */
 const DEFAULT_HISTORY_LIMIT = 50;
@@ -28,12 +34,24 @@ interface UnreadRow {
   unread: bigint;
 }
 
+/** `dm:received` に載せるメッセージ行。DirectMessage の全カラム */
+interface BroadcastableMessage {
+  id: number;
+  senderId: number;
+  receiverId: number;
+  content: string;
+  createdAt: Date;
+  type: string;
+  roomCode: string | null;
+}
+
 @Injectable()
 export class MessagesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly friends: FriendsService,
     private readonly presence: PresenceService,
+    private readonly rooms: RoomStore,
   ) {}
 
   /**
@@ -156,21 +174,82 @@ export class MessagesService {
       data: { senderId: myId, receiverId, content },
     });
 
-    // 受信者だけでなく送信者にも配信する。同じアカウントで開いている別タブを同期させるため
-    const [me, other] = await Promise.all([
-      this.friends.getPublicUserById(myId),
-      this.friends.getPublicUserById(receiverId),
-    ]);
-    this.presence.emitToUser(receiverId, PRESENCE_EVENTS.DM_RECEIVED, {
-      message,
-      user: me,
-    });
-    this.presence.emitToUser(myId, PRESENCE_EVENTS.DM_RECEIVED, {
-      message,
-      user: other,
-    });
+    await this.broadcastMessage(message);
 
     return message;
+  }
+
+  /**
+   * ホストが待機中のitoルームへフレンドを招待する。
+   *
+   * 招待は「参加ボタンが付いたルームコードの通知」でしかなく、承認/拒否も失効管理も持たない
+   * （docs/room-invite-requirements.md セクション0）。参加時の検証は既存の joinRoom が担う。
+   */
+  async sendRoomInvite(myId: number, receiverId: number, roomCode: string) {
+    if (receiverId === myId) {
+      throw new BadRequestException('自分自身には招待を送れません');
+    }
+
+    await this.assertFriends(myId, receiverId);
+
+    const room = this.rooms.getRoomByCode(roomCode);
+    if (!room) {
+      throw new NotFoundException('ルームが見つかりません');
+    }
+    if (room.roomPhase !== 'WAITING') {
+      throw new BadRequestException('ゲームはすでに開始されています');
+    }
+    // playerId は userId を文字列にしたもの（ItoPlayer.playerId）
+    if (room.players.find((p) => p.isRoomOwner)?.playerId !== String(myId)) {
+      throw new ForbiddenException('ルームのホストのみが招待を送れます');
+    }
+    if (room.players.some((p) => p.playerId === String(receiverId))) {
+      throw new BadRequestException('その相手はすでにルームに参加しています');
+    }
+
+    /*
+     * 同じ相手・同じルームへの招待は積み上げない。
+     * ホストが二度押した場合や再送された場合に、スレッドが招待で埋まるのを防ぐ。
+     * 既存行は受信者側で未読済みなので、この経路では配信し直さない
+     * （再送すると同じ招待で未読が二重に増える）。
+     */
+    const existing = await this.prisma.directMessage.findFirst({
+      where: { senderId: myId, receiverId, type: 'ROOM_INVITE', roomCode },
+    });
+    if (existing) return existing;
+
+    const message = await this.prisma.directMessage.create({
+      data: {
+        senderId: myId,
+        receiverId,
+        content: ROOM_INVITE_CONTENT,
+        type: 'ROOM_INVITE',
+        roomCode,
+      },
+    });
+
+    await this.broadcastMessage(message);
+
+    return message;
+  }
+
+  /**
+   * 受信者だけでなく送信者にも配信する。同じアカウントで開いている別タブを同期させるため。
+   * user には「会話の相手」が入る（受信者には送信者、送信者には受信者）。
+   */
+  private async broadcastMessage(message: BroadcastableMessage) {
+    const [sender, receiver] = await Promise.all([
+      this.friends.getPublicUserById(message.senderId),
+      this.friends.getPublicUserById(message.receiverId),
+    ]);
+    this.presence.emitToUser(message.receiverId, PRESENCE_EVENTS.DM_RECEIVED, {
+      message,
+      user: sender,
+    } satisfies DmReceivedPayload);
+    this.presence.emitToUser(message.senderId, PRESENCE_EVENTS.DM_RECEIVED, {
+      message,
+      user: receiver,
+    } satisfies DmReceivedPayload);
   }
 
   /**

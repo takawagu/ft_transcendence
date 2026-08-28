@@ -15,6 +15,7 @@ import {
   SendMessageDto,
   HistoryQueryDto,
   MarkReadDto,
+  SendRoomInviteDto,
 } from './dto/messages.dto';
 
 @Controller('messages')
@@ -39,6 +40,17 @@ export class MessagesController {
       req.user.id,
       body.userId,
       body.lastMessageId,
+    );
+  }
+
+  // POST なので下の @Get(':userId') とは食い合わない。
+  // 将来 GET /invite を足す場合は ':userId' より前に置くこと
+  @Post('invite')
+  sendRoomInvite(@Request() req: any, @Body() body: SendRoomInviteDto) {
+    return this.messagesService.sendRoomInvite(
+      req.user.id,
+      body.receiverId,
+      body.roomCode,
     );
   }
 

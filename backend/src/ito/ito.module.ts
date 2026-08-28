@@ -13,5 +13,9 @@ import { GameService } from './service/game.service';
     RoomService,
     GameService,
   ],
+  // ルーム招待の検証（ホスト判定・在室判定）でHTTP側からルームの実体を読むため。
+  // RoomStoreはgatewayやソケットに依存しない純粋なストアなので、外から読んでも副作用がない
+  // （docs/room-invite-requirements.md セクション2）
+  exports: [RoomStore],
 })
 export class ItoModule {}

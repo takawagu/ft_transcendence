@@ -60,6 +60,10 @@ export interface DmReceivedPayload {
     receiverId: number;
     content: string;
     createdAt: Date;
+    /** TEXT | ROOM_INVITE。招待も同じイベントで流す（docs/room-invite-requirements.md セクション2） */
+    type: string;
+    /** type = 'ROOM_INVITE' のときだけ入る招待先のルームコード */
+    roomCode: string | null;
   };
   /** 会話の相手。受信者には送信者、送信者には受信者が入る */
   user: PublicUser;

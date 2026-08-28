@@ -75,6 +75,11 @@ model DirectMessage {
   receiverId Int
   content    String
   createdAt  DateTime @default(now())
+  /// TEXT | ROOM_INVITE。ROOM_INVITE のとき roomCode が非nullになる
+  /// （不変条件: type = 'ROOM_INVITE' ⟺ roomCode !== null）
+  type       String   @default("TEXT")
+  /// 招待先のitoルームコード。type = 'TEXT' のときは null
+  roomCode   String?
 
   sender   User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
   receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)

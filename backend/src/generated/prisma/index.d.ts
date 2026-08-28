@@ -6126,6 +6126,8 @@ export namespace Prisma {
     receiverId: number | null
     content: string | null
     createdAt: Date | null
+    type: string | null
+    roomCode: string | null
   }
 
   export type DirectMessageMaxAggregateOutputType = {
@@ -6134,6 +6136,8 @@ export namespace Prisma {
     receiverId: number | null
     content: string | null
     createdAt: Date | null
+    type: string | null
+    roomCode: string | null
   }
 
   export type DirectMessageCountAggregateOutputType = {
@@ -6142,6 +6146,8 @@ export namespace Prisma {
     receiverId: number
     content: number
     createdAt: number
+    type: number
+    roomCode: number
     _all: number
   }
 
@@ -6164,6 +6170,8 @@ export namespace Prisma {
     receiverId?: true
     content?: true
     createdAt?: true
+    type?: true
+    roomCode?: true
   }
 
   export type DirectMessageMaxAggregateInputType = {
@@ -6172,6 +6180,8 @@ export namespace Prisma {
     receiverId?: true
     content?: true
     createdAt?: true
+    type?: true
+    roomCode?: true
   }
 
   export type DirectMessageCountAggregateInputType = {
@@ -6180,6 +6190,8 @@ export namespace Prisma {
     receiverId?: true
     content?: true
     createdAt?: true
+    type?: true
+    roomCode?: true
     _all?: true
   }
 
@@ -6275,6 +6287,8 @@ export namespace Prisma {
     receiverId: number
     content: string
     createdAt: Date
+    type: string
+    roomCode: string | null
     _count: DirectMessageCountAggregateOutputType | null
     _avg: DirectMessageAvgAggregateOutputType | null
     _sum: DirectMessageSumAggregateOutputType | null
@@ -6302,6 +6316,8 @@ export namespace Prisma {
     receiverId?: boolean
     content?: boolean
     createdAt?: boolean
+    type?: boolean
+    roomCode?: boolean
     sender?: boolean | UserDefaultArgs<ExtArgs>
     receiver?: boolean | UserDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["directMessage"]>
@@ -6312,6 +6328,8 @@ export namespace Prisma {
     receiverId?: boolean
     content?: boolean
     createdAt?: boolean
+    type?: boolean
+    roomCode?: boolean
     sender?: boolean | UserDefaultArgs<ExtArgs>
     receiver?: boolean | UserDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["directMessage"]>
@@ -6322,6 +6340,8 @@ export namespace Prisma {
     receiverId?: boolean
     content?: boolean
     createdAt?: boolean
+    type?: boolean
+    roomCode?: boolean
     sender?: boolean | UserDefaultArgs<ExtArgs>
     receiver?: boolean | UserDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["directMessage"]>
@@ -6332,9 +6352,11 @@ export namespace Prisma {
     receiverId?: boolean
     content?: boolean
     createdAt?: boolean
+    type?: boolean
+    roomCode?: boolean
   }
 
-  export type DirectMessageOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "senderId" | "receiverId" | "content" | "createdAt", ExtArgs["result"]["directMessage"]>
+  export type DirectMessageOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "senderId" | "receiverId" | "content" | "createdAt" | "type" | "roomCode", ExtArgs["result"]["directMessage"]>
   export type DirectMessageInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     sender?: boolean | UserDefaultArgs<ExtArgs>
     receiver?: boolean | UserDefaultArgs<ExtArgs>
@@ -6360,6 +6382,15 @@ export namespace Prisma {
       receiverId: number
       content: string
       createdAt: Date
+      /**
+       * TEXT | ROOM_INVITE。ROOM_INVITE のとき roomCode が非nullになる
+       * （不変条件: type = 'ROOM_INVITE' ⟺ roomCode !== null）
+       */
+      type: string
+      /**
+       * 招待先のitoルームコード。type = 'TEXT' のときは null
+       */
+      roomCode: string | null
     }, ExtArgs["result"]["directMessage"]>
     composites: {}
   }
@@ -6790,6 +6821,8 @@ export namespace Prisma {
     readonly receiverId: FieldRef<"DirectMessage", 'Int'>
     readonly content: FieldRef<"DirectMessage", 'String'>
     readonly createdAt: FieldRef<"DirectMessage", 'DateTime'>
+    readonly type: FieldRef<"DirectMessage", 'String'>
+    readonly roomCode: FieldRef<"DirectMessage", 'String'>
   }
     
 
@@ -8388,7 +8421,9 @@ export namespace Prisma {
     senderId: 'senderId',
     receiverId: 'receiverId',
     content: 'content',
-    createdAt: 'createdAt'
+    createdAt: 'createdAt',
+    type: 'type',
+    roomCode: 'roomCode'
   };
 
   export type DirectMessageScalarFieldEnum = (typeof DirectMessageScalarFieldEnum)[keyof typeof DirectMessageScalarFieldEnum]
@@ -8757,6 +8792,8 @@ export namespace Prisma {
     receiverId?: IntFilter<"DirectMessage"> | number
     content?: StringFilter<"DirectMessage"> | string
     createdAt?: DateTimeFilter<"DirectMessage"> | Date | string
+    type?: StringFilter<"DirectMessage"> | string
+    roomCode?: StringNullableFilter<"DirectMessage"> | string | null
     sender?: XOR<UserScalarRelationFilter, UserWhereInput>
     receiver?: XOR<UserScalarRelationFilter, UserWhereInput>
   }
@@ -8767,6 +8804,8 @@ export namespace Prisma {
     receiverId?: SortOrder
     content?: SortOrder
     createdAt?: SortOrder
+    type?: SortOrder
+    roomCode?: SortOrderInput | SortOrder
     sender?: UserOrderByWithRelationInput
     receiver?: UserOrderByWithRelationInput
   }
@@ -8780,6 +8819,8 @@ export namespace Prisma {
     receiverId?: IntFilter<"DirectMessage"> | number
     content?: StringFilter<"DirectMessage"> | string
     createdAt?: DateTimeFilter<"DirectMessage"> | Date | string
+    type?: StringFilter<"DirectMessage"> | string
+    roomCode?: StringNullableFilter<"DirectMessage"> | string | null
     sender?: XOR<UserScalarRelationFilter, UserWhereInput>
     receiver?: XOR<UserScalarRelationFilter, UserWhereInput>
   }, "id">
@@ -8790,6 +8831,8 @@ export namespace Prisma {
     receiverId?: SortOrder
     content?: SortOrder
     createdAt?: SortOrder
+    type?: SortOrder
+    roomCode?: SortOrderInput | SortOrder
     _count?: DirectMessageCountOrderByAggregateInput
     _avg?: DirectMessageAvgOrderByAggregateInput
     _max?: DirectMessageMaxOrderByAggregateInput
@@ -8806,6 +8849,8 @@ export namespace Prisma {
     receiverId?: IntWithAggregatesFilter<"DirectMessage"> | number
     content?: StringWithAggregatesFilter<"DirectMessage"> | string
     createdAt?: DateTimeWithAggregatesFilter<"DirectMessage"> | Date | string
+    type?: StringWithAggregatesFilter<"DirectMessage"> | string
+    roomCode?: StringNullableWithAggregatesFilter<"DirectMessage"> | string | null
   }
 
   export type ConversationReadWhereInput = {
@@ -9108,6 +9153,8 @@ export namespace Prisma {
   export type DirectMessageCreateInput = {
     content: string
     createdAt?: Date | string
+    type?: string
+    roomCode?: string | null
     sender: UserCreateNestedOneWithoutSentMessagesInput
     receiver: UserCreateNestedOneWithoutReceivedMessagesInput
   }
@@ -9118,11 +9165,15 @@ export namespace Prisma {
     receiverId: number
     content: string
     createdAt?: Date | string
+    type?: string
+    roomCode?: string | null
   }
 
   export type DirectMessageUpdateInput = {
     content?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    type?: StringFieldUpdateOperationsInput | string
+    roomCode?: NullableStringFieldUpdateOperationsInput | string | null
     sender?: UserUpdateOneRequiredWithoutSentMessagesNestedInput
     receiver?: UserUpdateOneRequiredWithoutReceivedMessagesNestedInput
   }
@@ -9133,6 +9184,8 @@ export namespace Prisma {
     receiverId?: IntFieldUpdateOperationsInput | number
     content?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    type?: StringFieldUpdateOperationsInput | string
+    roomCode?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type DirectMessageCreateManyInput = {
@@ -9141,11 +9194,15 @@ export namespace Prisma {
     receiverId: number
     content: string
     createdAt?: Date | string
+    type?: string
+    roomCode?: string | null
   }
 
   export type DirectMessageUpdateManyMutationInput = {
     content?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    type?: StringFieldUpdateOperationsInput | string
+    roomCode?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type DirectMessageUncheckedUpdateManyInput = {
@@ -9154,6 +9211,8 @@ export namespace Prisma {
     receiverId?: IntFieldUpdateOperationsInput | number
     content?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    type?: StringFieldUpdateOperationsInput | string
+    roomCode?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type ConversationReadCreateInput = {
@@ -9535,6 +9594,8 @@ export namespace Prisma {
     receiverId?: SortOrder
     content?: SortOrder
     createdAt?: SortOrder
+    type?: SortOrder
+    roomCode?: SortOrder
   }
 
   export type DirectMessageAvgOrderByAggregateInput = {
@@ -9549,6 +9610,8 @@ export namespace Prisma {
     receiverId?: SortOrder
     content?: SortOrder
     createdAt?: SortOrder
+    type?: SortOrder
+    roomCode?: SortOrder
   }
 
   export type DirectMessageMinOrderByAggregateInput = {
@@ -9557,6 +9620,8 @@ export namespace Prisma {
     receiverId?: SortOrder
     content?: SortOrder
     createdAt?: SortOrder
+    type?: SortOrder
+    roomCode?: SortOrder
   }
 
   export type DirectMessageSumOrderByAggregateInput = {
@@ -10277,6 +10342,8 @@ export namespace Prisma {
   export type DirectMessageCreateWithoutSenderInput = {
     content: string
     createdAt?: Date | string
+    type?: string
+    roomCode?: string | null
     receiver: UserCreateNestedOneWithoutReceivedMessagesInput
   }
 
@@ -10285,6 +10352,8 @@ export namespace Prisma {
     receiverId: number
     content: string
     createdAt?: Date | string
+    type?: string
+    roomCode?: string | null
   }
 
   export type DirectMessageCreateOrConnectWithoutSenderInput = {
@@ -10300,6 +10369,8 @@ export namespace Prisma {
   export type DirectMessageCreateWithoutReceiverInput = {
     content: string
     createdAt?: Date | string
+    type?: string
+    roomCode?: string | null
     sender: UserCreateNestedOneWithoutSentMessagesInput
   }
 
@@ -10308,6 +10379,8 @@ export namespace Prisma {
     senderId: number
     content: string
     createdAt?: Date | string
+    type?: string
+    roomCode?: string | null
   }
 
   export type DirectMessageCreateOrConnectWithoutReceiverInput = {
@@ -10501,6 +10574,8 @@ export namespace Prisma {
     receiverId?: IntFilter<"DirectMessage"> | number
     content?: StringFilter<"DirectMessage"> | string
     createdAt?: DateTimeFilter<"DirectMessage"> | Date | string
+    type?: StringFilter<"DirectMessage"> | string
+    roomCode?: StringNullableFilter<"DirectMessage"> | string | null
   }
 
   export type DirectMessageUpsertWithWhereUniqueWithoutReceiverInput = {
@@ -11390,6 +11465,8 @@ export namespace Prisma {
     receiverId: number
     content: string
     createdAt?: Date | string
+    type?: string
+    roomCode?: string | null
   }
 
   export type DirectMessageCreateManyReceiverInput = {
@@ -11397,6 +11474,8 @@ export namespace Prisma {
     senderId: number
     content: string
     createdAt?: Date | string
+    type?: string
+    roomCode?: string | null
   }
 
   export type FriendshipCreateManyApplicantInput = {
@@ -11442,6 +11521,8 @@ export namespace Prisma {
   export type DirectMessageUpdateWithoutSenderInput = {
     content?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    type?: StringFieldUpdateOperationsInput | string
+    roomCode?: NullableStringFieldUpdateOperationsInput | string | null
     receiver?: UserUpdateOneRequiredWithoutReceivedMessagesNestedInput
   }
 
@@ -11450,6 +11531,8 @@ export namespace Prisma {
     receiverId?: IntFieldUpdateOperationsInput | number
     content?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    type?: StringFieldUpdateOperationsInput | string
+    roomCode?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type DirectMessageUncheckedUpdateManyWithoutSenderInput = {
@@ -11457,11 +11540,15 @@ export namespace Prisma {
     receiverId?: IntFieldUpdateOperationsInput | number
     content?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    type?: StringFieldUpdateOperationsInput | string
+    roomCode?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type DirectMessageUpdateWithoutReceiverInput = {
     content?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    type?: StringFieldUpdateOperationsInput | string
+    roomCode?: NullableStringFieldUpdateOperationsInput | string | null
     sender?: UserUpdateOneRequiredWithoutSentMessagesNestedInput
   }
 
@@ -11470,6 +11557,8 @@ export namespace Prisma {
     senderId?: IntFieldUpdateOperationsInput | number
     content?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    type?: StringFieldUpdateOperationsInput | string
+    roomCode?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type DirectMessageUncheckedUpdateManyWithoutReceiverInput = {
@@ -11477,6 +11566,8 @@ export namespace Prisma {
     senderId?: IntFieldUpdateOperationsInput | number
     content?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    type?: StringFieldUpdateOperationsInput | string
+    roomCode?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type FriendshipUpdateWithoutApplicantInput = {
