@@ -243,7 +243,7 @@ erDiagram
 
 ## Modules
 
-> Counted directly against the `ft_transcendence` "Surprise" subject's official module list (`en.subject.pdf` / `ft_transcendence.pdf`), based on what is actually implemented in the code. 14 points are required; this totals **16 points**, i.e. one extra major module's worth of margin if something doesn't validate during evaluation.
+> Counted directly against the `ft_transcendence` subject's official module list (`en.subject.pdf` / `ft_transcendence.pdf`), based on what is actually implemented in the code. 14 points are required; this totals **16 points**, i.e. one extra major module's worth of margin if something doesn't validate during evaluation.
 
 | # | Category | Module | Type | Pts | Notes |
 |---|---|---|---|---|---|
