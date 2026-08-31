@@ -24,7 +24,22 @@ interface SocketData {
  * nginxは `location /socket.io/` でsocket.ioを一括プロキシしており、
  * 名前空間は同一パス上を通るためnginx側の設定追加は不要。
  */
-@WebSocketGateway({ namespace: '/presence', cors: { origin: '*' } })
+@WebSocketGateway({
+  namespace: '/presence',
+  cors: { origin: '*' },
+  /*
+   * 既定(25s/20s)より短くして切断検知を速める。
+   * この接続の有無が「ログイン中か」の判定そのものなので（auth.service.ts の login）、
+   * ブラウザのクラッシュや回線断でFINが届かない場合の解放待ちを最大約18秒に抑える。
+   * これ以上短くすると不安定な回線でフレンドのオンライン表示がちらつきやすくなる。
+   *
+   * 注意: engine.ioのインスタンスは全ゲートウェイで1つなので、この設定は
+   * `/ito` 名前空間にも効く（itoの切断検知＝ゲーム一時停止も同じだけ速くなる）。
+   * 名前空間ごとには分けられない。
+   */
+  pingInterval: 10000,
+  pingTimeout: 8000,
+})
 export class PresenceGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {

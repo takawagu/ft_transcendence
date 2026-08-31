@@ -26,6 +26,7 @@ status: 要検討
 - 現状JWTの有効期限は`7d`固定（[auth.service.ts:81](backend/src/auth/auth.service.ts#L81)）。リフレッシュトークンは無し
 - 有効期限切れ・改ざん時は`AuthGuard`が401を返すのみ。フロント側の自動ログアウト処理は[page.tsx](frontend/src/app/page.tsx)の`apiCall`内で401検知時に実施済み
 - トークン漏洩時の失効手段（ブラックリスト等）は無し。必要か？
+- セクション7の多重ログイン禁止は**トークンの失効ではなく接続の有無**で判定している。発行済みトークンは7日間有効なままなので、漏洩対策にはならない点に注意
 
 ---
 
@@ -78,7 +79,51 @@ status: 決定済み（実装済み）
 
 ---
 
-## 7. 登録直後のUXフィードバック
+## 7. 多重ログインの禁止（先勝ち）
+
+status: 実装済み
+
+### 背景
+
+同一アカウントに、既にログイン中のブラウザとは別のブラウザ／別の機器からログインしようとすると、送信ボタンが「通信中...」のまま戻らない不具合があった。原因は2つ:
+
+1. `login()` に重複ログインのチェックが無く、サーバーが「今このユーザーはログイン中か」を答えられる仕組みがログインフローに繋がっていなかった
+2. `apiCall` の `fetch` にタイムアウトが無く、応答も失敗も返らないまま止まると `await apiCall(...)` が永久に返らない（締め切り判定はループ先頭でしか行われないため、60秒の締め切りも効かない）
+
+### 決定
+
+- 多重ログインは**先勝ち**で禁止する。既にログイン中の端末を保護し、2台目のログイン試行は409で拒否する
+- 「ログイン中か」の判定は**presenceのWebSocket接続の有無**を実体とする（[presence.service.ts](backend/src/presence/presence.service.ts)の`isOnline`）。Sessionテーブルは作らない
+  - 理由: ブラウザを閉じれば接続が切れて自動的に解放されるため、ログアウトし忘れによる恒久ロックアウトが起きない。DBに持たせると明示的なログアウトが無い限り解放されず、後始末の仕組みが別途必要になる
+  - `friend-requirements.md`セクション4の「オンライン状態はプロセス内メモリで持つ」という既存方針とも一貫する
+- 判定は**パスワード検証の後**に行う。前に置くと、パスワードを知らない第三者に「そのアカウントが今オンラインか」を教えてしまう
+- `register()`には入れない。新規アカウントがオンラインであることはあり得ない
+
+### 実装
+
+- [auth.service.ts](backend/src/auth/auth.service.ts)の`login()`で`PresenceService.isOnline(user.id)`を見て、真なら`ConflictException`（409）。`AuthModule`が`PresenceModule`をimportする
+  - モジュールの依存は`AuthModule → PresenceModule`の一方向のみ。`PresenceModule`は`imports`が空で、`PresenceGateway`は`@Global`な`AuthModule`から`AuthService`を受け取っているため循環しない
+- [presence.gateway.ts](backend/src/presence/presence.gateway.ts)の`pingInterval`/`pingTimeout`を10s/8s（既定は25s/20s）に短縮。ブラウザのクラッシュや回線断でFINが届かない場合の解放待ちを最大約45秒から約18秒に縮めた
+  - これ以上短くすると不安定な回線でフレンドのオンライン表示がちらつきやすくなる
+  - engine.ioのインスタンスは全ゲートウェイで1つのため、この設定は`/ito`名前空間にも効く。itoの切断検知（＝ゲームの一時停止）も同じだけ速くなる。名前空間ごとには分けられない
+- [session.tsx](frontend/src/lib/session.tsx)の`apiCall`に`AbortController`で15秒のリクエストタイムアウトを追加。タイムアウトでの中断はサーバーに届いている可能性があるためリトライせず即エラーにする（`make up`直後の502/503リトライはそのまま残す）
+- フロントのエラー表示は変更不要。`handleAuthSubmit`のcatchが`err.message`を`authError`に入れるため、409のメッセージがそのまま画面に出る
+
+### 解放条件
+
+- 該当端末でログアウトする（presenceソケットが即座に切断される）
+- タブ／ブラウザを閉じる（正常クローズならTCP FINで即座に検知）
+- ブラウザのクラッシュ・回線断の場合は最大約18秒待つ
+
+### 既知の制約
+
+- **同一アカウントの複数タブは影響を受けない**。2枚目以降のタブはlocalStorageのトークンを復元するだけでログインAPIを叩かないため。presence側も`userId → Set<socketId>`で複数接続を許容している
+- **フェイルオープン**。presenceのWSが繋がらない環境では`isOnline`が常にfalseになり判定が素通りする。誰もログインできなくなる方向には壊れない
+- バックエンドを複数プロセスへ水平スケールすると、Mapがプロセスローカルなため判定が壊れる（presence機能自体の既存の制約と同じ）
+
+---
+
+## 8. 登録直後のUXフィードバック
 
 status: 実装済み
 

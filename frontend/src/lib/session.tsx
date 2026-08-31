@@ -28,6 +28,13 @@ const API_RETRY_DEADLINE_MS = 60_000;
 const API_RETRY_BASE_DELAY_MS = 500;
 const API_RETRY_MAX_DELAY_MS = 5_000;
 
+/**
+ * 1リクエストあたりの上限。
+ * fetch には既定のタイムアウトが無く、応答も失敗も返らないまま止まると
+ * apiCall が永久に返らず、呼び出し側のローディング表示が固まったままになる。
+ */
+const REQUEST_TIMEOUT_MS = 15_000;
+
 interface SessionContextValue {
   /** localStorage を読む useEffect が走った後か。false の間は認証状態が確定していない */
   mounted: boolean;
@@ -124,15 +131,28 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         }
 
         let res: Response;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
         try {
           res = await fetch(endpoint, {
             method,
             headers,
             body: body ? JSON.stringify(body) : undefined,
+            signal: controller.signal,
           });
         } catch {
+          // タイムアウトでの中断はリクエストがサーバーに届いている可能性があるため、
+          // 副作用の二重実行を避けてリトライせず打ち切る
+          if (controller.signal.aborted) {
+            setApiWaiting(false);
+            throw new Error(
+              'サーバーからの応答がありません。時間をおいて再度お試しください。',
+            );
+          }
           // fetch自体が失敗＝サーバーに届いていないので、副作用の二重実行にはならない
           continue;
+        } finally {
+          clearTimeout(timer);
         }
 
         // 502/503 はnginxがバックエンドに到達できなかった状態。リクエストは処理されていない。

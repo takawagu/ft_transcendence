@@ -4,12 +4,16 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
+import { PresenceService } from '../presence/presence.service';
 
 @Injectable()
 export class AuthService {
   private readonly jwtSecret = process.env.JWT_SECRET || 'secret';
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly presence: PresenceService,
+  ) {}
 
   async register(body: RegisterDto) {
     const { email, password, username, bio, profileImage } = body;
@@ -66,6 +70,18 @@ export class AuthService {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       throw new UnauthorizedException('Invalid email or password');
+    }
+
+    /*
+     * 多重ログインは先勝ちで禁止する（docs/login-requirements.md セクション7）。
+     * ログイン中かどうかは presence の WebSocket 接続の有無で判定する。
+     * パスワード検証の後に置くこと。先に置くと、パスワードを知らない第三者に
+     * 「そのアカウントが今オンラインか」を教えてしまう。
+     */
+    if (this.presence.isOnline(user.id)) {
+      throw new ConflictException(
+        'このアカウントは既に別の端末またはブラウザでログイン中です。そちらでログアウトしてから、もう一度お試しください。',
+      );
     }
 
     const token = this.generateToken(user.id);
