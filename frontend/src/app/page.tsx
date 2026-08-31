@@ -65,7 +65,8 @@ export default function HomePage() {
   const [roomCreateRounds, setRoomCreateRounds] = useState(3);
 
   // Modal states
-  const [showTermsModal, setShowTermsModal] = useState(false);
+  type ModalType = 'terms' | 'privacy' | null;
+  const [activeModal, setActiveModal] = useState<ModalType>(null);
 
   // Block states
   const [blockedUsers, setBlockedUsers] = useState<User[]>([]);
@@ -368,7 +369,7 @@ export default function HomePage() {
     const reader = new FileReader();
     reader.onload = (event) => {
       if (event.target?.result) {
-        setEditProfileImage(event.target.result as string); // save as Base64
+        setEditProfileImage(event.target.result as string);
       }
     };
     reader.readAsDataURL(file);
@@ -539,13 +540,9 @@ export default function HomePage() {
                 {!isLoginTab && (
                   <div className="text-xs text-zinc-500 text-center mt-2 mb-2">
                     アカウントを登録することで、
-                    <button
-                      type="button"
-                      onClick={() => setShowTermsModal(true)}
-                      className="text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
-                    >
-                      利用規約
-                    </button>
+                    <button type="button" onClick={() => setActiveModal('terms')} className="text-indigo-400 hover:text-indigo-300 underline cursor-pointer mx-1">利用規約</button>
+                    と
+                    <button type="button" onClick={() => setActiveModal('privacy')} className="text-indigo-400 hover:text-indigo-300 underline cursor-pointer mx-1">プライバシーポリシー</button>
                     に同意したものとみなされます。
                   </div>
                 )}
@@ -605,83 +602,102 @@ export default function HomePage() {
           )}
         </div>
 
-        <footer className="absolute bottom-6 w-full text-center z-10">
-          <button
-            onClick={() => setShowTermsModal(true)}
-            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
-          >
-            利用規約
-          </button>
+        <footer className="absolute bottom-6 w-full flex justify-center gap-6 z-10">
+          <button type="button" onClick={() => setActiveModal('terms')} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer">利用規約</button>
+          <button type="button" onClick={() => setActiveModal('privacy')} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer">プライバシーポリシー</button>
         </footer>
 
-        {/* --- TERMS MODAL --- */}
-        {showTermsModal && (
-          <div
-            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center px-4"
-            onClick={() => setShowTermsModal(false)}
-          >
-            <div
-              className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in fade-in zoom-in-95 duration-200"
-              onClick={e => e.stopPropagation()}
-            >
+        {/* --- TERMS & PRIVACY MODAL --- */}
+        {activeModal && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center px-4" onClick={() => setActiveModal(null)}>
+            <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
               <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
-                <h3 className="text-lg font-bold text-zinc-100">利用規約</h3>
-                <button
-                  onClick={() => setShowTermsModal(false)}
-                  className="text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
-                >
+                <h3 className="text-lg font-bold text-zinc-100">
+                  {activeModal === 'terms' ? '利用規約' : 'プライバシーポリシー'}
+                </h3>
+                <button onClick={() => setActiveModal(null)} className="text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
 
-              <div className="p-6 overflow-y-auto flex-1 text-sm text-zinc-300 space-y-4 leading-relaxed">
-                <h4 className="font-bold text-white">第1条（適用）</h4>
-                <p>本規約は、ユーザーと運営者との間の本サービスの利用に関わる一切の関係に適用されるものとします。</p>
-                <h4 className="font-bold text-white mt-4">第2条（ユーザー登録）</h4>
-                <p>本サービスの利用を希望する者は、本規約に同意の上、運営者が定める方法によってユーザー登録を行うものとします。</p>
-                <h4 className="font-bold text-white mt-4">第3条（アカウントの管理）</h4>
-                <p>ユーザーは、自己の責任において、本サービスのアカウントおよびパスワードを適切に管理するものとします。いかなる場合にも、これらを第三者に譲渡または貸与することはできません。</p>
-                <h4 className="font-bold text-white mt-4">第4条（禁止事項）</h4>
-                <p>ユーザーは、本サービスの利用にあたり、以下の行為をしてはなりません。</p>
-                <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
-                  <li>法令または公序良俗に違反する行為</li>
-                  <li>犯罪行為に関連する行為</li>
-                  <li>運営者、他のユーザー、または第三者のサーバーまたはネットワークの機能を破壊したり、妨害したりする行為</li>
-                  <li>本サービスの運営を妨害するおそれのある行為</li>
-                  <li>他のユーザーに関する個人情報等を収集または蓄積する行為</li>
-                  <li>不正アクセスをし、またはこれを試みる行為</li>
-                  <li>他のユーザーに成りすます行為</li>
-                  <li>本サービス内でのチャット機能を利用した、他のユーザーに対する誹謗中傷、脅迫、いやがらせ、スパム送信、その他不適切な発言を行う行為</li>
-                  <li>ゲームの進行を意図的に妨害する、または本来のゲーム性から著しく逸脱する行為</li>
-                  <li>その他、運営者が不適切と判断する行為</li>
-                </ul>
-                <h4 className="font-bold text-white mt-4">第5条（本サービスの提供の停止等）</h4>
-                <p>運営者は、以下のいずれかの事由があると判断した場合、ユーザーに事前に通知することなく本サービスの全部または一部の提供を停止または中断することができるものとします。</p>
-                <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
-                  <li>本サービスにかかるコンピュータシステムの保守点検または更新を行う場合</li>
-                  <li>地震、落雷、火災、停電または天災などの不可抗力により、本サービスの提供が困難となった場合</li>
-                  <li>コンピュータまたは通信回線等が事故により停止した場合</li>
-                  <li>その他、運営者が本サービスの提供が困難と判断した場合</li>
-                </ul>
-                <h4 className="font-bold text-white mt-4">第6条（知的財産権）</h4>
-                <p>本サービスに関する知的財産権（「ITO」のゲームルール、名称、デザイン等の権利を含むがこれに限らない）は、正当な権利者に帰属します。ユーザーは、これらを無断で複製、転載、改変等することはできません。</p>
-                <h4 className="font-bold text-white mt-4">第7条（免責事項）</h4>
-                <p>運営者は、本サービスに事実上または法律上の瑕疵（安全性、信頼性、正確性、完全性、有効性、特定の目的への適合性、セキュリティなどに関する欠陥、エラーやバグ、権利侵害などを含みます）がないことを明示的にも黙示的にも保証しておりません。</p>
-                <p>運営者は、本サービスに起因してユーザーに生じたあらゆる損害について一切の責任を負いません。</p>
-                <h4 className="font-bold text-white mt-4">第8条（利用規約の変更）</h4>
-                <p>運営者は、必要と判断した場合には、ユーザーに通知することなくいつでも本規約を変更することができるものとします。</p>
-                <h4 className="font-bold text-white mt-4">第9条（準拠法・裁判管轄）</h4>
-                <p>本規約の解釈にあたっては、日本法を準拠法とします。</p>
-                <p>本サービスに関して紛争が生じた場合には、運営者の本店所在地を管轄する裁判所を専属的合意管轄とします。</p>
+              <div className="p-6 overflow-y-auto flex-1 text-sm text-zinc-300 space-y-4">
+                {activeModal === 'terms' ? (
+                  <>
+                    <h4 className="font-bold text-white">第1条（適用）</h4>
+                    <p>本規約は、ユーザーと運営者との間の本サービスの利用に関わる一切の関係に適用されるものとします。</p>
+
+                    <h4 className="font-bold text-white mt-4">第2条（ユーザー登録）</h4>
+                    <p>本サービスの利用を希望する者は、本規約に同意の上、運営者が定める方法によってユーザー登録を行うものとします。</p>
+
+                    <h4 className="font-bold text-white mt-4">第3条（アカウントの管理）</h4>
+                    <p>ユーザーは、自己の責任において、本サービスのアカウントおよびパスワードを適切に管理するものとします。いかなる場合にも、これらを第三者に譲渡または貸与することはできません。</p>
+
+                    <h4 className="font-bold text-white mt-4">第4条（禁止事項）</h4>
+                    <p>ユーザーは、本サービスの利用にあたり、以下の行為をしてはなりません。</p>
+                    <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
+                      <li>法令または公序良俗に違反する行為</li>
+                      <li>犯罪行為に関連する行為</li>
+                      <li>運営者、他のユーザー、または第三者のサーバーまたはネットワークの機能を破壊したり、妨害したりする行為</li>
+                      <li>本サービス内でのチャット機能を利用した、他のユーザーに対する誹謗中傷、脅迫、いやがらせ、スパム送信、その他不適切な発言を行う行為</li>
+                      <li>ゲームの進行を意図的に妨害する、または本来のゲーム性から著しく逸脱する行為</li>
+                      <li>その他、運営者が不適切と判断する行為</li>
+                    </ul>
+
+                    <h4 className="font-bold text-white mt-4">第5条（本サービスの提供の停止等）</h4>
+                    <p>運営者は、以下のいずれかの事由があると判断した場合、ユーザーに事前に通知することなく本サービスの全部または一部の提供を停止または中断することができるものとします。</p>
+                    <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
+                      <li>保守点検または更新を行う場合</li>
+                      <li>不可抗力により、本サービスの提供が困難となった場合</li>
+                      <li>その他、運営者が本サービスの提供が困難と判断した場合</li>
+                    </ul>
+
+                    <h4 className="font-bold text-white mt-4">第6条（免責事項）</h4>
+                    <p>運営者は、本サービスに起因してユーザーに生じたあらゆる損害について一切の責任を負いません。本サービスは現状有姿で提供され、安全性や正確性などについていかなる保証も行いません。</p>
+
+                    <h4 className="font-bold text-white mt-4">第7条（利用規約の変更）</h4>
+                    <p>運営者は、必要と判断した場合には、ユーザーに通知することなくいつでも本規約を変更することができるものとします。</p>
+                  </>
+                ) : (
+                  <>
+                    <h4 className="font-bold text-white">第1条（取得する個人情報）</h4>
+                    <p>本サービスでは、ユーザーが登録・利用するにあたり、以下の情報を取得します。</p>
+                    <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
+                      <li>メールアドレス、パスワード等のアカウント情報</li>
+                      <li>ユーザー名、自己紹介文、プロフィール画像</li>
+                      <li>チャットのメッセージ内容、フレンド関係、ゲームの戦績などの利用履歴</li>
+                      <li>端末情報、アクセスログ等の利用環境に関する情報</li>
+                    </ul>
+
+                    <h4 className="font-bold text-white mt-4">第2条（利用目的）</h4>
+                    <p>取得した個人情報は、以下の目的で利用いたします。</p>
+                    <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
+                      <li>本サービスの提供および運営のため（ゲーム機能、チャット機能、マッチングなど）</li>
+                      <li>ユーザーからのお問い合わせへの対応のため</li>
+                      <li>利用規約に違反する行為や、不正・不当な目的でサービスを利用しようとするユーザーの特定および対応のため</li>
+                      <li>本サービスの改善や新機能の開発に役立てるため</li>
+                    </ul>
+
+                    <h4 className="font-bold text-white mt-4">第3条（個人情報の第三者提供）</h4>
+                    <p>運営者は、次に掲げる場合を除いて、あらかじめユーザーの同意を得ることなく第三者に個人情報を提供することはありません。ただし、個人情報保護法その他の法令で認められる場合を除きます。</p>
+                    <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
+                      <li>人の生命、身体または財産の保護のために必要がある場合</li>
+                      <li>公衆衛生の向上または児童の健全な育成の推進のために特に必要がある場合</li>
+                      <li>国の機関もしくは地方公共団体またはその委託を受けた者が法令の定める事務を遂行することに対して協力する必要がある場合</li>
+                    </ul>
+
+                    <h4 className="font-bold text-white mt-4">第4条（安全管理措置）</h4>
+                    <p>運営者は、ユーザーの個人情報を正確かつ最新の状態に保ち、個人情報への不正アクセス・紛失・破損・改ざん・漏洩などを防止するため、セキュリティシステムの維持・管理体制の整備等の必要な措置を講じます。</p>
+
+                    <h4 className="font-bold text-white mt-4">第5条（プライバシーポリシーの変更）</h4>
+                    <p>本ポリシーの内容は、法令その他本ポリシーに別段の定めのある事項を除いて、ユーザーに通知することなく変更することができるものとします。</p>
+                  </>
+                )}
               </div>
 
               <div className="px-6 py-4 border-t border-zinc-800 shrink-0 flex justify-end">
-                <button
-                  onClick={() => setShowTermsModal(false)}
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-colors cursor-pointer"
-                >
+                <button onClick={() => setActiveModal(null)} className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-colors cursor-pointer">
                   確認しました
                 </button>
               </div>
@@ -734,7 +750,7 @@ export default function HomePage() {
 
           <button
             onClick={openOptions}
-            className="p-2 text-zinc-400 hover:text-white bg-zinc-900/60 hover:bg-zinc-800 rounded-full border border-zinc-800/80 transition-all"
+            className="p-2 text-zinc-400 hover:text-white bg-zinc-900/60 hover:bg-zinc-800 rounded-full border border-zinc-800/80 transition-all cursor-pointer"
             title="設定"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -745,7 +761,7 @@ export default function HomePage() {
 
           <button
             onClick={handleLogout}
-            className="p-2 text-zinc-400 hover:text-red-400 bg-zinc-900/60 hover:bg-red-950/20 rounded-full border border-zinc-800/80 hover:border-red-900/50 transition-all"
+            className="p-2 text-zinc-400 hover:text-red-400 bg-zinc-900/60 hover:bg-red-950/20 rounded-full border border-zinc-800/80 hover:border-red-900/50 transition-all cursor-pointer"
             title="ログアウト"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1286,91 +1302,102 @@ export default function HomePage() {
       )}
 
       {/* フッター */}
-      <footer className="mt-8 py-6 border-t border-zinc-900/80 text-center w-full">
-        <button
-          onClick={() => setShowTermsModal(true)}
-          className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
-        >
-          利用規約
-        </button>
+      <footer className="mt-8 py-6 border-t border-zinc-900/80 text-center w-full flex justify-center gap-6">
+        <button type="button" onClick={() => setActiveModal('terms')} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer">利用規約</button>
+        <button type="button" onClick={() => setActiveModal('privacy')} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer">プライバシーポリシー</button>
       </footer>
 
-      {/* --- TERMS MODAL (ログイン後用) --- */}
-      {showTermsModal && (
-        <div
-          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center px-4"
-          onClick={() => setShowTermsModal(false)}
-        >
-          <div
-            className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in fade-in zoom-in-95 duration-200"
-            onClick={e => e.stopPropagation()}
-          >
+      {/* --- TERMS & PRIVACY MODAL (ログイン後用) --- */}
+      {activeModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center px-4" onClick={() => setActiveModal(null)}>
+          <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
-              <h3 className="text-lg font-bold text-zinc-100">利用規約</h3>
-              <button
-                onClick={() => setShowTermsModal(false)}
-                className="text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
-              >
+              <h3 className="text-lg font-bold text-zinc-100">
+                {activeModal === 'terms' ? '利用規約' : 'プライバシーポリシー'}
+              </h3>
+              <button onClick={() => setActiveModal(null)} className="text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto flex-1 text-sm text-zinc-300 space-y-4 leading-relaxed">
-              <h4 className="font-bold text-white">第1条（適用）</h4>
-              <p>本規約は、ユーザーと運営者との間の本サービスの利用に関わる一切の関係に適用されるものとします。</p>
+            <div className="p-6 overflow-y-auto flex-1 text-sm text-zinc-300 space-y-4">
+              {activeModal === 'terms' ? (
+                <>
+                  <h4 className="font-bold text-white">第1条（適用）</h4>
+                  <p>本規約は、ユーザーと運営者との間の本サービスの利用に関わる一切の関係に適用されるものとします。</p>
 
-              <h4 className="font-bold text-white mt-4">第2条（ユーザー登録）</h4>
-              <p>本サービスの利用を希望する者は、本規約に同意の上、運営者が定める方法によってユーザー登録を行うものとします。</p>
+                  <h4 className="font-bold text-white mt-4">第2条（ユーザー登録）</h4>
+                  <p>本サービスの利用を希望する者は、本規約に同意の上、運営者が定める方法によってユーザー登録を行うものとします。</p>
 
-              <h4 className="font-bold text-white mt-4">第3条（アカウントの管理）</h4>
-              <p>ユーザーは、自己の責任において、本サービスのアカウントおよびパスワードを適切に管理するものとします。いかなる場合にも、これらを第三者に譲渡または貸与することはできません。</p>
+                  <h4 className="font-bold text-white mt-4">第3条（アカウントの管理）</h4>
+                  <p>ユーザーは、自己の責任において、本サービスのアカウントおよびパスワードを適切に管理するものとします。いかなる場合にも、これらを第三者に譲渡または貸与することはできません。</p>
 
-              <h4 className="font-bold text-white mt-4">第4条（禁止事項）</h4>
-              <p>ユーザーは、本サービスの利用にあたり、以下の行為をしてはなりません。</p>
-              <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
-                <li>法令または公序良俗に違反する行為</li>
-                <li>犯罪行為に関連する行為</li>
-                <li>運営者、他のユーザー、または第三者のサーバーまたはネットワークの機能を破壊したり、妨害したりする行為</li>
-                <li>本サービスの運営を妨害するおそれのある行為</li>
-                <li>他のユーザーに関する個人情報等を収集または蓄積する行為</li>
-                <li>不正アクセスをし、またはこれを試みる行為</li>
-                <li>他のユーザーに成りすます行為</li>
-                <li>本サービス内でのチャット機能を利用した、他のユーザーに対する誹謗中傷、脅迫、いやがらせ、スパム送信、その他不適切な発言を行う行為</li>
-                <li>ゲームの進行を意図的に妨害する、または本来のゲーム性から著しく逸脱する行為</li>
-                <li>その他、運営者が不適切と判断する行為</li>
-              </ul>
+                  <h4 className="font-bold text-white mt-4">第4条（禁止事項）</h4>
+                  <p>ユーザーは、本サービスの利用にあたり、以下の行為をしてはなりません。</p>
+                  <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
+                    <li>法令または公序良俗に違反する行為</li>
+                    <li>犯罪行為に関連する行為</li>
+                    <li>運営者、他のユーザー、または第三者のサーバーまたはネットワークの機能を破壊したり、妨害したりする行為</li>
+                    <li>本サービス内でのチャット機能を利用した、他のユーザーに対する誹謗中傷、脅迫、いやがらせ、スパム送信、その他不適切な発言を行う行為</li>
+                    <li>ゲームの進行を意図的に妨害する、または本来のゲーム性から著しく逸脱する行為</li>
+                    <li>その他、運営者が不適切と判断する行為</li>
+                  </ul>
 
-              <h4 className="font-bold text-white mt-4">第5条（本サービスの提供の停止等）</h4>
-              <p>運営者は、以下のいずれかの事由があると判断した場合、ユーザーに事前に通知することなく本サービスの全部または一部の提供を停止または中断することができるものとします。</p>
-              <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
-                <li>本サービスにかかるコンピュータシステムの保守点検または更新を行う場合</li>
-                <li>地震、落雷、火災、停電または天災などの不可抗力により、本サービスの提供が困難となった場合</li>
-                <li>コンピュータまたは通信回線等が事故により停止した場合</li>
-                <li>その他、運営者が本サービスの提供が困難と判断した場合</li>
-              </ul>
+                  <h4 className="font-bold text-white mt-4">第5条（本サービスの提供の停止等）</h4>
+                  <p>運営者は、以下のいずれかの事由があると判断した場合、ユーザーに事前に通知することなく本サービスの全部または一部の提供を停止または中断することができるものとします。</p>
+                  <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
+                    <li>保守点検または更新を行う場合</li>
+                    <li>不可抗力により、本サービスの提供が困難となった場合</li>
+                    <li>その他、運営者が本サービスの提供が困難と判断した場合</li>
+                  </ul>
 
-              <h4 className="font-bold text-white mt-4">第6条（知的財産権）</h4>
-              <p>本サービスに関する知的財産権（「ITO」のゲームルール、名称、デザイン等の権利を含むがこれに限らない）は、正当な権利者に帰属します。ユーザーは、これらを無断で複製、転載、改変等することはできません。</p>
+                  <h4 className="font-bold text-white mt-4">第6条（免責事項）</h4>
+                  <p>運営者は、本サービスに起因してユーザーに生じたあらゆる損害について一切の責任を負いません。本サービスは現状有姿で提供され、安全性や正確性などについていかなる保証も行いません。</p>
 
-              <h4 className="font-bold text-white mt-4">第7条（免責事項）</h4>
-              <p>運営者は、本サービスに事実上または法律上の瑕疵（安全性、信頼性、正確性、完全性、有効性、特定の目的への適合性、セキュリティなどに関する欠陥、エラーやバグ、権利侵害などを含みます）がないことを明示的にも黙示的にも保証しておりません。</p>
-              <p>運営者は、本サービスに起因してユーザーに生じたあらゆる損害について一切の責任を負いません。</p>
+                  <h4 className="font-bold text-white mt-4">第7条（利用規約の変更）</h4>
+                  <p>運営者は、必要と判断した場合には、ユーザーに通知することなくいつでも本規約を変更することができるものとします。</p>
+                </>
+              ) : (
+                <>
+                  <h4 className="font-bold text-white">第1条（取得する個人情報）</h4>
+                  <p>本サービスでは、ユーザーが登録・利用するにあたり、以下の情報を取得します。</p>
+                  <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
+                    <li>メールアドレス、パスワード等のアカウント情報</li>
+                    <li>ユーザー名、自己紹介文、プロフィール画像</li>
+                    <li>チャットのメッセージ内容、フレンド関係、ゲームの戦績などの利用履歴</li>
+                    <li>端末情報、アクセスログ等の利用環境に関する情報</li>
+                  </ul>
 
-              <h4 className="font-bold text-white mt-4">第8条（利用規約の変更）</h4>
-              <p>運営者は、必要と判断した場合には、ユーザーに通知することなくいつでも本規約を変更することができるものとします。</p>
+                  <h4 className="font-bold text-white mt-4">第2条（利用目的）</h4>
+                  <p>取得した個人情報は、以下の目的で利用いたします。</p>
+                  <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
+                    <li>本サービスの提供および運営のため（ゲーム機能、チャット機能、マッチングなど）</li>
+                    <li>ユーザーからのお問い合わせへの対応のため</li>
+                    <li>利用規約に違反する行為や、不正・不当な目的でサービスを利用しようとするユーザーの特定および対応のため</li>
+                    <li>本サービスの改善や新機能の開発に役立てるため</li>
+                  </ul>
 
-              <h4 className="font-bold text-white mt-4">第9条（準拠法・裁判管轄）</h4>
-              <p>本規約の解釈にあたっては、日本法を準拠法とします。</p>
-              <p>本サービスに関して紛争が生じた場合には、運営者の本店所在地を管轄する裁判所を専属的合意管轄とします。</p>
+                  <h4 className="font-bold text-white mt-4">第3条（個人情報の第三者提供）</h4>
+                  <p>運営者は、次に掲げる場合を除いて、あらかじめユーザーの同意を得ることなく第三者に個人情報を提供することはありません。ただし、個人情報保護法その他の法令で認められる場合を除きます。</p>
+                  <ul className="list-disc pl-5 space-y-1 mt-2 text-zinc-400">
+                    <li>人の生命、身体または財産の保護のために必要がある場合</li>
+                    <li>公衆衛生の向上または児童の健全な育成の推進のために特に必要がある場合</li>
+                    <li>国の機関もしくは地方公共団体またはその委託を受けた者が法令の定める事務を遂行することに対して協力する必要がある場合</li>
+                  </ul>
+
+                  <h4 className="font-bold text-white mt-4">第4条（安全管理措置）</h4>
+                  <p>運営者は、ユーザーの個人情報を正確かつ最新の状態に保ち、個人情報への不正アクセス・紛失・破損・改ざん・漏洩などを防止するため、セキュリティシステムの維持・管理体制の整備等の必要な措置を講じます。</p>
+
+                  <h4 className="font-bold text-white mt-4">第5条（プライバシーポリシーの変更）</h4>
+                  <p>本ポリシーの内容は、法令その他本ポリシーに別段の定めのある事項を除いて、ユーザーに通知することなく変更することができるものとします。</p>
+                </>
+              )}
             </div>
 
             <div className="px-6 py-4 border-t border-zinc-800 shrink-0 flex justify-end">
-              <button
-                onClick={() => setShowTermsModal(false)}
-                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-colors cursor-pointer"
-              >
+              <button onClick={() => setActiveModal(null)} className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-colors cursor-pointer">
                 確認しました
               </button>
             </div>
