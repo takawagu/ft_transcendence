@@ -81,6 +81,7 @@ export class BroadcastService {
           room.roomPhase === 'INPUT_GENERATING' ? p.playerPhase : undefined,
         hasSubmittedPrompt: p.hasSubmittedPrompt,
         imageUrl: showImages ? p.imageUrl : undefined,
+        prompt: showImages ? p.prompt : undefined,
         status: p.status,
         awaitingReturn: p.awaitingReturn,
       })),

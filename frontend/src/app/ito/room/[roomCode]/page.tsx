@@ -57,12 +57,16 @@ export default function RoomPage() {
       
       const scaleX = windowWidth / virtualWidth;
       const scaleY = windowHeight / virtualHeight;
+      
+      // Fit exactly to the viewport for both orientations (no vertical scrolling)
       const newScale = Math.min(scaleX, scaleY);
       
-      // Limit minimum scale to 0.65 to maintain readability
-      const finalScale = Math.max(newScale, 0.65);
+      // Limits to keep layout looking premium and highly readable
+      const minScale = portrait ? 0.65 : 0.85;
+      const maxScale = portrait ? 1.5 : 2.0;
+      const finalScale = Math.max(Math.min(newScale, maxScale), minScale);
       
-      setScale(Math.min(finalScale, 1.5));
+      setScale(finalScale);
       setIsPortrait(portrait);
     };
     
@@ -262,7 +266,7 @@ export default function RoomPage() {
   };
 
   return (
-    <div className="h-screen overflow-auto text-white flex flex-col relative items-center justify-center">
+    <div className="h-screen overflow-hidden text-white flex flex-col relative items-center justify-center">
       {state.error && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 text-sm">
           {state.error}

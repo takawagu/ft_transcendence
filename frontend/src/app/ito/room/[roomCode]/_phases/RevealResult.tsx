@@ -26,29 +26,25 @@ export function RevealResult({ state, myId, emit }: PhaseProps) {
   }
 
   return (
-    <div className="h-full w-full flex flex-col items-center gap-6 p-6 pt-10 max-w-2xl mx-auto">
+    <div className="h-full w-full flex flex-col items-center gap-6 p-6 pt-10 max-w-2xl mx-auto overflow-y-auto">
       {revealResult && (
         <>
           {/* Result banner */}
           <div className="text-center">
             {revealResult.success ? (
               <>
-                <p className="text-5xl mb-2">🎉</p>
-                <h2 className="text-3xl font-bold text-green-400">成功！</h2>
-                <p className="text-zinc-400 text-sm mt-1">見事に正しい順番に並べられました</p>
+                <h2 className="text-3xl font-bold text-green-400">大成功！</h2>
               </>
             ) : (
               <>
-                <p className="text-5xl mb-2">😢</p>
                 <h2 className="text-3xl font-bold text-red-400">失敗...</h2>
-                <p className="text-zinc-400 text-sm mt-1">順番が違っていました</p>
               </>
             )}
           </div>
 
           {/* Submitted order with card numbers */}
           <div className="w-full">
-            <p className="text-xs text-zinc-600 mb-3 font-semibold">提出した順番</p>
+            <p className="text-xs text-zinc-600 mb-3 font-semibold">並べた順番</p>
             <div className="flex flex-wrap justify-center gap-3">
               {revealResult.submittedOrder.map((pid, i) => {
                 const p = playerMap.get(pid);
@@ -57,7 +53,7 @@ export function RevealResult({ state, myId, emit }: PhaseProps) {
                 return (
                   <div
                     key={pid}
-                    className={`flex flex-col items-center gap-2 rounded-xl p-3 w-28 text-center transition-all duration-200 select-none ${
+                    className={`flex flex-col items-center gap-2 rounded-xl p-3 w-40 text-center transition-all duration-200 select-none ${
                       isCorrectPos
                         ? 'bg-green-950/30 ring-1 ring-green-600/80 shadow-lg shadow-green-900/5'
                         : 'bg-red-950/30 ring-1 ring-red-600/80 shadow-lg shadow-red-900/5'
@@ -73,24 +69,16 @@ export function RevealResult({ state, myId, emit }: PhaseProps) {
                       </span>
                     </div>
 
-                    {/* Image */}
-                    {p?.imageUrl ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
-                        src={p.imageUrl}
-                        alt={p?.name ?? ''}
-                        className="w-16 h-16 rounded-lg object-cover shadow-inner"
-                        draggable={false}
-                      />
-                    ) : (
-                      <div className="w-16 h-16 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-500 font-bold text-lg">
-                        {p?.name?.[0]}
-                      </div>
-                    )}
+                    {/* Prompt Content */}
+                    <div className="w-36 h-36 rounded-lg border border-cyan-500/20 bg-gradient-to-br from-[#0c1020] to-[#151c3c] flex flex-col items-center justify-center p-3 text-center select-none overflow-y-auto shadow-inner scrollbar-thin">
+                      <p className="font-semibold text-sm text-white break-words leading-tight">
+                        {p?.prompt || '未入力'}
+                      </p>
+                    </div>
 
                     {/* Name & number */}
                     <div className="w-full">
-                      <p className="text-sm font-medium text-white truncate">{p?.name}</p>
+                      <p className="text-sm font-semibold text-white truncate">{p?.name}</p>
                       {pid === myId && (
                         <p className="text-[10px] text-indigo-400 font-semibold truncate mt-0.5">あなた</p>
                       )}
@@ -112,23 +100,15 @@ export function RevealResult({ state, myId, emit }: PhaseProps) {
                   return (
                     <div
                       key={pid}
-                      className="flex flex-col items-center gap-2 bg-zinc-800/40 rounded-xl p-3 w-28 text-center ring-1 ring-zinc-700/50 select-none"
+                      className="flex flex-col items-center gap-2 bg-zinc-800/40 rounded-xl p-3 w-40 text-center ring-1 ring-zinc-700/50 select-none"
                     >
                       <p className="text-xs text-zinc-500 font-mono">{i + 1}番目</p>
-                      {p?.imageUrl ? (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img
-                          src={p.imageUrl}
-                          alt={p?.name ?? ''}
-                          className="w-10 h-10 rounded object-cover shadow-inner"
-                          draggable={false}
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center text-zinc-500 font-bold text-sm">
-                          {p?.name?.[0]}
-                        </div>
-                      )}
-                      <p className="text-xs font-medium text-white truncate w-full">{p?.name}</p>
+                      <div className="w-36 h-36 rounded border border-cyan-500/20 bg-gradient-to-br from-[#0c1020] to-[#151c3c] flex flex-col items-center justify-center p-3 text-center select-none overflow-y-auto shadow-inner scrollbar-thin">
+                        <p className="font-semibold text-sm text-white break-words leading-tight">
+                          {p?.prompt || '未入力'}
+                        </p>
+                      </div>
+                      <p className="text-xs font-semibold text-white truncate w-full">{p?.name}</p>
                       <p className="font-mono text-indigo-400 font-bold text-sm mt-0.5">{cardMap.get(pid)}</p>
                     </div>
                   );
