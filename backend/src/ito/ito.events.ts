@@ -11,7 +11,7 @@ export type RoomPhase =
   | 'ROUND_RESULT'
   | 'GAME_OVER';
 
-export type PlayerPhase = 'INPUT' | 'GENERATING' | 'DONE';
+export type PlayerPhase = 'INPUT' | 'DONE';
 
 /**
  * プレイヤーの参加状態。
@@ -33,6 +33,7 @@ export interface PlayerInGameInfo extends PlayerInfo {
   playerPhase?: PlayerPhase; // INPUT_GENERATING中のみ有効
   hasSubmittedPrompt: boolean; // 他プレイヤーから見える（プロンプト内容は非公開）
   imageUrl?: string; // SPEAKING以降で全員に公開
+  prompt?: string; // SPEAKING以降で全員に公開
   status: PlayerStatus;
   /** ホストが「復帰を待つ」を明示選択済み。表示専用でゲームロジックは参照しない */
   awaitingReturn: boolean;

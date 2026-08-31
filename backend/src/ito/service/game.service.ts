@@ -78,11 +78,17 @@ export class GameService {
     if (room.roomPhase !== 'INPUT_GENERATING' || room.paused) return;
     if (player.playerPhase !== 'INPUT') return;
 
-    player.prompt = payload.prompt;
-    player.hasSubmittedPrompt = true;
-    player.playerPhase = 'GENERATING';
+    // Validate prompt length (max 100 characters)
+    if (!payload.prompt || typeof payload.prompt !== 'string' || payload.prompt.trim().length === 0 || payload.prompt.trim().length > 100) {
+      client.emit('ito:error', { message: 'お題の回答は1文字以上100文字以内で入力してください。' });
+      return;
+    }
 
-    this.broadcast.emitPlayerPhaseChange(room.id, player.playerId, 'GENERATING');
+    player.prompt = payload.prompt.trim();
+    player.hasSubmittedPrompt = true;
+    player.playerPhase = 'DONE';
+
+    this.broadcast.emitPlayerPhaseChange(room.id, player.playerId, 'DONE');
 
     // 分子・分母の両方を除外者抜きで数える。片方だけにすると完了条件が永久に成立しなくなる。
     const active = activePlayers(room);
@@ -91,7 +97,7 @@ export class GameService {
       totalCount: active.length,
     });
 
-    this.stubGenerateImage(room, player.playerId);
+    this.advancePhaseIfComplete(room);
   }
 
   placeCard(client: Socket, payload: PlaceCardPayload) {
@@ -247,31 +253,6 @@ export class GameService {
     );
   }
 
-  private stubGenerateImage(room: ItoRoom, playerId: string) {
-    const delay = 1000 + Math.random() * 2000;
-    setTimeout(() => {
-      if (!this.store.hasRoom(room.id)) return;
-      const player = room.players.find((p) => p.playerId === playerId);
-      if (!player || player.playerPhase !== 'GENERATING') return;
-
-      player.imageUrl = `https://placehold.co/300x300/1a1a2e/00d4ff?text=${encodeURIComponent(player.name)}`;
-      player.playerPhase = 'DONE';
-
-      const active = activePlayers(room);
-
-      this.broadcast.emitPlayerPhaseChange(room.id, playerId, 'DONE');
-
-      this.broadcast.emitToRoom(room.id, ITO_EVENTS.IMAGE_GENERATED, {
-        playerId,
-        imageUrl: player.imageUrl,
-        generatedCount: active.filter((p) => p.playerPhase === 'DONE').length,
-        totalCount: active.length,
-      });
-
-      // ポーズ中ならここでは進めない。ホストが再開したときにまとめて消化される。
-      this.advancePhaseIfComplete(room);
-    }, delay);
-  }
 
   private transitionToSpeaking(room: ItoRoom) {
     room.roomPhase = 'SPEAKING';
