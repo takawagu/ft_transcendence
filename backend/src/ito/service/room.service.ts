@@ -222,7 +222,22 @@ export class RoomService {
 
     const player = room.players.find((p) => p.playerId === payload.playerId);
     if (!player) {
-      client.emit('ito:error', { message: '再参加できませんでした' });
+      // WAITINGは席を保持しない設計（handleDisconnect/leaveRoomが物理削除する）なので、
+      // ここで見つからないのは異常ではなく正常系。新規参加に倒す。
+      // 逆にWAITING以外で見つからない＝purgeExcludedで掃除済み＝戻してはいけない人。
+      if (room.roomPhase === 'WAITING' && payload.playerName) {
+        this.joinRoom(client, {
+          roomCode: payload.roomCode,
+          playerId: payload.playerId,
+          playerName: payload.playerName,
+        });
+        return;
+      }
+      // 「未参加の人が開始済みの部屋に入ろうとした」場合と区別が付かない
+      // （purgeExcludedは痕跡を残さない）ので、両方に通じる文言にする
+      client.emit('ito:error', {
+        message: 'ゲームが進行中のため参加できません',
+      });
       return;
     }
 
