@@ -15,12 +15,13 @@ export function isInviteExpired(createdAt: string): boolean {
 }
 
 /**
- * 招待からルームへ参加する。手順はホーム画面の handleJoinRoom に揃えたうえで、
- * 古いルームセッションの削除を1手加えている。
+ * 招待からルームへ参加する。手順はホーム画面の handleJoinRoom と同じ。
  *
- * `ito_room_session` を消すのは、直前に別のルームに居た場合にルームページの
- * 再接続分岐へ紛れ込むのを防ぐため。現状は roomCode の比較で弾かれるものの、
- * 招待でルームを渡り歩く導線ができる以上、明示的に捨ててから遷移する。
+ * かつてここは `ito_room_session` を消してから遷移していた。ルームページが
+ * 「参加済みかどうか」をクライアント側の記録で判定していた頃の名残で、
+ * その判定自体が誤り（記録の有無で復帰/新規参加を当てにいくと必ずどちらかを
+ * 取り逃す）だったため廃止した。今はルームページが常に ito:rejoin を送り、
+ * 席を持っているサーバ側が復帰か新規参加かを決める。
  *
  * 期限内でもルームが既に消えていることはある。その場合は参加後に既存の
  * ito:error「ルームが見つかりません」が出る（これを正規の失敗経路とする）。
@@ -30,7 +31,6 @@ export function joinInvitedRoom(
   username: string,
   router: ReturnType<typeof useRouter>,
 ) {
-  sessionStorage.removeItem('ito_room_session');
   sessionStorage.setItem('ito_player_name', username);
   router.push(`/ito/room/${roomCode}`);
 }

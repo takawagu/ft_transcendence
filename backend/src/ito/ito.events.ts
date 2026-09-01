@@ -190,6 +190,11 @@ export class SendChatPayload {
 export class RejoinPayload {
   roomCode: string;
   playerId: string;
+  /**
+   * WAITING中は席が保持されないため、復帰ではなく新規参加にフォールバックする。
+   * その際に名前が要る。省略時はフォールバックせず通常の失敗として扱う（旧クライアント互換）。
+   */
+  playerName?: string;
 }
 
 export class ExcludePlayerPayload {

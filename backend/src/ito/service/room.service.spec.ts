@@ -214,4 +214,98 @@ describe('RoomService disconnect handling', () => {
     expect(owner?.status).toBe('ACTIVE');
     expect(owner?.playerId).not.toBe('a');
   });
+
+  /**
+   * WAITINGは席を保持しない（handleDisconnect/leaveRoomが物理削除する）ので、
+   * rejoin時に「playersに居ない」のは正常系。ここを弾くと退室後の再入室と
+   * ロビーでのリロードが両方詰む。
+   */
+  describe('rejoin in WAITING', () => {
+    function seedLobby(ids = ['a', 'b']): ItoRoom {
+      const room = makeRoom({
+        roomPhase: 'WAITING',
+        currentRound: 0,
+        players: ids.map((id, i) => makePlayer({ playerId: id, isRoomOwner: i === 0 })),
+      });
+      store.addRoom(room);
+      for (const p of room.players) {
+        store.linkSocket(p.socketId!, room.id, p.playerId);
+      }
+      return room;
+    }
+
+    it('re-seats a player who left the lobby and came back with the same code', () => {
+      const room = seedLobby();
+      service.leaveRoom(fakeSocket('sock-b'));
+      expect(room.players.map((p) => p.playerId)).toEqual(['a']);
+
+      const returning = fakeSocket('sock-b2');
+      service.rejoin(returning, { roomCode: 'ABC123', playerId: 'b', playerName: 'pb' });
+
+      expect(room.players.map((p) => p.playerId)).toEqual(['a', 'b']);
+      expect(returning.emit).not.toHaveBeenCalledWith('ito:error', expect.anything());
+      expect(store.resolve('sock-b2')?.player.playerId).toBe('b');
+    });
+
+    it('re-seats a player who reloaded the lobby page', () => {
+      const room = seedLobby();
+      service.handleDisconnect('sock-b');
+      expect(room.players.map((p) => p.playerId)).toEqual(['a']);
+
+      service.rejoin(fakeSocket('sock-b2'), {
+        roomCode: 'ABC123',
+        playerId: 'b',
+        playerName: 'pb',
+      });
+
+      expect(room.players.map((p) => p.playerId)).toEqual(['a', 'b']);
+    });
+
+    it('does not re-seat someone who is missing from a started game', () => {
+      // purgeExcludedで掃除された後の状態。戻してはいけない人
+      seedRoom(['a', 'c']);
+      const ghost = fakeSocket('sock-b2');
+
+      service.rejoin(ghost, { roomCode: 'ABC123', playerId: 'b', playerName: 'pb' });
+
+      expect(ghost.emit).toHaveBeenCalledWith('ito:error', expect.anything());
+      expect(store.resolve('sock-b2')).toBeUndefined();
+    });
+
+    it('seats a first-time joiner arriving through the rejoin path', () => {
+      // クライアントは初回参加とリロードを区別せず常にrejoinを送る
+      const room = seedLobby(['a']);
+
+      service.rejoin(fakeSocket('sock-z'), {
+        roomCode: 'ABC123',
+        playerId: 'z',
+        playerName: 'pz',
+      });
+
+      expect(room.players.map((p) => p.playerId)).toEqual(['a', 'z']);
+      expect(room.players.find((p) => p.playerId === 'z')?.isRoomOwner).toBe(false);
+    });
+
+    it('still refuses a duplicate seat for a player already in the lobby', () => {
+      const room = seedLobby();
+      const dupe = fakeSocket('sock-dupe');
+
+      service.rejoin(dupe, { roomCode: 'ABC123', playerId: 'b', playerName: 'pb' });
+
+      // 既に席がある＝rejoin本来の経路。joinRoomの重複チェックには落ちない
+      expect(room.players.filter((p) => p.playerId === 'b')).toHaveLength(1);
+      expect(room.players.find((p) => p.playerId === 'b')?.socketId).toBe('sock-dupe');
+    });
+
+    it('falls back to the plain failure when the client sends no name', () => {
+      const room = seedLobby();
+      service.leaveRoom(fakeSocket('sock-b'));
+
+      const returning = fakeSocket('sock-b2');
+      service.rejoin(returning, { roomCode: 'ABC123', playerId: 'b' });
+
+      expect(returning.emit).toHaveBeenCalledWith('ito:error', expect.anything());
+      expect(room.players.map((p) => p.playerId)).toEqual(['a']);
+    });
+  });
 });

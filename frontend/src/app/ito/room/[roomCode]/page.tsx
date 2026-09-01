@@ -29,6 +29,8 @@ export default function RoomPage() {
   const [myId, setMyId] = useState('');
   const [dissolved, setDissolved] = useState(false);
   const [abortedReason, setAbortedReason] = useState<string | null>(null);
+  /** 入室そのものに失敗した理由。トーストと違い、画面を先に進めさせない */
+  const [entryError, setEntryError] = useState<string | null>(null);
   const [state, setState] = useState<GameState>({
     roomCode: '',
     roomPhase: 'WAITING',
@@ -88,25 +90,29 @@ export default function RoomPage() {
     const playerId = String(userObj.id);
     setMyId(playerId);
 
-    const savedSessionRaw = sessionStorage.getItem('ito_room_session');
-    const savedSession = savedSessionRaw ? JSON.parse(savedSessionRaw) : null;
-
     const socket = io(`${BACKEND_URL}/ito`);
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      const totalRounds = parseInt(sessionStorage.getItem('ito_total_rounds') || '3', 10);
-      if (joinedRoomCodeRef.current) {
-        // 同一ページ内でのsocket.io自動再接続: 既に参加済みの部屋へ再接続する
-        socket.emit('ito:rejoin', { roomCode: joinedRoomCodeRef.current, playerId });
-      } else if (!isCreating && savedSession && savedSession.roomCode === routeRoomCode) {
-        // ページリロード後: sessionStorageに記録された同じ部屋へ再接続する
-        socket.emit('ito:rejoin', { roomCode: savedSession.roomCode, playerId });
-      } else if (isCreating) {
+      // まだ部屋が無い(=/new)ときだけ作成。作成後の自動再接続はjoinedRoomCodeRefで拾う
+      if (isCreating && !joinedRoomCodeRef.current) {
+        const totalRounds = parseInt(sessionStorage.getItem('ito_total_rounds') || '3', 10);
         socket.emit('ito:createRoom', { playerName, playerId, totalRounds });
-      } else {
-        socket.emit('ito:joinRoom', { roomCode: routeRoomCode, playerName, playerId });
+        return;
       }
+      /*
+       * 部屋コードが分かっているなら、初回参加・リロード・自動再接続を区別せず常にrejoinを送る。
+       * 「復帰すべきか新規参加か」を判断できるのは席を持っているサーバだけで、
+       * クライアント側の状態(sessionStorage)で当てにいくと必ずどちらかに倒し損ねる:
+       *   - 記録が残りすぎる(退室後の同コード再入室) → 復帰扱いで弾かれる
+       *   - 記録が足りない(別タブ・招待経由)         → 新規参加扱いで「開始済み」に弾かれる
+       * サーバはWAITINGで席が無ければjoinRoomへ倒すので、この1本で両方賄える。
+       */
+      socket.emit('ito:rejoin', {
+        roomCode: joinedRoomCodeRef.current ?? routeRoomCode,
+        playerId,
+        playerName,
+      });
     });
 
     socket.on('ito:roomState', (data: any) => {
@@ -127,7 +133,6 @@ export default function RoomPage() {
         window.history.replaceState(null, '', `/ito/room/${data.roomCode}`);
       }
       joinedRoomCodeRef.current = data.roomCode;
-      sessionStorage.setItem('ito_room_session', JSON.stringify({ roomCode: data.roomCode, playerId }));
     });
 
     socket.on('ito:resyncState', (data: any) => {
@@ -147,7 +152,6 @@ export default function RoomPage() {
         totalRounds: data.totalRounds,
       }));
       joinedRoomCodeRef.current = data.roomCode;
-      sessionStorage.setItem('ito_room_session', JSON.stringify({ roomCode: data.roomCode, playerId }));
     });
 
     socket.on('ito:phaseChange', (data: any) => {
@@ -211,6 +215,13 @@ export default function RoomPage() {
     });
 
     socket.on('ito:error', (data: any) => {
+      // 一度も入室できていない状態でのエラーは復帰不能。トーストで流すと
+      // 画面が「接続中...」のまま固まり、ユーザーには操作不能にしか見えない
+      if (!joinedRoomCodeRef.current) {
+        setEntryError(data.message ?? 'ルームに参加できませんでした');
+        setTimeout(() => router.push('/'), 3000);
+        return;
+      }
       setState(prev => ({ ...prev, error: data.message }));
       setTimeout(() => setState(prev => ({ ...prev, error: undefined })), 3000);
     });
@@ -273,34 +284,15 @@ export default function RoomPage() {
         </div>
       )}
       {dissolved && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-zinc-800 rounded-2xl p-10 flex flex-col items-center gap-6 shadow-2xl">
-            <p className="text-xl font-bold text-white">部屋が解散されました</p>
-            <p className="text-zinc-400 text-sm">まもなくトップへ戻ります...</p>
-            <button
-              onClick={() => router.push('/')}
-              className="rounded-lg bg-indigo-600 px-6 py-2 font-semibold text-white hover:bg-indigo-500 transition-colors"
-            >
-              今すぐ戻る
-            </button>
-          </div>
-        </div>
+        <ExitDialog message="部屋が解散されました" onBack={() => router.push('/')} />
       )}
       {abortedReason && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-zinc-800 rounded-2xl p-10 flex flex-col items-center gap-6 shadow-2xl">
-            <p className="text-xl font-bold text-white">{abortedReason}</p>
-            <p className="text-zinc-400 text-sm">まもなくトップへ戻ります...</p>
-            <button
-              onClick={() => router.push('/')}
-              className="rounded-lg bg-indigo-600 px-6 py-2 font-semibold text-white hover:bg-indigo-500 transition-colors"
-            >
-              今すぐ戻る
-            </button>
-          </div>
-        </div>
+        <ExitDialog message={abortedReason} onBack={() => router.push('/')} />
       )}
-      {state.paused && !abortedReason && (
+      {entryError && (
+        <ExitDialog message={entryError} onBack={() => router.push('/')} />
+      )}
+      {state.paused && !abortedReason && !entryError && (
         <PauseOverlay state={state} myId={myId} emit={emit} />
       )}
 
@@ -316,6 +308,24 @@ export default function RoomPage() {
         }}
       >
         {renderPhase()}
+      </div>
+    </div>
+  );
+}
+
+/** 部屋から出る以外にやることが無い状態（解散・中断・入室失敗）の全画面表示 */
+function ExitDialog({ message, onBack }: { message: string; onBack: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-zinc-800 rounded-2xl p-10 flex flex-col items-center gap-6 shadow-2xl max-w-md">
+        <p className="text-xl font-bold text-white text-center">{message}</p>
+        <p className="text-zinc-400 text-sm">まもなくトップへ戻ります...</p>
+        <button
+          onClick={onBack}
+          className="rounded-lg bg-indigo-600 px-6 py-2 font-semibold text-white hover:bg-indigo-500 transition-colors"
+        >
+          今すぐ戻る
+        </button>
       </div>
     </div>
   );
