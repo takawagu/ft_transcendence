@@ -191,5 +191,23 @@ section 3 の復元範囲は`ROOM_STATE`に足りないものを補う形で決�
 - **サーバから切断はしない**。クライアントのsocket.ioが自動再接続して`rejoin`を送り直し、
   2つのタブが席を奪い合い続けるため。切断の判断は通知を受けた側に委ねる
 - **席がACTIVEでもrejoinは拒否しない**。通信が切れてからサーバが切断を検知するまでには
-  間があり（ping timeout）、その間の再接続を弾くと「復帰できない」が再発する。
+  間があり（`/presence`のping設定がengine.io全体に効くため最大約18秒）、
+  その間の再接続を弾くと「復帰できない」が再発する。
   奪い合いではなく「後から来た接続が正」と決め打つ
+
+**5. `/ito` 名前空間を認証必須にし、playerIdをトークンから導出するようにした**
+
+`playerId`はクライアントが送ってくる値をそのまま使っていた。`/ito`にはハンドシェイクの
+検証が一切無かったため、**roomCodeと他人のuserIdを知っているだけで進行中の席を奪え、
+`RESYNC_STATE`でその人の手札番号まで読めた**。上の「後から来た接続が正」という決め方は、
+名乗りが検証されて初めて安全になる。
+
+- `handleConnection`でハンドシェイクのJWTを検証し、通らない接続は切る（`/presence`と同じ扱い）
+- 解決した`userId`を`client.data.playerId`に固定し、`createRoom`/`joinRoom`/`rejoin`は
+  **ゲートウェイがこの値で payload の`playerId`を上書きしてから**サービスに渡す。
+  クライアントが名乗る`playerId`はどこにも届かない
+- `ito:excludePlayer`/`ito:awaitReturn`の`playerId`は「名乗り」ではなく「操作の対象」なので
+  上書きしない（権限はホスト判定と`DISCONNECTED`判定で担保済み）
+- トークン検証は`AuthService.userIdFromToken`に集約し、`/presence`側の実装もこれに寄せた
+- 残る穴: `playerName`は依然クライアント申告のまま。トークンにusernameが無く、
+  解決するとjoin/createがDBアクセスを伴うため見送った。席は奪えないので影響は表示名の詐称のみ

@@ -9,6 +9,7 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { AuthService } from '../auth/auth.service';
 import { RoomService } from './service/room.service';
 import { GameService } from './service/game.service';
 import { BroadcastService } from './service/broadcast.service';
@@ -26,6 +27,12 @@ import {
   AwaitReturnPayload,
 } from './ito.events';
 
+/** 接続後にsocketへ保持する情報 */
+interface ItoSocketData {
+  /** ハンドシェイクのJWTから導出した本人のplayerId。認証済みの接続には必ず入る */
+  playerId?: string;
+}
+
 @WebSocketGateway({ namespace: '/ito', cors: { origin: '*' } })
 export class ItoGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
@@ -37,6 +44,7 @@ export class ItoGateway
     private readonly roomService: RoomService,
     private readonly gameService: GameService,
     private readonly broadcastService: BroadcastService,
+    private readonly authService: AuthService,
   ) {}
 
   afterInit(server: Server) {
@@ -44,7 +52,26 @@ export class ItoGateway
   }
 
   handleConnection(client: Socket) {
-    console.log(`[ITO] connected: ${client.id}`);
+    const userId = this.authService.userIdFromToken(client.handshake.auth?.token);
+    if (userId === undefined) {
+      // 認証できない接続は保持しない（presence gatewayと同じ扱い）
+      client.disconnect();
+      return;
+    }
+
+    // playerIdはここで一度だけ確定させる。以降クライアントが名乗る値は一切見ない
+    (client.data as ItoSocketData).playerId = String(userId);
+    console.log(`[ITO] connected: ${client.id} (player ${userId})`);
+  }
+
+  /**
+   * この接続の本人のplayerId。
+   * クライアントが送ってくるplayerIdを信用すると、roomCodeと他人のuserIdを知っているだけで
+   * 進行中の席を奪えてしまい、RESYNC_STATEでその人の手札番号まで読めてしまう。
+   * 認証できない接続はhandleConnectionで切っているので、ここでは必ず値が入っている。
+   */
+  private playerIdOf(client: Socket): string {
+    return (client.data as ItoSocketData).playerId!;
   }
 
   handleDisconnect(client: Socket) {
@@ -57,7 +84,12 @@ export class ItoGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: CreateRoomPayload,
   ) {
-    this.roomService.createRoom(client, payload.playerName, payload.playerId, payload.totalRounds);
+    this.roomService.createRoom(
+      client,
+      payload.playerName,
+      this.playerIdOf(client),
+      payload.totalRounds,
+    );
   }
 
   @SubscribeMessage(ITO_EVENTS.JOIN_ROOM)
@@ -65,7 +97,10 @@ export class ItoGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: JoinRoomPayload,
   ) {
-    this.roomService.joinRoom(client, payload);
+    this.roomService.joinRoom(client, {
+      ...payload,
+      playerId: this.playerIdOf(client),
+    });
   }
 
   @SubscribeMessage(ITO_EVENTS.LEAVE_ROOM)
@@ -133,7 +168,10 @@ export class ItoGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: RejoinPayload,
   ) {
-    this.roomService.rejoin(client, payload);
+    this.roomService.rejoin(client, {
+      ...payload,
+      playerId: this.playerIdOf(client),
+    });
   }
 
   @SubscribeMessage(ITO_EVENTS.EXCLUDE_PLAYER)

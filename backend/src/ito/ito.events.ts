@@ -157,6 +157,14 @@ export const ITO_EVENTS = {
 
 // ===== ペイロード型（Client → Server） =====
 
+/**
+ * 「自分は誰か」を表すplayerIdは、どのペイロードでも**ゲートウェイが
+ * ハンドシェイクのJWTから埋める**。クライアントが送っても捨てられる。
+ * 信用すると、roomCodeと他人のuserIdを知っているだけで席を奪えてしまうため。
+ *
+ * 一方 ExcludePlayerPayload / AwaitReturnPayload のplayerIdは「操作の対象」であって
+ * 名乗りではないので上書きしない（権限はホスト判定と切断中判定で担保している）。
+ */
 export class CreateRoomPayload {
   playerName: string;
   playerId: string;

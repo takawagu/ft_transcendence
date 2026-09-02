@@ -97,14 +97,15 @@ export default function RoomPage() {
     const playerId = String(userObj.id);
     setMyId(playerId);
 
-    const socket = io(`${BACKEND_URL}/ito`);
+    // playerIdはサーバがこのトークンから導出する。以降クライアントは名乗らない
+    const socket = io(`${BACKEND_URL}/ito`, { auth: { token: storedToken } });
     socketRef.current = socket;
 
     socket.on('connect', () => {
       // まだ部屋が無い(=/new)ときだけ作成。作成後の自動再接続はjoinedRoomCodeRefで拾う
       if (isCreating && !joinedRoomCodeRef.current) {
         const totalRounds = parseInt(sessionStorage.getItem('ito_total_rounds') || '3', 10);
-        socket.emit('ito:createRoom', { playerName, playerId, totalRounds });
+        socket.emit('ito:createRoom', { playerName, totalRounds });
         return;
       }
       /*
@@ -117,9 +118,16 @@ export default function RoomPage() {
        */
       socket.emit('ito:rejoin', {
         roomCode: joinedRoomCodeRef.current ?? routeRoomCode,
-        playerId,
         playerName,
       });
+    });
+
+    socket.on('disconnect', reason => {
+      // サーバが明示的に切るのは認証に失敗したときだけ（席を奪われた場合は切らない）。
+      // 拾わないと画面が「接続中...」のまま固まる
+      if (reason === 'io server disconnect') {
+        leaveWith('認証に失敗しました。ログインし直してください');
+      }
     });
 
     socket.on('ito:roomState', (data: any) => {
