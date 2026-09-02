@@ -63,6 +63,7 @@ services:
       NEXT_PUBLIC_API_URL: ""
       NEXT_PUBLIC_WS_URL: ""
       ALLOWED_DEV_ORIGIN: ${LAN_IP:-}
+      NEXT_PUBLIC_SHOW_DEV_LOGIN: ${SHOW_DEV_LOGIN:-false}
     volumes:
       - ./frontend:/app
       - /app/node_modules

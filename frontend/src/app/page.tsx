@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSession, type User } from '@/lib/session';
 import { usePresence } from '@/lib/presence';
@@ -28,6 +29,9 @@ const SEARCH_MIN_LENGTH = 2;
 export default function HomePage() {
   const router = useRouter();
 
+  // DEVアカウント表示フラグ（本番では非表示、make test 時のみ表示）
+  const showDevLogin = process.env.NEXT_PUBLIC_SHOW_DEV_LOGIN === 'true';
+
   // Auth states — 遷移をまたいで保つため layout の SessionProvider が持つ
   const { mounted, token, user, login, logout, updateUser, apiCall } = useSession();
   // Presence (online status) — /presence 名前空間から配信される。接続も Provider 側
@@ -36,6 +40,7 @@ export default function HomePage() {
   const totalUnread = [...unreadCounts.values()].reduce((sum, n) => sum + n, 0);
 
   const [isLoginTab, setIsLoginTab] = useState(true);
+  const [authModal, setAuthModal] = useState<'login' | 'register' | null>(null);
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [registerSuccessMsg, setRegisterSuccessMsg] = useState('');
@@ -245,6 +250,7 @@ export default function HomePage() {
     setPassword('');
     setBio('');
     setRegisterSuccessMsg('');
+    setAuthModal(null);
   };
 
   // Room Actions
@@ -410,202 +416,316 @@ export default function HomePage() {
   // --- TITLE SCREEN (Not logged in) ---
   if (!token || !user) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center bg-zinc-950 text-white relative overflow-hidden px-4">
-        {/* Decorative background glow */}
-        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-indigo-900/20 rounded-full blur-[120px] pointer-events-none"></div>
-        <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-purple-900/20 rounded-full blur-[120px] pointer-events-none"></div>
+      <main className="min-h-screen flex flex-col justify-between items-center bg-[#050811] text-white relative overflow-hidden px-4 py-6 select-none font-sans">
+        {/* Fullscreen Game Background Image */}
+        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
+          {/* Shift image container further up so '4ito' logo sits higher */}
+          <div className="absolute inset-x-0 -top-[22vh] sm:-top-[26vh] h-[125vh]">
+            <Image
+              src="/title-bg.jpg"
+              alt="4ito Title Background"
+              fill
+              priority
+              className="object-cover object-center scale-100 opacity-100 brightness-110 contrast-105"
+            />
+          </div>
+          {/* Subtle bottom fade to seamlessly blend into background */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#050811] via-transparent to-transparent pointer-events-none" />
+        </div>
 
-        <div className="w-full max-w-md bg-zinc-900/70 border border-zinc-800/80 backdrop-blur-md rounded-2xl shadow-2xl p-8 z-10">
-          <div className="text-center mb-8">
-            <h1 className="text-6xl font-extrabold tracking-widest bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 drop-shadow-md animate-pulse">
-              AITO
-            </h1>
-            <p className="text-zinc-400 text-sm mt-3 tracking-wide">
-              数字を言葉で表現し合う、緊迫の協力型カードゲーム
-            </p>
+        {/* Top spacer: Change this height (e.g. h-[40vh], h-[42vh]) to directly move buttons up/down */}
+        <div className="h-[65vh] w-full shrink-0" />
+
+        {/* Action Menu Buttons */}
+        <div className="z-10 text-center max-w-xl w-full mx-auto space-y-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
+            <button
+              type="button"
+              onClick={() => {
+                setIsLoginTab(true);
+                setAuthModal('login');
+                setAuthError('');
+                setRegisterSuccessMsg('');
+              }}
+              className="w-full sm:w-60 py-4 px-8 rounded-2xl font-bold text-base tracking-wide transition-all duration-200 flex items-center justify-center gap-2.5 bg-zinc-900/90 hover:bg-zinc-800 text-white border border-white/40 hover:border-white/80 shadow-2xl backdrop-blur-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+              </svg>
+              ログイン
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsLoginTab(false);
+                setAuthModal('register');
+                setAuthError('');
+                setRegisterSuccessMsg('');
+              }}
+              className="w-full sm:w-60 py-4 px-8 rounded-2xl font-bold text-base tracking-wide transition-all duration-200 flex items-center justify-center gap-2.5 bg-zinc-900/90 hover:bg-zinc-800 text-white border border-white/40 hover:border-white/80 shadow-2xl backdrop-blur-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+              新規登録
+            </button>
           </div>
 
-          {registerSuccessMsg ? (
-            <div className="py-10 text-center space-y-3">
-              <p className="text-2xl">{registerSuccessMsg}</p>
-              <p className="text-zinc-400 text-sm">ホーム画面に移動します...</p>
+          {/* Quick Dev Login (make test 時のみ表示) */}
+          {showDevLogin && (
+            <div className="flex items-center justify-center gap-2 pt-1">
+              <span className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider">DEV:</span>
+              <button
+                type="button"
+                onClick={() => handleDevLogin(1)}
+                disabled={loading}
+                className="px-3 py-1 rounded-md bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200 text-xs font-mono transition-all cursor-pointer"
+              >
+                Dev1 🚀
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDevLogin(2)}
+                disabled={loading}
+                className="px-3 py-1 rounded-md bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200 text-xs font-mono transition-all cursor-pointer"
+              >
+                Dev2 👾
+              </button>
             </div>
-          ) : (
-            <>
-              {/* Form Tabs */}
-              <div className="flex border-b border-zinc-800 mb-6">
-                <button
-                  onClick={() => {
-                    setIsLoginTab(true);
-                    setAuthError('');
-                    setRegisterSuccessMsg('');
-                  }}
-                  className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 ${isLoginTab
-                    ? 'text-indigo-400 border-b-2 border-indigo-500 font-bold'
-                    : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                >
-                  ログイン
-                </button>
-                <button
-                  onClick={() => {
-                    setIsLoginTab(false);
-                    setAuthError('');
-                    setRegisterSuccessMsg('');
-                  }}
-                  className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 ${!isLoginTab
-                    ? 'text-indigo-400 border-b-2 border-indigo-500 font-bold'
-                    : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                >
-                  新規登録
-                </button>
-              </div>
-
-              <form onSubmit={handleAuthSubmit} className="space-y-4">
-                {authError && (
-                  <div className="p-3 bg-red-950/60 border border-red-800 text-red-300 rounded-lg text-xs leading-relaxed">
-                    {authError}
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-                    メールアドレス
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="example@email.com"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
-                  />
-                  {!isLoginTab && emailStatus !== 'idle' && (
-                    <p className={`mt-1 text-xs ${emailStatus === 'taken' ? 'text-red-400' :
-                      emailStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
-                      }`}>
-                      {emailStatus === 'checking' && '確認中...'}
-                      {emailStatus === 'taken' && 'そのメールアドレスはすでに使われています'}
-                      {emailStatus === 'available' && '使用可能です'}
-                    </p>
-                  )}
-                </div>
-
-                {!isLoginTab && (
-                  <div>
-                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-                      ユーザー名
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="ゲームに表示される名前"
-                      maxLength={30}
-                      value={username}
-                      onChange={e => setUsername(e.target.value)}
-                      className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
-                    />
-                    {usernameStatus !== 'idle' && (
-                      <p className={`mt-1 text-xs ${usernameStatus === 'taken' ? 'text-red-400' :
-                        usernameStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
-                        }`}>
-                        {usernameStatus === 'checking' && '確認中...'}
-                        {usernameStatus === 'taken' && 'そのユーザー名はすでに使われています'}
-                        {usernameStatus === 'available' && '使用可能です'}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-                    パスワード
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
-                  />
-                  {!isLoginTab && password.length > 0 && (
-                    <p className={`mt-1 text-xs ${password.length >= 8 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {password.length >= 8 ? '使用可能な長さです' : `あと${8 - password.length}文字以上必要です（8文字以上）`}
-                    </p>
-                  )}
-                </div>
-
-                {!isLoginTab && (
-                  <div className="text-xs text-zinc-500 text-center mt-2 mb-2">
-                    アカウントを登録することで、
-                    <button type="button" onClick={() => setActiveModal('terms')} className="text-indigo-400 hover:text-indigo-300 underline cursor-pointer mx-1">利用規約</button>
-                    と
-                    <button type="button" onClick={() => setActiveModal('privacy')} className="text-indigo-400 hover:text-indigo-300 underline cursor-pointer mx-1">プライバシーポリシー</button>
-                    に同意したものとみなされます。
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={
-                    loading ||
-                    (!isLoginTab && (
-                      usernameStatus === 'taken' ||
-                      usernameStatus === 'checking' ||
-                      emailStatus === 'taken' ||
-                      emailStatus === 'checking' ||
-                      password.length < 8
-                    ))
-                  }
-                  className="w-full mt-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-4 py-3 font-semibold text-sm text-white disabled:opacity-50 transition-all shadow-lg hover:shadow-indigo-500/20 hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>
-                      通信中...
-                    </>
-                  ) : isLoginTab ? (
-                    'ログイン'
-                  ) : (
-                    'アカウント登録して開始'
-                  )}
-                </button>
-
-                <div className="relative flex py-2 items-center">
-                  <div className="flex-grow border-t border-zinc-800/80"></div>
-                  <span className="flex-shrink mx-4 text-zinc-500 text-xs uppercase tracking-wider font-semibold">開発者テスト</span>
-                  <div className="flex-grow border-t border-zinc-800/80"></div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleDevLogin(1)}
-                    disabled={loading}
-                    className="flex-1 rounded-lg bg-zinc-850 hover:bg-zinc-800 border border-zinc-700 px-3 py-2.5 font-bold text-xs text-indigo-400 transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    Dev1 🚀
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDevLogin(2)}
-                    disabled={loading}
-                    className="flex-1 rounded-lg bg-zinc-850 hover:bg-zinc-800 border border-zinc-700 px-3 py-2.5 font-bold text-xs text-purple-400 transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    Dev2 👾
-                  </button>
-                </div>
-              </form>
-            </>
           )}
         </div>
 
-        <footer className="absolute bottom-6 w-full flex justify-center gap-6 z-10">
-          <button type="button" onClick={() => setActiveModal('terms')} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer">利用規約</button>
-          <button type="button" onClick={() => setActiveModal('privacy')} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer">プライバシーポリシー</button>
+        {/* Bottom spacer absorbing the remaining space down to the footer */}
+        <div className="flex-1 w-full" />
+
+        {/* Footer */}
+        <footer className="z-10 flex justify-center gap-6 py-2">
+          <button type="button" onClick={() => setActiveModal('terms')} className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">利用規約</button>
+          <span className="text-zinc-600 text-xs">•</span>
+          <button type="button" onClick={() => setActiveModal('privacy')} className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">プライバシーポリシー</button>
         </footer>
+
+        {/* --- AUTH MODAL (Login / Register Modal) --- */}
+        {authModal && (
+          <div
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center px-4 animate-in fade-in duration-200"
+            onClick={() => setAuthModal(null)}
+          >
+            <div
+              className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 relative z-10 animate-in zoom-in-95 duration-200 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => setAuthModal(null)}
+                className="absolute top-4 right-4 text-zinc-400 hover:text-white p-1.5 rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
+                title="閉じる"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-bold tracking-tight text-white">
+                  {isLoginTab ? 'ログイン' : '新規登録'}
+                </h2>
+                <p className="text-xs text-zinc-400 mt-1">
+                  {isLoginTab ? 'アカウント情報を入力してください' : 'アカウントを作成してゲームを開始します'}
+                </p>
+              </div>
+
+              {registerSuccessMsg ? (
+                <div className="py-10 text-center space-y-3">
+                  <p className="text-2xl">{registerSuccessMsg}</p>
+                  <p className="text-zinc-400 text-sm">ホーム画面に移動します...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Form Tabs */}
+                  <div className="flex border-b border-zinc-800 mb-6">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsLoginTab(true);
+                        setAuthError('');
+                        setRegisterSuccessMsg('');
+                      }}
+                      className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 cursor-pointer ${
+                        isLoginTab
+                          ? 'text-white border-b-2 border-white font-bold'
+                          : 'text-zinc-500 hover:text-zinc-300'
+                      }`}
+                    >
+                      ログイン
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsLoginTab(false);
+                        setAuthError('');
+                        setRegisterSuccessMsg('');
+                      }}
+                      className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 cursor-pointer ${
+                        !isLoginTab
+                          ? 'text-white border-b-2 border-white font-bold'
+                          : 'text-zinc-500 hover:text-zinc-300'
+                      }`}
+                    >
+                      新規登録
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleAuthSubmit} className="space-y-4">
+                    {authError && (
+                      <div className="p-3 bg-red-950/60 border border-red-800 text-red-300 rounded-lg text-xs leading-relaxed">
+                        {authError}
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-1.5">
+                        メールアドレス
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="example@email.com"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 transition-all text-sm"
+                      />
+                      {!isLoginTab && emailStatus !== 'idle' && (
+                        <p className={`mt-1 text-xs ${
+                          emailStatus === 'taken' ? 'text-red-400' :
+                          emailStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
+                        }`}>
+                          {emailStatus === 'checking' && '確認中...'}
+                          {emailStatus === 'taken' && 'そのメールアドレスはすでに使われています'}
+                          {emailStatus === 'available' && '使用可能です'}
+                        </p>
+                      )}
+                    </div>
+
+                    {!isLoginTab && (
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-1.5">
+                          ユーザー名
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="ゲームに表示される名前"
+                          maxLength={30}
+                          value={username}
+                          onChange={e => setUsername(e.target.value)}
+                          className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 transition-all text-sm"
+                        />
+                        {usernameStatus !== 'idle' && (
+                          <p className={`mt-1 text-xs ${
+                            usernameStatus === 'taken' ? 'text-red-400' :
+                            usernameStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
+                          }`}>
+                            {usernameStatus === 'checking' && '確認中...'}
+                            {usernameStatus === 'taken' && 'そのユーザー名はすでに使われています'}
+                            {usernameStatus === 'available' && '使用可能です'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-1.5">
+                        パスワード
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 transition-all text-sm"
+                      />
+                      {!isLoginTab && password.length > 0 && (
+                        <p className={`mt-1 text-xs ${password.length >= 8 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {password.length >= 8 ? '使用可能な長さです' : `あと${8 - password.length}文字以上必要です（8文字以上）`}
+                        </p>
+                      )}
+                    </div>
+
+                    {!isLoginTab && (
+                      <div className="text-xs text-zinc-500 text-center mt-2 mb-2">
+                        アカウントを登録することで、
+                        <button type="button" onClick={() => setActiveModal('terms')} className="text-zinc-300 hover:text-white underline cursor-pointer mx-1">利用規約</button>
+                        と
+                        <button type="button" onClick={() => setActiveModal('privacy')} className="text-zinc-300 hover:text-white underline cursor-pointer mx-1">プライバシーポリシー</button>
+                        に同意したものとみなされます。
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={
+                        loading ||
+                        (!isLoginTab && (
+                          usernameStatus === 'taken' ||
+                          usernameStatus === 'checking' ||
+                          emailStatus === 'taken' ||
+                          emailStatus === 'checking' ||
+                          password.length < 8
+                        ))
+                      }
+                      className="w-full mt-2 rounded-lg bg-white hover:bg-zinc-200 px-4 py-3 font-semibold text-sm text-zinc-950 disabled:opacity-50 transition-all shadow-md hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      {loading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-zinc-950"></div>
+                          通信中...
+                        </>
+                      ) : isLoginTab ? (
+                        'ログイン'
+                      ) : (
+                        'アカウント登録して開始'
+                      )}
+                    </button>
+
+                    {/* 開発者テスト (make test 時のみ表示) */}
+                    {showDevLogin && (
+                      <>
+                        <div className="relative flex py-2 items-center">
+                          <div className="flex-grow border-t border-zinc-800"></div>
+                          <span className="flex-shrink mx-4 text-zinc-500 text-xs uppercase tracking-wider font-medium">開発者テスト</span>
+                          <div className="flex-grow border-t border-zinc-800"></div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleDevLogin(1)}
+                            disabled={loading}
+                            className="flex-1 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 px-3 py-2 font-bold text-xs text-zinc-300 font-mono transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            Dev1 🚀
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDevLogin(2)}
+                            disabled={loading}
+                            className="flex-1 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 px-3 py-2 font-bold text-xs text-zinc-300 font-mono transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            Dev2 👾
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </form>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* --- TERMS & PRIVACY MODAL --- */}
         {activeModal && (
