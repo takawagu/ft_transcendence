@@ -85,7 +85,9 @@ export class RoomService {
       socketId: client.id,
       playerId: payload.playerId,
       name: payload.playerName,
-      isRoomOwner: false,
+      // 空のロビーが猶予中に生き残っている場合（ホストが1人でリロードした直後など）、
+      // 最初に入った人がホストになる。そうしないとホスト不在で誰も確定できない部屋になる。
+      isRoomOwner: room.players.length === 0,
       status: 'ACTIVE',
       awaitingReturn: false,
       playerPhase: 'INPUT',
@@ -171,8 +173,9 @@ export class RoomService {
       room.players = room.players.filter((p) => p.playerId !== player.playerId);
 
       if (room.players.length === 0) {
-        this.store.unlinkRoomSockets(room);
-        this.store.deleteRoom(room.id, room.roomCode);
+        // 1人きりのホストがリロードしただけ、ということが普通にある。
+        // 即削除するとルームコードと配布済みの招待リンクまで道連れになるので猶予を置く。
+        this.store.scheduleDisposal(room);
         return;
       }
       if (!room.players.some((p) => p.isRoomOwner)) {
@@ -186,8 +189,11 @@ export class RoomService {
     player.socketId = null;
 
     if (connectedPlayers(room).length === 0) {
-      this.store.unlinkRoomSockets(room);
-      this.store.deleteRoom(room.id, room.roomCode);
+      // 全員が同時に落ちた（＝ポーズ中の相手を待っているホストがリロードした等）だけかもしれない。
+      // 猶予内に誰か1人でも戻れば部屋はそのまま復活する。
+      // ホスト権はここでは動かさない。移譲先も切断中の誰かにしかならず、
+      // その人が戻らなければ誰もポーズを解けない部屋になる。
+      this.store.scheduleDisposal(room);
       return;
     }
 
@@ -258,6 +264,15 @@ export class RoomService {
     player.awaitingReturn = false;
     this.store.linkSocket(client.id, room.id, player.playerId);
     client.join(room.id);
+
+    // 接続中が0人になった部屋が復活したとき、ホストが切断中のままだと
+    // ポーズを解ける人が誰も居ない部屋になる。最初に戻った人がホストを引き継ぐ。
+    // 通常の切断ではhandleDisconnectが接続中の誰かへ移譲済みなので、ここは発火しない。
+    // 元ホストが後から戻ってもホスト権は返さない（reconnect-design.mdの決定事項）。
+    if (!connectedPlayers(room).some((p) => p.isRoomOwner)) {
+      room.players.forEach((p) => (p.isRoomOwner = false));
+      player.isRoomOwner = true;
+    }
 
     this.broadcast.emitResyncState(room, player);
     this.broadcast.emitToRoom(room.id, ITO_EVENTS.PLAYER_RECONNECTED, {

@@ -74,6 +74,8 @@ interface ItoPlayer {
 | I3 | `awaitingReturn === true` ⟹ `status === 'DISCONNECTED'` |
 | I4 | SPEAKING中は常に `currentTurnIndex === boardOrder.length` |
 | I5 | `room.players` が縮むのは (a) WAITINGフェーズの退室/切断、(b) ラウンド境界の`purgeExcluded` のみ |
+| I6 | 接続中0人になった部屋は即消さず `ROOM_DISPOSE_GRACE_MS` の猶予を持つ。猶予内に `linkSocket` が起きれば予約は取り消される。明示的な退室/解散/中断だけは猶予なしで即削除 |
+| I7 | `ACTIVE` なプレイヤーが1人以上居る部屋には、必ず `ACTIVE` なホストが1人居る |
 
 ### 2.4 人数・状態判定は `player-utils.ts` に集約
 
