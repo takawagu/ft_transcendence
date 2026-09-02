@@ -47,6 +47,7 @@ export class BroadcastService {
       turnOrder: [...room.turnOrder],
       messages: [...room.messages],
       myCardNumber: player.cardNumber,
+      lastReveal: room.lastReveal,
     };
     this.server.to(player.socketId).emit(ITO_EVENTS.RESYNC_STATE, payload);
   }

@@ -148,6 +148,9 @@ export default function RoomPage() {
         myCardNumber: data.myCardNumber,
         myTheme: data.theme,
         chatMessages: data.messages ?? [],
+        // ROUND_RESULT/GAME_OVER中の復帰。cardsRevealedは公開の瞬間にしか飛ばないため、
+        // ここで受け取らないと結果画面が空のままになる
+        revealResult: data.lastReveal ?? prev.revealResult,
         currentRound: data.currentRound,
         totalRounds: data.totalRounds,
       }));

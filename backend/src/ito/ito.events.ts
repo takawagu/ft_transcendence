@@ -298,4 +298,6 @@ export interface ResyncStatePayload extends RoomStatePayload {
   turnOrder: string[];
   messages: ChatMessagePayload[];
   myCardNumber?: number; // 本人のみに送る
+  /** 直近ラウンドの公開結果。ROUND_RESULT/GAME_OVER中に復帰した人の結果画面を復元する */
+  lastReveal?: CardsRevealedPayload;
 }
