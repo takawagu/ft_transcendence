@@ -27,10 +27,11 @@ export default function RoomPage() {
 
   const socketRef = useRef<Socket | null>(null);
   const [myId, setMyId] = useState('');
-  const [dissolved, setDissolved] = useState(false);
-  const [abortedReason, setAbortedReason] = useState<string | null>(null);
-  /** 入室そのものに失敗した理由。トーストと違い、画面を先に進めさせない */
-  const [entryError, setEntryError] = useState<string | null>(null);
+  /**
+   * 部屋から出る以外にやることが無くなった理由（解散・中断・入室失敗・席の移動）。
+   * トーストと違い、画面を先に進めさせない。
+   */
+  const [exitMessage, setExitMessage] = useState<string | null>(null);
   const [state, setState] = useState<GameState>({
     roomCode: '',
     roomPhase: 'WAITING',
@@ -42,6 +43,12 @@ export default function RoomPage() {
 
   const emit = (event: string, payload?: unknown) => {
     socketRef.current?.emit(event, payload);
+  };
+
+  /** 部屋から出る以外にやることが無い状態にして、しばらく後にトップへ戻す */
+  const leaveWith = (message: string) => {
+    setExitMessage(message);
+    setTimeout(() => router.push('/'), 3000);
   };
 
   const [scale, setScale] = useState(1);
@@ -221,8 +228,7 @@ export default function RoomPage() {
       // 一度も入室できていない状態でのエラーは復帰不能。トーストで流すと
       // 画面が「接続中...」のまま固まり、ユーザーには操作不能にしか見えない
       if (!joinedRoomCodeRef.current) {
-        setEntryError(data.message ?? 'ルームに参加できませんでした');
-        setTimeout(() => router.push('/'), 3000);
+        leaveWith(data.message ?? 'ルームに参加できませんでした');
         return;
       }
       setState(prev => ({ ...prev, error: data.message }));
@@ -230,8 +236,15 @@ export default function RoomPage() {
     });
 
     socket.on('ito:roomDissolved', () => {
-      setDissolved(true);
-      setTimeout(() => router.push('/'), 3000);
+      leaveWith('部屋が解散されました');
+    });
+
+    socket.on('ito:sessionTakenOver', () => {
+      // 同じ席に別のタブ/端末が入った。この接続はもう部屋のブロードキャストを受け取らず、
+      // 送った操作も全て無視されるので、自分から切って離脱画面を出す。
+      // 明示的なdisconnectなのでsocket.ioは自動再接続せず、席を奪い返しには行かない。
+      socket.disconnect();
+      leaveWith('別の場所でこの部屋に接続したため、この画面は切断されました');
     });
 
     socket.on('ito:gamePaused', () => {
@@ -244,8 +257,7 @@ export default function RoomPage() {
     });
 
     socket.on('ito:gameAborted', (data: any) => {
-      setAbortedReason(data.reason ?? 'ゲームが中断されました');
-      setTimeout(() => router.push('/'), 3000);
+      leaveWith(data.reason ?? 'ゲームが中断されました');
     });
 
     return () => {
@@ -286,16 +298,10 @@ export default function RoomPage() {
           {state.error}
         </div>
       )}
-      {dissolved && (
-        <ExitDialog message="部屋が解散されました" onBack={() => router.push('/')} />
+      {exitMessage && (
+        <ExitDialog message={exitMessage} onBack={() => router.push('/')} />
       )}
-      {abortedReason && (
-        <ExitDialog message={abortedReason} onBack={() => router.push('/')} />
-      )}
-      {entryError && (
-        <ExitDialog message={entryError} onBack={() => router.push('/')} />
-      )}
-      {state.paused && !abortedReason && !entryError && (
+      {state.paused && !exitMessage && (
         <PauseOverlay state={state} myId={myId} emit={emit} />
       )}
 

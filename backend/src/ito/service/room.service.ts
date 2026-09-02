@@ -256,8 +256,14 @@ export class RoomService {
       return;
     }
 
-    // 同一ページ内でのsocket.io自動再接続では旧ソケットのリンクが残り得るため先に外す
-    if (player.socketId) this.store.unlinkSocket(player.socketId);
+    // 同一ページ内でのsocket.io自動再接続では旧ソケットのリンクが残り得るため先に外す。
+    // 旧ソケットがまだ生きている（別タブ・別端末）場合もあるので、部屋からも切り離す。
+    // 席が既にACTIVEでも復帰は拒否しない。通信が切れてから切断が検知されるまでには
+    // 間があり、その間の再接続を弾くと直したばかりの「復帰できない」が再発するため。
+    if (player.socketId && player.socketId !== client.id) {
+      this.store.unlinkSocket(player.socketId);
+      this.broadcast.dropSocket(player.socketId, room.id);
+    }
 
     player.socketId = client.id;
     player.status = 'ACTIVE';

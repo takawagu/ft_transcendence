@@ -50,7 +50,11 @@ describe('RoomService disconnect handling', () => {
   let broadcast: jest.Mocked<
     Pick<
       BroadcastService,
-      'emitToRoom' | 'broadcastRoomState' | 'broadcastPhaseChange' | 'emitResyncState'
+      | 'emitToRoom'
+      | 'broadcastRoomState'
+      | 'broadcastPhaseChange'
+      | 'emitResyncState'
+      | 'dropSocket'
     >
   >;
   let gameService: jest.Mocked<Pick<GameService, 'advancePhaseIfComplete'>>;
@@ -61,6 +65,7 @@ describe('RoomService disconnect handling', () => {
       broadcastRoomState: jest.fn(),
       broadcastPhaseChange: jest.fn(),
       emitResyncState: jest.fn(),
+      dropSocket: jest.fn(),
     };
     gameService = { advancePhaseIfComplete: jest.fn() };
     store = new RoomStore();
@@ -306,6 +311,39 @@ describe('RoomService disconnect handling', () => {
 
       expect(returning.emit).toHaveBeenCalledWith('ito:error', expect.anything());
       expect(room.players.map((p) => p.playerId)).toEqual(['a']);
+    });
+  });
+
+  describe('seat takeover', () => {
+    it('cuts the old socket loose when a second connection takes the seat', () => {
+      // 回帰: 旧ソケットを部屋に残すと、操作は全てresolveで弾かれるのに
+      // ブロードキャストだけは届き続ける「何も効かないタブ」になっていた。
+      const room = seedRoom(['a', 'b']);
+
+      service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
+
+      expect(broadcast.dropSocket).toHaveBeenCalledWith('sock-b', room.id);
+      expect(store.resolve('sock-b')).toBeUndefined();
+      expect(store.resolve('sock-b2')?.player.playerId).toBe('b');
+    });
+
+    it('has nothing to cut loose when the seat was already empty', () => {
+      seedRoom(['a', 'b']);
+      service.handleDisconnect('sock-b');
+
+      service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
+
+      expect(broadcast.dropSocket).not.toHaveBeenCalled();
+    });
+
+    it('does not cut loose the very socket that is rejoining', () => {
+      // 同じソケットからrejoinが二度来ても、自分を部屋から外してはいけない
+      seedRoom(['a', 'b']);
+
+      service.rejoin(fakeSocket('sock-b'), { roomCode: 'ABC123', playerId: 'b' });
+
+      expect(broadcast.dropSocket).not.toHaveBeenCalled();
+      expect(store.resolve('sock-b')?.player.playerId).toBe('b');
     });
   });
 

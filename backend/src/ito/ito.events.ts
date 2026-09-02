@@ -150,6 +150,9 @@ export const ITO_EVENTS = {
 
   /** 再接続した本人にのみ送る、完全な状態復元用ペイロード */
   RESYNC_STATE: 'ito:resyncState',
+
+  /** 同じ席に別の接続が入り、この接続が席から外された（旧ソケットにのみ送る） */
+  SESSION_TAKEN_OVER: 'ito:sessionTakenOver',
 } as const;
 
 // ===== ペイロード型（Client → Server） =====
