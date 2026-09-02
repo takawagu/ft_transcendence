@@ -336,6 +336,31 @@ describe('RoomService disconnect handling', () => {
       expect(broadcast.dropSocket).not.toHaveBeenCalled();
     });
 
+    it('does not announce a reconnect when the seat was never seen to drop', () => {
+      // 別タブが席を引き継いだだけ。他プレイヤーは離脱を見ていないので通知は嘘になる
+      const room = seedRoom(['a', 'b']);
+
+      service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
+
+      expect(broadcast.emitToRoom).not.toHaveBeenCalledWith(
+        room.id,
+        'ito:playerReconnected',
+        expect.anything(),
+      );
+    });
+
+    it('announces a reconnect when the player really had dropped', () => {
+      const room = seedRoom(['a', 'b']);
+      service.handleDisconnect('sock-b');
+
+      service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
+
+      expect(broadcast.emitToRoom).toHaveBeenCalledWith(room.id, 'ito:playerReconnected', {
+        playerId: 'b',
+        playerName: 'pb',
+      });
+    });
+
     it('does not cut loose the very socket that is rejoining', () => {
       // 同じソケットからrejoinが二度来ても、自分を部屋から外してはいけない
       seedRoom(['a', 'b']);

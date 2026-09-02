@@ -256,6 +256,10 @@ export class RoomService {
       return;
     }
 
+    // 別タブが席を引き継いだだけの場合、他プレイヤーは離脱を見ていないので
+    // 「再接続しました」を出すと嘘になる。ACTIVEを上書きする前に控えておく。
+    const wasDisconnected = player.status === 'DISCONNECTED';
+
     // 同一ページ内でのsocket.io自動再接続では旧ソケットのリンクが残り得るため先に外す。
     // 旧ソケットがまだ生きている（別タブ・別端末）場合もあるので、部屋からも切り離す。
     // 席が既にACTIVEでも復帰は拒否しない。通信が切れてから切断が検知されるまでには
@@ -281,10 +285,12 @@ export class RoomService {
     }
 
     this.broadcast.emitResyncState(room, player);
-    this.broadcast.emitToRoom(room.id, ITO_EVENTS.PLAYER_RECONNECTED, {
-      playerId: player.playerId,
-      playerName: player.name,
-    });
+    if (wasDisconnected) {
+      this.broadcast.emitToRoom(room.id, ITO_EVENTS.PLAYER_RECONNECTED, {
+        playerId: player.playerId,
+        playerName: player.name,
+      });
+    }
     this.broadcast.broadcastRoomState(room);
     console.log(`[ITO] ${player.name} rejoined room ${room.roomCode}`);
   }

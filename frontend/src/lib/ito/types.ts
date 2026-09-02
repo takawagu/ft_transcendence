@@ -53,6 +53,8 @@ export interface GameState {
   chatMessages: ChatMessage[];
   revealResult?: RevealResult;
   error?: string;
+  /** エラーではない一時的な通知（プレイヤーの復帰など） */
+  notice?: string;
   promptSubmittedCount?: number;
   promptTotalCount?: number;
   imageGeneratedCount?: number;

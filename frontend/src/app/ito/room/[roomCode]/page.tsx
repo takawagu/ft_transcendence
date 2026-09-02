@@ -255,6 +255,19 @@ export default function RoomPage() {
       leaveWith('別の場所でこの部屋に接続したため、この画面は切断されました');
     });
 
+    socket.on('ito:playerReconnected', (data: any) => {
+      // 自分の復帰を自分に知らせても仕方がない。myIdはこの時点ではまだ空なのでplayerIdで比べる
+      if (data.playerId === playerId) return;
+
+      const notice = `${data.playerName} が再接続しました`;
+      setState(prev => ({ ...prev, notice }));
+      // 続けて別の人が戻ってきた場合に、古いタイマーが新しい通知を消さないようにする
+      setTimeout(
+        () => setState(prev => (prev.notice === notice ? { ...prev, notice: undefined } : prev)),
+        3000,
+      );
+    });
+
     socket.on('ito:gamePaused', () => {
       // 誰が切断中かはroomStateのplayers[].statusが持つ
       setState(prev => ({ ...prev, paused: true }));
@@ -301,9 +314,19 @@ export default function RoomPage() {
 
   return (
     <div className="h-screen overflow-hidden text-white flex flex-col relative items-center justify-center">
-      {state.error && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 text-sm">
-          {state.error}
+      {/* ポーズ中でも読めるよう、オーバーレイ(z-50)より上に出す */}
+      {(state.error || state.notice) && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col items-center gap-2">
+          {state.error && (
+            <div className="bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg text-sm">
+              {state.error}
+            </div>
+          )}
+          {state.notice && (
+            <div className="bg-zinc-800 border border-emerald-700/70 text-emerald-200 px-6 py-3 rounded-lg shadow-lg text-sm">
+              {state.notice}
+            </div>
+          )}
         </div>
       )}
       {exitMessage && (
