@@ -68,6 +68,10 @@ export default function HomePage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [activeFriendTab, setActiveFriendTab] = useState<'list' | 'requests' | 'blocks'>('list');
   const [roomCreateRounds, setRoomCreateRounds] = useState(3);
+  // 部屋作成・参加・ルールのアコーディオン開閉ステート
+  const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
+  const [isJoinRoomOpen, setIsJoinRoomOpen] = useState(false);
+  const [isRulesOpen, setIsRulesOpen] = useState(false);
 
   // Modal states
   type ModalType = 'terms' | 'privacy' | null;
@@ -839,9 +843,8 @@ export default function HomePage() {
       <header className="border-b border-zinc-900 bg-zinc-950/70 backdrop-blur-md sticky top-0 z-20 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-1.5 rounded-xl shadow-md">
-            <span className="text-xl font-black tracking-widest text-white px-1">AITO</span>
+            <span className="text-xl font-black tracking-widest text-white px-1">4ITO</span>
           </div>
-          <span className="text-xs text-zinc-500 hidden sm:inline-block">協力型数字表現ゲーム</span>
         </div>
 
         <div className="flex items-center gap-4">
@@ -897,97 +900,233 @@ export default function HomePage() {
           {/* Create Room Card */}
           <div className="bg-gradient-to-br from-zinc-900/90 to-zinc-950 border border-zinc-800/80 rounded-2xl p-6 shadow-xl relative overflow-hidden group hover:border-indigo-500/50 transition-all duration-300">
             <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-600/10 rounded-full blur-2xl pointer-events-none group-hover:bg-indigo-600/20 transition-all"></div>
-            <div className="flex items-start gap-4">
-              <div className="bg-indigo-600/10 p-3.5 rounded-xl border border-indigo-500/20 text-indigo-400">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            
+            {/* クリック可能なヘッダー */}
+            <div
+              onClick={() => setIsCreateRoomOpen(prev => !prev)}
+              className="flex items-center justify-between cursor-pointer select-none"
+              role="button"
+              aria-expanded={isCreateRoomOpen}
+            >
+              <div className="flex items-center gap-4">
+                <div className="bg-indigo-600/10 p-3.5 rounded-xl border border-indigo-500/20 text-indigo-400 group-hover:bg-indigo-600/20 transition-all">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </div>
+                <div className="space-y-1">
+                  <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
+                    部屋を作る
+                  </h2>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    ホストになって部屋を作成し、コードを共有しよう！
+                  </p>
+                </div>
+              </div>
+
+              {/* 開閉インジケーター（矢印アイコン） */}
+              <div
+                className={`p-2 rounded-xl bg-zinc-900/80 border border-zinc-800 text-zinc-400 group-hover:text-zinc-200 transition-all duration-300 ${
+                  isCreateRoomOpen ? 'rotate-180 bg-indigo-600/20 border-indigo-500/40 text-indigo-400' : ''
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
-              <div className="space-y-1.5 flex-1">
-                <h2 className="text-xl font-bold text-zinc-100">部屋を新しく作る</h2>
-                <p className="text-xs text-zinc-400 leading-relaxed">
-                  ホストになってゲームルームを作成し、6桁 of ルームコードを友達に共有して一緒にプレイします。
-                </p>
-              </div>
             </div>
 
-            <div className="mt-4 flex items-center justify-between p-3 bg-zinc-950/60 rounded-xl border border-zinc-800/85">
-              <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                設定ラウンド数
-              </label>
-              <div className="flex items-center gap-2">
-                {[1, 2, 3, 5].map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setRoomCreateRounds(r)}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${roomCreateRounds === r
-                      ? 'bg-indigo-600 text-white shadow-md'
-                      : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
-                      }`}
-                  >
-                    {r}
-                  </button>
-                ))}
-                <span className="text-xs text-zinc-500 ml-1">ラウンド</span>
-              </div>
-            </div>
-
-            <button
-              onClick={handleCreateRoom}
-              className="w-full mt-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-4 py-3.5 font-bold text-sm text-white transition-all shadow-md hover:shadow-indigo-500/10 hover:scale-[1.005] active:scale-[0.995] flex items-center justify-center gap-2 cursor-pointer"
+            {/* アコーディオン展開エリア（クリックで下に伸びて出現） */}
+            <div
+              className={`grid transition-all duration-300 ease-in-out ${
+                isCreateRoomOpen ? 'grid-rows-[1fr] opacity-100 mt-5' : 'grid-rows-[0fr] opacity-0 mt-0 pointer-events-none'
+              }`}
             >
-              新規ルームを作成
-            </button>
+              <div className="overflow-hidden space-y-4">
+                {/* ラウンド数設定 */}
+                <div className="p-4 bg-zinc-950/70 rounded-xl border border-zinc-800/85 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      ラウンド数
+                    </label>
+                  </div>
+
+                  {/* 1〜5 のセレクトボタン */}
+                  <div className="flex justify-between items-center gap-2 pt-1">
+                    {[1, 2, 3, 4, 5].map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setRoomCreateRounds(r)}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center cursor-pointer ${
+                          roomCreateRounds === r
+                            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-indigo-400 scale-[1.02]'
+                            : 'bg-zinc-900/90 border border-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 新規ルームを作成ボタン */}
+                <button
+                  onClick={handleCreateRoom}
+                  className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-4 py-3.5 font-bold text-sm text-white transition-all shadow-md hover:shadow-indigo-500/10 hover:scale-[1.005] active:scale-[0.995] flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  新規ルームを作成
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Join Room Card */}
-          <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-6 shadow-xl hover:border-purple-500/30 transition-all duration-300">
-            <div className="flex items-start gap-4">
-              <div className="bg-purple-600/10 p-3.5 rounded-xl border border-purple-500/20 text-purple-400">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
+          <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-6 shadow-xl relative overflow-hidden group hover:border-purple-500/50 transition-all duration-300">
+            {/* クリック可能なヘッダー */}
+            <div
+              onClick={() => setIsJoinRoomOpen(prev => !prev)}
+              className="flex items-center justify-between cursor-pointer select-none"
+              role="button"
+              aria-expanded={isJoinRoomOpen}
+            >
+              <div className="flex items-center gap-4">
+                <div className="bg-purple-600/10 p-3.5 rounded-xl border border-purple-500/20 text-purple-400 group-hover:bg-purple-600/20 transition-all">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <div className="space-y-1">
+                  <h2 className="text-xl font-bold text-zinc-100">部屋に参加する</h2>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    コードを入力して、部屋に参加しよう！
+                  </p>
+                </div>
               </div>
-              <div className="space-y-1.5 flex-1">
-                <h2 className="text-xl font-bold text-zinc-100">作成済みの部屋に参加する</h2>
-                <p className="text-xs text-zinc-400 leading-relaxed">
-                  友達が作成したルームコードを入力して、進行中のゲームや待機部屋に入室します。
-                </p>
+
+              {/* 開閉インジケーター（矢印アイコン） */}
+              <div
+                className={`p-2 rounded-xl bg-zinc-900/80 border border-zinc-800 text-zinc-400 group-hover:text-zinc-200 transition-all duration-300 ${
+                  isJoinRoomOpen ? 'rotate-180 bg-purple-600/20 border-purple-500/40 text-purple-400' : ''
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
               </div>
             </div>
 
-            <form onSubmit={handleJoinRoom} className="mt-6 flex flex-col sm:flex-row gap-3">
-              <input
-                type="text"
-                required
-                maxLength={6}
-                placeholder="ルームコード (例: ABCDEF)"
-                value={roomCodeInput}
-                onChange={e => setRoomCodeInput(e.target.value.toUpperCase())}
-                className="flex-1 rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-3.5 text-center font-mono text-base tracking-widest uppercase text-white placeholder-zinc-600 outline-none focus:border-purple-500 transition-all"
-              />
-              <button
-                type="submit"
-                disabled={roomCodeInput.length < 6}
-                className="rounded-xl bg-purple-600 hover:bg-purple-500 active:bg-purple-700 disabled:opacity-40 disabled:hover:bg-purple-600 px-6 py-3.5 font-bold text-sm text-white transition-all shadow-md cursor-pointer flex items-center justify-center"
-              >
-                参加する
-              </button>
-            </form>
+            {/* アコーディオン展開エリア（クリックで下に伸びて出現） */}
+            <div
+              className={`grid transition-all duration-300 ease-in-out ${
+                isJoinRoomOpen ? 'grid-rows-[1fr] opacity-100 mt-5' : 'grid-rows-[0fr] opacity-0 mt-0 pointer-events-none'
+              }`}
+            >
+              <div className="overflow-hidden">
+                <form onSubmit={handleJoinRoom} className="space-y-4">
+                  {/* 1段目: ルームコード入力エリア */}
+                  <div className="p-4 bg-zinc-950/70 rounded-xl border border-zinc-800/85 space-y-2.5">
+                    <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                        </svg>
+                        ルームコード
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={6}
+                      placeholder="例: ABCDEF"
+                      value={roomCodeInput}
+                      onChange={e => setRoomCodeInput(e.target.value.toUpperCase())}
+                      className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-3 text-center font-mono text-lg font-bold tracking-[0.25em] uppercase text-white placeholder-zinc-600 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 transition-all"
+                    />
+                  </div>
+
+                  {/* 2段目: 参加するボタン */}
+                  <button
+                    type="submit"
+                    disabled={roomCodeInput.length < 6}
+                    className="w-full rounded-xl bg-purple-600 hover:bg-purple-500 active:bg-purple-700 disabled:opacity-40 disabled:hover:bg-purple-600 px-4 py-3.5 font-bold text-sm text-white transition-all shadow-md hover:shadow-purple-500/10 hover:scale-[1.005] active:scale-[0.995] cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    部屋に参加する
+                  </button>
+                </form>
+              </div>
+            </div>
           </div>
 
-          <div className="bg-zinc-900/30 border border-zinc-800/40 rounded-2xl p-5 text-xs text-zinc-500 leading-relaxed">
-            <h4 className="font-bold text-zinc-400 mb-2">💡 ito(イト)の基本ルール</h4>
-            <p className="mb-1.5">
-              1. プレイヤーはそれぞれ 1〜100 の秘密の数字が書かれたカードを1枚持ちます。
-            </p>
-            <p className="mb-1.5">
-              2. 出されたお題（例：「欲しいもの」「怖いもの」など）に沿って、自分の持っている数字の大きさを「言葉」で表現し合います（数字自体を直接言うのは禁止です）。
-            </p>
-            <p>
-              3. 全員で話し合い、自分たちの数字を小さい順に並べ替えることを目指す協力ゲームです。
-            </p>
+          {/* Rules Card (Accordion) */}
+          <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 sm:p-6 shadow-lg relative overflow-hidden group hover:border-zinc-700/60 transition-all duration-300">
+            {/* クリック可能なヘッダー */}
+            <div
+              onClick={() => setIsRulesOpen(prev => !prev)}
+              className="flex items-center justify-between cursor-pointer select-none"
+              role="button"
+              aria-expanded={isRulesOpen}
+            >
+              <div className="flex items-center gap-3">
+                <h4 className="text-base sm:text-lg font-bold text-zinc-200 group-hover:text-white transition-colors">
+                  ito の基本ルール
+                </h4>
+              </div>
+
+              {/* 開閉インジケーター（矢印アイコン） */}
+              <div
+                className={`p-2 rounded-xl bg-zinc-800/40 border border-zinc-800/60 text-zinc-400 group-hover:text-zinc-200 transition-all duration-300 ${
+                  isRulesOpen ? 'rotate-180 bg-zinc-800/80 text-zinc-200' : ''
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+
+            {/* アコーディオン展開エリア */}
+            <div
+              className={`grid transition-all duration-300 ease-in-out ${
+                isRulesOpen ? 'grid-rows-[1fr] opacity-100 mt-4' : 'grid-rows-[0fr] opacity-0 mt-0 pointer-events-none'
+              }`}
+            >
+              <div className="overflow-hidden text-sm sm:text-base text-zinc-300 leading-relaxed space-y-3.5 pt-3 border-t border-zinc-800/60">
+                <div className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 font-bold text-xs flex items-center justify-center mt-0.5">
+                    1
+                  </span>
+                  <p className="flex-1">
+                    プレイヤーはそれぞれ <span className="text-indigo-300 font-semibold">1〜100</span> の数字が書かれたカードを1枚持ちます。
+                  </p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 font-bold text-xs flex items-center justify-center mt-0.5">
+                    2
+                  </span>
+                  <p className="flex-1">
+                    出されたお題（例：「欲しいもの」「怖いもの」など）に沿って、自分の持っている数字の大きさを<span className="text-amber-300 font-semibold">「言葉」</span>で表現し合います（<span className="text-red-300">数字自体を直接言うのは禁止</span>です）。
+                  </p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 font-bold text-xs flex items-center justify-center mt-0.5">
+                    3
+                  </span>
+                  <p className="flex-1">
+                    全員で話し合い、自分たちの数字を<span className="text-emerald-300 font-semibold">小さい順に並べ替える</span>ことを目指す協力ゲームです。
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
