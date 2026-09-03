@@ -132,6 +132,12 @@ export class MessagesService {
       lastReadMessageId,
     });
 
+    // 相手（メッセージ送信者）へも既読をリアルタイムに通知
+    this.presence.emitToUser(partnerId, PRESENCE_EVENTS.DM_READ, {
+      userId: myId,
+      lastReadMessageId,
+    });
+
     return { userId: partnerId, lastReadMessageId };
   }
 
@@ -159,8 +165,17 @@ export class MessagesService {
       take: limit,
     });
 
+    // 相手がこちらのメッセージをどこまで読んだかのカーソルを取得
+    const partnerCursor = await this.prisma.conversationRead.findUnique({
+      where: { userId_partnerId: { userId, partnerId: myId } },
+      select: { lastReadMessageId: true },
+    });
+
     // 新しい順で取ってから反転する（古い順にtakeすると最新が取れない）
-    return messages.reverse();
+    return {
+      messages: messages.reverse(),
+      partnerLastReadMessageId: partnerCursor?.lastReadMessageId ?? 0,
+    };
   }
 
   async sendMessage(myId: number, receiverId: number, content: string) {

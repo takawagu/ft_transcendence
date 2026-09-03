@@ -1,4 +1,4 @@
-.PHONY: all up down logs restart 
+.PHONY: all up down logs restart test
 
 all: up
 
@@ -11,9 +11,21 @@ HTTPS_PORT := $(shell grep -E '^HTTPS_PORT=' .env 2>/dev/null | tail -1 | cut -d
 HTTPS_PORT := $(if $(HTTPS_PORT),$(HTTPS_PORT),8443)
 
 up:
-	LAN_IP=$(LAN_IP) docker compose up -d --build --wait
+	LAN_IP=$(LAN_IP) SHOW_DEV_LOGIN=false docker compose up -d --build --wait
 	@echo ""
 	@echo "起動しました。ブラウザで以下にアクセスしてください:"
+	@echo "  このPCから:        https://localhost:$(HTTPS_PORT)/"
+	@if [ -n "$(LAN_IP)" ]; then \
+		echo "  他の端末から:      https://$(LAN_IP):$(HTTPS_PORT)/"; \
+	fi
+	@echo ""
+	@echo "(自己署名証明書のため、ブラウザの警告は「詳細設定→続行」で許可してください)"
+	@echo ""
+
+test:
+	LAN_IP=$(LAN_IP) SHOW_DEV_LOGIN=true docker compose up -d --build --wait
+	@echo ""
+	@echo "【テストモード (DEVアカウント有効)】で起動しました。ブラウザで以下にアクセスしてください:"
 	@echo "  このPCから:        https://localhost:$(HTTPS_PORT)/"
 	@if [ -n "$(LAN_IP)" ]; then \
 		echo "  他の端末から:      https://$(LAN_IP):$(HTTPS_PORT)/"; \

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSession, type User } from '@/lib/session';
 import { usePresence } from '@/lib/presence';
@@ -28,6 +29,9 @@ const SEARCH_MIN_LENGTH = 2;
 export default function HomePage() {
   const router = useRouter();
 
+  // DEVアカウント表示フラグ（本番では非表示、make test 時のみ表示）
+  const showDevLogin = process.env.NEXT_PUBLIC_SHOW_DEV_LOGIN === 'true';
+
   // Auth states — 遷移をまたいで保つため layout の SessionProvider が持つ
   const { mounted, token, user, login, logout, updateUser, apiCall } = useSession();
   // Presence (online status) — /presence 名前空間から配信される。接続も Provider 側
@@ -36,6 +40,7 @@ export default function HomePage() {
   const totalUnread = [...unreadCounts.values()].reduce((sum, n) => sum + n, 0);
 
   const [isLoginTab, setIsLoginTab] = useState(true);
+  const [authModal, setAuthModal] = useState<'login' | 'register' | null>(null);
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [registerSuccessMsg, setRegisterSuccessMsg] = useState('');
@@ -63,6 +68,10 @@ export default function HomePage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [activeFriendTab, setActiveFriendTab] = useState<'list' | 'requests' | 'blocks'>('list');
   const [roomCreateRounds, setRoomCreateRounds] = useState(3);
+  // 部屋作成・参加・ルールのアコーディオン開閉ステート
+  const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
+  const [isJoinRoomOpen, setIsJoinRoomOpen] = useState(false);
+  const [isRulesOpen, setIsRulesOpen] = useState(false);
 
   // Modal states
   type ModalType = 'terms' | 'privacy' | null;
@@ -245,6 +254,7 @@ export default function HomePage() {
     setPassword('');
     setBio('');
     setRegisterSuccessMsg('');
+    setAuthModal(null);
   };
 
   // Room Actions
@@ -410,202 +420,316 @@ export default function HomePage() {
   // --- TITLE SCREEN (Not logged in) ---
   if (!token || !user) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center bg-zinc-950 text-white relative overflow-hidden px-4">
-        {/* Decorative background glow */}
-        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-indigo-900/20 rounded-full blur-[120px] pointer-events-none"></div>
-        <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-purple-900/20 rounded-full blur-[120px] pointer-events-none"></div>
+      <main className="min-h-screen flex flex-col justify-between items-center bg-[#050811] text-white relative overflow-hidden px-4 py-6 select-none font-sans">
+        {/* Fullscreen Game Background Image */}
+        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
+          {/* Shift image container further up so '4ito' logo sits higher */}
+          <div className="absolute inset-x-0 -top-[22vh] sm:-top-[26vh] h-[125vh]">
+            <Image
+              src="/title-bg.jpg"
+              alt="4ito Title Background"
+              fill
+              priority
+              className="object-cover object-center scale-100 opacity-100 brightness-110 contrast-105"
+            />
+          </div>
+          {/* Subtle bottom fade to seamlessly blend into background */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#050811] via-transparent to-transparent pointer-events-none" />
+        </div>
 
-        <div className="w-full max-w-md bg-zinc-900/70 border border-zinc-800/80 backdrop-blur-md rounded-2xl shadow-2xl p-8 z-10">
-          <div className="text-center mb-8">
-            <h1 className="text-6xl font-extrabold tracking-widest bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 drop-shadow-md animate-pulse">
-              AITO
-            </h1>
-            <p className="text-zinc-400 text-sm mt-3 tracking-wide">
-              数字を言葉で表現し合う、緊迫の協力型カードゲーム
-            </p>
+        {/* Top spacer: Change this height (e.g. h-[40vh], h-[42vh]) to directly move buttons up/down */}
+        <div className="h-[65vh] w-full shrink-0" />
+
+        {/* Action Menu Buttons */}
+        <div className="z-10 text-center max-w-xl w-full mx-auto space-y-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
+            <button
+              type="button"
+              onClick={() => {
+                setIsLoginTab(true);
+                setAuthModal('login');
+                setAuthError('');
+                setRegisterSuccessMsg('');
+              }}
+              className="w-full sm:w-60 py-4 px-8 rounded-2xl font-bold text-base tracking-wide transition-all duration-200 flex items-center justify-center gap-2.5 bg-zinc-900/90 hover:bg-zinc-800 text-white border border-white/40 hover:border-white/80 shadow-2xl backdrop-blur-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+              </svg>
+              ログイン
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsLoginTab(false);
+                setAuthModal('register');
+                setAuthError('');
+                setRegisterSuccessMsg('');
+              }}
+              className="w-full sm:w-60 py-4 px-8 rounded-2xl font-bold text-base tracking-wide transition-all duration-200 flex items-center justify-center gap-2.5 bg-zinc-900/90 hover:bg-zinc-800 text-white border border-white/40 hover:border-white/80 shadow-2xl backdrop-blur-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+              新規登録
+            </button>
           </div>
 
-          {registerSuccessMsg ? (
-            <div className="py-10 text-center space-y-3">
-              <p className="text-2xl">{registerSuccessMsg}</p>
-              <p className="text-zinc-400 text-sm">ホーム画面に移動します...</p>
+          {/* Quick Dev Login (make test 時のみ表示) */}
+          {showDevLogin && (
+            <div className="flex items-center justify-center gap-2 pt-1">
+              <span className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider">DEV:</span>
+              <button
+                type="button"
+                onClick={() => handleDevLogin(1)}
+                disabled={loading}
+                className="px-3 py-1 rounded-md bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200 text-xs font-mono transition-all cursor-pointer"
+              >
+                Dev1 🚀
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDevLogin(2)}
+                disabled={loading}
+                className="px-3 py-1 rounded-md bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200 text-xs font-mono transition-all cursor-pointer"
+              >
+                Dev2 👾
+              </button>
             </div>
-          ) : (
-            <>
-              {/* Form Tabs */}
-              <div className="flex border-b border-zinc-800 mb-6">
-                <button
-                  onClick={() => {
-                    setIsLoginTab(true);
-                    setAuthError('');
-                    setRegisterSuccessMsg('');
-                  }}
-                  className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 ${isLoginTab
-                    ? 'text-indigo-400 border-b-2 border-indigo-500 font-bold'
-                    : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                >
-                  ログイン
-                </button>
-                <button
-                  onClick={() => {
-                    setIsLoginTab(false);
-                    setAuthError('');
-                    setRegisterSuccessMsg('');
-                  }}
-                  className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 ${!isLoginTab
-                    ? 'text-indigo-400 border-b-2 border-indigo-500 font-bold'
-                    : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                >
-                  新規登録
-                </button>
-              </div>
-
-              <form onSubmit={handleAuthSubmit} className="space-y-4">
-                {authError && (
-                  <div className="p-3 bg-red-950/60 border border-red-800 text-red-300 rounded-lg text-xs leading-relaxed">
-                    {authError}
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-                    メールアドレス
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="example@email.com"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
-                  />
-                  {!isLoginTab && emailStatus !== 'idle' && (
-                    <p className={`mt-1 text-xs ${emailStatus === 'taken' ? 'text-red-400' :
-                      emailStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
-                      }`}>
-                      {emailStatus === 'checking' && '確認中...'}
-                      {emailStatus === 'taken' && 'そのメールアドレスはすでに使われています'}
-                      {emailStatus === 'available' && '使用可能です'}
-                    </p>
-                  )}
-                </div>
-
-                {!isLoginTab && (
-                  <div>
-                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-                      ユーザー名
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="ゲームに表示される名前"
-                      maxLength={30}
-                      value={username}
-                      onChange={e => setUsername(e.target.value)}
-                      className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
-                    />
-                    {usernameStatus !== 'idle' && (
-                      <p className={`mt-1 text-xs ${usernameStatus === 'taken' ? 'text-red-400' :
-                        usernameStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
-                        }`}>
-                        {usernameStatus === 'checking' && '確認中...'}
-                        {usernameStatus === 'taken' && 'そのユーザー名はすでに使われています'}
-                        {usernameStatus === 'available' && '使用可能です'}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-                    パスワード
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
-                  />
-                  {!isLoginTab && password.length > 0 && (
-                    <p className={`mt-1 text-xs ${password.length >= 8 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {password.length >= 8 ? '使用可能な長さです' : `あと${8 - password.length}文字以上必要です（8文字以上）`}
-                    </p>
-                  )}
-                </div>
-
-                {!isLoginTab && (
-                  <div className="text-xs text-zinc-500 text-center mt-2 mb-2">
-                    アカウントを登録することで、
-                    <button type="button" onClick={() => setActiveModal('terms')} className="text-indigo-400 hover:text-indigo-300 underline cursor-pointer mx-1">利用規約</button>
-                    と
-                    <button type="button" onClick={() => setActiveModal('privacy')} className="text-indigo-400 hover:text-indigo-300 underline cursor-pointer mx-1">プライバシーポリシー</button>
-                    に同意したものとみなされます。
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={
-                    loading ||
-                    (!isLoginTab && (
-                      usernameStatus === 'taken' ||
-                      usernameStatus === 'checking' ||
-                      emailStatus === 'taken' ||
-                      emailStatus === 'checking' ||
-                      password.length < 8
-                    ))
-                  }
-                  className="w-full mt-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-4 py-3 font-semibold text-sm text-white disabled:opacity-50 transition-all shadow-lg hover:shadow-indigo-500/20 hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>
-                      通信中...
-                    </>
-                  ) : isLoginTab ? (
-                    'ログイン'
-                  ) : (
-                    'アカウント登録して開始'
-                  )}
-                </button>
-
-                <div className="relative flex py-2 items-center">
-                  <div className="flex-grow border-t border-zinc-800/80"></div>
-                  <span className="flex-shrink mx-4 text-zinc-500 text-xs uppercase tracking-wider font-semibold">開発者テスト</span>
-                  <div className="flex-grow border-t border-zinc-800/80"></div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleDevLogin(1)}
-                    disabled={loading}
-                    className="flex-1 rounded-lg bg-zinc-850 hover:bg-zinc-800 border border-zinc-700 px-3 py-2.5 font-bold text-xs text-indigo-400 transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    Dev1 🚀
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDevLogin(2)}
-                    disabled={loading}
-                    className="flex-1 rounded-lg bg-zinc-850 hover:bg-zinc-800 border border-zinc-700 px-3 py-2.5 font-bold text-xs text-purple-400 transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    Dev2 👾
-                  </button>
-                </div>
-              </form>
-            </>
           )}
         </div>
 
-        <footer className="absolute bottom-6 w-full flex justify-center gap-6 z-10">
-          <button type="button" onClick={() => setActiveModal('terms')} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer">利用規約</button>
-          <button type="button" onClick={() => setActiveModal('privacy')} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer">プライバシーポリシー</button>
+        {/* Bottom spacer absorbing the remaining space down to the footer */}
+        <div className="flex-1 w-full" />
+
+        {/* Footer */}
+        <footer className="z-10 flex justify-center gap-6 py-2">
+          <button type="button" onClick={() => setActiveModal('terms')} className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">利用規約</button>
+          <span className="text-zinc-600 text-xs">•</span>
+          <button type="button" onClick={() => setActiveModal('privacy')} className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">プライバシーポリシー</button>
         </footer>
+
+        {/* --- AUTH MODAL (Login / Register Modal) --- */}
+        {authModal && (
+          <div
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center px-4 animate-in fade-in duration-200"
+            onClick={() => setAuthModal(null)}
+          >
+            <div
+              className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 relative z-10 animate-in zoom-in-95 duration-200 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => setAuthModal(null)}
+                className="absolute top-4 right-4 text-zinc-400 hover:text-white p-1.5 rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
+                title="閉じる"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-bold tracking-tight text-white">
+                  {isLoginTab ? 'ログイン' : '新規登録'}
+                </h2>
+                <p className="text-xs text-zinc-400 mt-1">
+                  {isLoginTab ? 'アカウント情報を入力してください' : 'アカウントを作成してゲームを開始します'}
+                </p>
+              </div>
+
+              {registerSuccessMsg ? (
+                <div className="py-10 text-center space-y-3">
+                  <p className="text-2xl">{registerSuccessMsg}</p>
+                  <p className="text-zinc-400 text-sm">ホーム画面に移動します...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Form Tabs */}
+                  <div className="flex border-b border-zinc-800 mb-6">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsLoginTab(true);
+                        setAuthError('');
+                        setRegisterSuccessMsg('');
+                      }}
+                      className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 cursor-pointer ${
+                        isLoginTab
+                          ? 'text-white border-b-2 border-white font-bold'
+                          : 'text-zinc-500 hover:text-zinc-300'
+                      }`}
+                    >
+                      ログイン
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsLoginTab(false);
+                        setAuthError('');
+                        setRegisterSuccessMsg('');
+                      }}
+                      className={`flex-1 pb-3 text-center font-semibold text-sm transition-all duration-200 cursor-pointer ${
+                        !isLoginTab
+                          ? 'text-white border-b-2 border-white font-bold'
+                          : 'text-zinc-500 hover:text-zinc-300'
+                      }`}
+                    >
+                      新規登録
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleAuthSubmit} className="space-y-4">
+                    {authError && (
+                      <div className="p-3 bg-red-950/60 border border-red-800 text-red-300 rounded-lg text-xs leading-relaxed">
+                        {authError}
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-1.5">
+                        メールアドレス
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="example@email.com"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 transition-all text-sm"
+                      />
+                      {!isLoginTab && emailStatus !== 'idle' && (
+                        <p className={`mt-1 text-xs ${
+                          emailStatus === 'taken' ? 'text-red-400' :
+                          emailStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
+                        }`}>
+                          {emailStatus === 'checking' && '確認中...'}
+                          {emailStatus === 'taken' && 'そのメールアドレスはすでに使われています'}
+                          {emailStatus === 'available' && '使用可能です'}
+                        </p>
+                      )}
+                    </div>
+
+                    {!isLoginTab && (
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-1.5">
+                          ユーザー名
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="ゲームに表示される名前"
+                          maxLength={30}
+                          value={username}
+                          onChange={e => setUsername(e.target.value)}
+                          className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 transition-all text-sm"
+                        />
+                        {usernameStatus !== 'idle' && (
+                          <p className={`mt-1 text-xs ${
+                            usernameStatus === 'taken' ? 'text-red-400' :
+                            usernameStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
+                          }`}>
+                            {usernameStatus === 'checking' && '確認中...'}
+                            {usernameStatus === 'taken' && 'そのユーザー名はすでに使われています'}
+                            {usernameStatus === 'available' && '使用可能です'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-1.5">
+                        パスワード
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2.5 text-white placeholder-zinc-600 outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 transition-all text-sm"
+                      />
+                      {!isLoginTab && password.length > 0 && (
+                        <p className={`mt-1 text-xs ${password.length >= 8 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {password.length >= 8 ? '使用可能な長さです' : `あと${8 - password.length}文字以上必要です（8文字以上）`}
+                        </p>
+                      )}
+                    </div>
+
+                    {!isLoginTab && (
+                      <div className="text-xs text-zinc-500 text-center mt-2 mb-2">
+                        アカウントを登録することで、
+                        <button type="button" onClick={() => setActiveModal('terms')} className="text-zinc-300 hover:text-white underline cursor-pointer mx-1">利用規約</button>
+                        と
+                        <button type="button" onClick={() => setActiveModal('privacy')} className="text-zinc-300 hover:text-white underline cursor-pointer mx-1">プライバシーポリシー</button>
+                        に同意したものとみなされます。
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={
+                        loading ||
+                        (!isLoginTab && (
+                          usernameStatus === 'taken' ||
+                          usernameStatus === 'checking' ||
+                          emailStatus === 'taken' ||
+                          emailStatus === 'checking' ||
+                          password.length < 8
+                        ))
+                      }
+                      className="w-full mt-2 rounded-lg bg-white hover:bg-zinc-200 px-4 py-3 font-semibold text-sm text-zinc-950 disabled:opacity-50 transition-all shadow-md hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      {loading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-zinc-950"></div>
+                          通信中...
+                        </>
+                      ) : isLoginTab ? (
+                        'ログイン'
+                      ) : (
+                        'アカウント登録して開始'
+                      )}
+                    </button>
+
+                    {/* 開発者テスト (make test 時のみ表示) */}
+                    {showDevLogin && (
+                      <>
+                        <div className="relative flex py-2 items-center">
+                          <div className="flex-grow border-t border-zinc-800"></div>
+                          <span className="flex-shrink mx-4 text-zinc-500 text-xs uppercase tracking-wider font-medium">開発者テスト</span>
+                          <div className="flex-grow border-t border-zinc-800"></div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleDevLogin(1)}
+                            disabled={loading}
+                            className="flex-1 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 px-3 py-2 font-bold text-xs text-zinc-300 font-mono transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            Dev1 🚀
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDevLogin(2)}
+                            disabled={loading}
+                            className="flex-1 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 px-3 py-2 font-bold text-xs text-zinc-300 font-mono transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            Dev2 👾
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </form>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* --- TERMS & PRIVACY MODAL --- */}
         {activeModal && (
@@ -719,44 +843,27 @@ export default function HomePage() {
       <header className="border-b border-zinc-900 bg-zinc-950/70 backdrop-blur-md sticky top-0 z-20 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-1.5 rounded-xl shadow-md">
-            <span className="text-xl font-black tracking-widest text-white px-1">AITO</span>
+            <span className="text-xl font-black tracking-widest text-white px-1">4ITO</span>
           </div>
-          <span className="text-xs text-zinc-500 hidden sm:inline-block">協力型数字表現ゲーム</span>
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3 bg-zinc-900/60 pl-3 pr-4 py-1.5 rounded-full border border-zinc-800/80">
-            {renderAvatar(user.profileImage, 'w-8 h-8 text-base')}
+          {/* ユーザープロフィールボタン（クリックで設定・プロフィール表示） */}
+          <button
+            type="button"
+            onClick={openOptions}
+            className="flex items-center gap-3 bg-zinc-900/60 hover:bg-zinc-800/90 pl-2.5 pr-4 py-1.5 rounded-full border border-zinc-800/80 hover:border-zinc-700 transition-all cursor-pointer group text-left"
+            title="プロフィールを表示・編集"
+          >
+            <div className="relative">
+              {renderAvatar(user.profileImage, 'w-8 h-8 text-base group-hover:scale-105 transition-transform')}
+            </div>
             <div>
-              <div className="text-sm font-semibold text-zinc-100">{user.username}</div>
+              <div className="text-sm font-semibold text-zinc-100 group-hover:text-white transition-colors">
+                {user.username}
+              </div>
               {user.bio && <div className="text-[10px] text-zinc-500 truncate max-w-[100px]">{user.bio}</div>}
             </div>
-          </div>
-
-          <button
-            onClick={() => router.push('/messages')}
-            className="relative p-2 text-zinc-400 hover:text-white bg-zinc-900/60 hover:bg-zinc-800 rounded-full border border-zinc-800/80 transition-all cursor-pointer"
-            title="メッセージ"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-            {totalUnread > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-indigo-600 text-white text-[9px] font-extrabold rounded-full flex items-center justify-center">
-                {totalUnread > 99 ? '99+' : totalUnread}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={openOptions}
-            className="p-2 text-zinc-400 hover:text-white bg-zinc-900/60 hover:bg-zinc-800 rounded-full border border-zinc-800/80 transition-all cursor-pointer"
-            title="設定"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
           </button>
 
           <button
@@ -777,97 +884,233 @@ export default function HomePage() {
           {/* Create Room Card */}
           <div className="bg-gradient-to-br from-zinc-900/90 to-zinc-950 border border-zinc-800/80 rounded-2xl p-6 shadow-xl relative overflow-hidden group hover:border-indigo-500/50 transition-all duration-300">
             <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-600/10 rounded-full blur-2xl pointer-events-none group-hover:bg-indigo-600/20 transition-all"></div>
-            <div className="flex items-start gap-4">
-              <div className="bg-indigo-600/10 p-3.5 rounded-xl border border-indigo-500/20 text-indigo-400">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            
+            {/* クリック可能なヘッダー */}
+            <div
+              onClick={() => setIsCreateRoomOpen(prev => !prev)}
+              className="flex items-center justify-between cursor-pointer select-none"
+              role="button"
+              aria-expanded={isCreateRoomOpen}
+            >
+              <div className="flex items-center gap-4">
+                <div className="bg-indigo-600/10 p-3.5 rounded-xl border border-indigo-500/20 text-indigo-400 group-hover:bg-indigo-600/20 transition-all">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </div>
+                <div className="space-y-1">
+                  <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
+                    部屋を作成
+                  </h2>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    ホストになって部屋を作成し、コードを共有しよう！
+                  </p>
+                </div>
+              </div>
+
+              {/* 開閉インジケーター（矢印アイコン） */}
+              <div
+                className={`p-2 rounded-xl bg-zinc-900/80 border border-zinc-800 text-zinc-400 group-hover:text-zinc-200 transition-all duration-300 ${
+                  isCreateRoomOpen ? 'rotate-180 bg-indigo-600/20 border-indigo-500/40 text-indigo-400' : ''
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
-              <div className="space-y-1.5 flex-1">
-                <h2 className="text-xl font-bold text-zinc-100">部屋を新しく作る</h2>
-                <p className="text-xs text-zinc-400 leading-relaxed">
-                  ホストになってゲームルームを作成し、6桁 of ルームコードを友達に共有して一緒にプレイします。
-                </p>
-              </div>
             </div>
 
-            <div className="mt-4 flex items-center justify-between p-3 bg-zinc-950/60 rounded-xl border border-zinc-800/85">
-              <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                設定ラウンド数
-              </label>
-              <div className="flex items-center gap-2">
-                {[1, 2, 3, 5].map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setRoomCreateRounds(r)}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${roomCreateRounds === r
-                      ? 'bg-indigo-600 text-white shadow-md'
-                      : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
-                      }`}
-                  >
-                    {r}
-                  </button>
-                ))}
-                <span className="text-xs text-zinc-500 ml-1">ラウンド</span>
-              </div>
-            </div>
-
-            <button
-              onClick={handleCreateRoom}
-              className="w-full mt-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-4 py-3.5 font-bold text-sm text-white transition-all shadow-md hover:shadow-indigo-500/10 hover:scale-[1.005] active:scale-[0.995] flex items-center justify-center gap-2 cursor-pointer"
+            {/* アコーディオン展開エリア（クリックで下に伸びて出現） */}
+            <div
+              className={`grid transition-all duration-300 ease-in-out ${
+                isCreateRoomOpen ? 'grid-rows-[1fr] opacity-100 mt-5' : 'grid-rows-[0fr] opacity-0 mt-0 pointer-events-none'
+              }`}
             >
-              新規ルームを作成
-            </button>
+              <div className="overflow-hidden space-y-4">
+                {/* ラウンド数設定 */}
+                <div className="p-4 bg-zinc-950/70 rounded-xl border border-zinc-800/85 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      ラウンド数
+                    </label>
+                  </div>
+
+                  {/* 1〜5 のセレクトボタン */}
+                  <div className="flex justify-between items-center gap-2 pt-1">
+                    {[1, 2, 3, 4, 5].map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setRoomCreateRounds(r)}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center cursor-pointer ${
+                          roomCreateRounds === r
+                            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-indigo-400 scale-[1.02]'
+                            : 'bg-zinc-900/90 border border-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 新規ルームを作成ボタン */}
+                <button
+                  onClick={handleCreateRoom}
+                  className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-4 py-3.5 font-bold text-sm text-white transition-all shadow-md hover:shadow-indigo-500/10 hover:scale-[1.005] active:scale-[0.995] flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  部屋を作る
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Join Room Card */}
-          <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-6 shadow-xl hover:border-purple-500/30 transition-all duration-300">
-            <div className="flex items-start gap-4">
-              <div className="bg-purple-600/10 p-3.5 rounded-xl border border-purple-500/20 text-purple-400">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
+          <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-6 shadow-xl relative overflow-hidden group hover:border-purple-500/50 transition-all duration-300">
+            {/* クリック可能なヘッダー */}
+            <div
+              onClick={() => setIsJoinRoomOpen(prev => !prev)}
+              className="flex items-center justify-between cursor-pointer select-none"
+              role="button"
+              aria-expanded={isJoinRoomOpen}
+            >
+              <div className="flex items-center gap-4">
+                <div className="bg-purple-600/10 p-3.5 rounded-xl border border-purple-500/20 text-purple-400 group-hover:bg-purple-600/20 transition-all">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <div className="space-y-1">
+                  <h2 className="text-xl font-bold text-zinc-100">部屋に参加</h2>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    コードを入力して、部屋に参加しよう！
+                  </p>
+                </div>
               </div>
-              <div className="space-y-1.5 flex-1">
-                <h2 className="text-xl font-bold text-zinc-100">作成済みの部屋に参加する</h2>
-                <p className="text-xs text-zinc-400 leading-relaxed">
-                  友達が作成したルームコードを入力して、進行中のゲームや待機部屋に入室します。
-                </p>
+
+              {/* 開閉インジケーター（矢印アイコン） */}
+              <div
+                className={`p-2 rounded-xl bg-zinc-900/80 border border-zinc-800 text-zinc-400 group-hover:text-zinc-200 transition-all duration-300 ${
+                  isJoinRoomOpen ? 'rotate-180 bg-purple-600/20 border-purple-500/40 text-purple-400' : ''
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
               </div>
             </div>
 
-            <form onSubmit={handleJoinRoom} className="mt-6 flex flex-col sm:flex-row gap-3">
-              <input
-                type="text"
-                required
-                maxLength={6}
-                placeholder="ルームコード (例: ABCDEF)"
-                value={roomCodeInput}
-                onChange={e => setRoomCodeInput(e.target.value.toUpperCase())}
-                className="flex-1 rounded-xl bg-zinc-950 border border-zinc-800 px-4 py-3.5 text-center font-mono text-base tracking-widest uppercase text-white placeholder-zinc-600 outline-none focus:border-purple-500 transition-all"
-              />
-              <button
-                type="submit"
-                disabled={roomCodeInput.length < 6}
-                className="rounded-xl bg-purple-600 hover:bg-purple-500 active:bg-purple-700 disabled:opacity-40 disabled:hover:bg-purple-600 px-6 py-3.5 font-bold text-sm text-white transition-all shadow-md cursor-pointer flex items-center justify-center"
-              >
-                参加する
-              </button>
-            </form>
+            {/* アコーディオン展開エリア（クリックで下に伸びて出現） */}
+            <div
+              className={`grid transition-all duration-300 ease-in-out ${
+                isJoinRoomOpen ? 'grid-rows-[1fr] opacity-100 mt-5' : 'grid-rows-[0fr] opacity-0 mt-0 pointer-events-none'
+              }`}
+            >
+              <div className="overflow-hidden">
+                <form onSubmit={handleJoinRoom} className="space-y-4">
+                  {/* 1段目: ルームコード入力エリア */}
+                  <div className="p-4 bg-zinc-950/70 rounded-xl border border-zinc-800/85 space-y-2.5">
+                    <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                        </svg>
+                        ルームコード
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={6}
+                      placeholder="例: ABCDEF"
+                      value={roomCodeInput}
+                      onChange={e => setRoomCodeInput(e.target.value.toUpperCase())}
+                      className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-3 text-center font-mono text-lg font-bold tracking-[0.25em] uppercase text-white placeholder-zinc-600 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 transition-all"
+                    />
+                  </div>
+
+                  {/* 2段目: 参加するボタン */}
+                  <button
+                    type="submit"
+                    disabled={roomCodeInput.length < 6}
+                    className="w-full rounded-xl bg-purple-600 hover:bg-purple-500 active:bg-purple-700 disabled:opacity-40 disabled:hover:bg-purple-600 px-4 py-3.5 font-bold text-sm text-white transition-all shadow-md hover:shadow-purple-500/10 hover:scale-[1.005] active:scale-[0.995] cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    部屋に参加
+                  </button>
+                </form>
+              </div>
+            </div>
           </div>
 
-          <div className="bg-zinc-900/30 border border-zinc-800/40 rounded-2xl p-5 text-xs text-zinc-500 leading-relaxed">
-            <h4 className="font-bold text-zinc-400 mb-2">💡 ito(イト)の基本ルール</h4>
-            <p className="mb-1.5">
-              1. プレイヤーはそれぞれ 1〜100 の秘密の数字が書かれたカードを1枚持ちます。
-            </p>
-            <p className="mb-1.5">
-              2. 出されたお題（例：「欲しいもの」「怖いもの」など）に沿って、自分の持っている数字の大きさを「言葉」で表現し合います（数字自体を直接言うのは禁止です）。
-            </p>
-            <p>
-              3. 全員で話し合い、自分たちの数字を小さい順に並べ替えることを目指す協力ゲームです。
-            </p>
+          {/* Rules Card (Accordion) */}
+          <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-5 sm:p-6 shadow-lg relative overflow-hidden group hover:border-zinc-700/60 transition-all duration-300">
+            {/* クリック可能なヘッダー */}
+            <div
+              onClick={() => setIsRulesOpen(prev => !prev)}
+              className="flex items-center justify-between cursor-pointer select-none"
+              role="button"
+              aria-expanded={isRulesOpen}
+            >
+              <div className="flex items-center gap-3">
+                <h4 className="text-base sm:text-lg font-bold text-zinc-200 group-hover:text-white transition-colors">
+                  ito の基本ルール
+                </h4>
+              </div>
+
+              {/* 開閉インジケーター（矢印アイコン） */}
+              <div
+                className={`p-2 rounded-xl bg-zinc-800/40 border border-zinc-800/60 text-zinc-400 group-hover:text-zinc-200 transition-all duration-300 ${
+                  isRulesOpen ? 'rotate-180 bg-zinc-800/80 text-zinc-200' : ''
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+
+            {/* アコーディオン展開エリア */}
+            <div
+              className={`grid transition-all duration-300 ease-in-out ${
+                isRulesOpen ? 'grid-rows-[1fr] opacity-100 mt-4' : 'grid-rows-[0fr] opacity-0 mt-0 pointer-events-none'
+              }`}
+            >
+              <div className="overflow-hidden text-sm sm:text-base text-zinc-300 leading-relaxed space-y-3.5 pt-3 border-t border-zinc-800/60">
+                <div className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 font-bold text-xs flex items-center justify-center mt-0.5">
+                    1
+                  </span>
+                  <p className="flex-1">
+                    プレイヤーはそれぞれ <span className="text-indigo-300 font-semibold">1〜100</span> の数字が書かれたカードを1枚持ちます。
+                  </p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 font-bold text-xs flex items-center justify-center mt-0.5">
+                    2
+                  </span>
+                  <p className="flex-1">
+                    出されたお題（例：「欲しいもの」「怖いもの」など）に沿って、自分の持っている数字の大きさを<span className="text-amber-300 font-semibold">「言葉」</span>で表現し合います（<span className="text-red-300">数字自体を直接言うのは禁止</span>です）。
+                  </p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 font-bold text-xs flex items-center justify-center mt-0.5">
+                    3
+                  </span>
+                  <p className="flex-1">
+                    全員で話し合い、自分たちの数字を<span className="text-emerald-300 font-semibold">小さい順に並べ替える</span>ことを目指す協力ゲームです。
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -875,15 +1118,35 @@ export default function HomePage() {
         <div className="md:col-span-2 space-y-6">
           <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl shadow-xl flex flex-col min-h-[420px] overflow-hidden">
             <div className="border-b border-zinc-800/80 bg-zinc-900/40 px-4 py-1.5 flex items-center justify-between">
-              <div className="flex gap-2">
+              <div className="flex items-center gap-1 sm:gap-2">
                 <button
                   onClick={() => switchFriendTab('list')}
-                  className={`px-3 py-3 text-xs font-bold transition-all relative ${activeFriendTab === 'list' ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'
+                  className={`px-3 py-3 text-xs font-bold transition-all relative flex items-center gap-1.5 ${activeFriendTab === 'list' ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'
                     }`}
                 >
                   フレンド ({friends.length})
+                  {totalUnread > 0 && (
+                    <span className="bg-indigo-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-extrabold animate-bounce">
+                      {totalUnread > 99 ? '99+' : totalUnread}
+                    </span>
+                  )}
                   {activeFriendTab === 'list' && (
                     <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500"></div>
+                  )}
+                </button>
+                <button
+                  onClick={() => router.push('/messages')}
+                  className="px-3 py-3 text-xs font-bold transition-all relative flex items-center gap-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800/40 rounded-lg cursor-pointer group"
+                  title="チャット一覧を開く"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-400 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  <span>チャット</span>
+                  {totalUnread > 0 && (
+                    <span className="bg-indigo-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-extrabold animate-bounce">
+                      {totalUnread > 99 ? '99+' : totalUnread}
+                    </span>
                   )}
                 </button>
                 <button
@@ -928,46 +1191,80 @@ export default function HomePage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {friends.map(friend => (
-                      <div
-                        key={friend.id}
-                        className="flex items-center justify-between p-3 bg-zinc-950/40 hover:bg-zinc-950/80 border border-zinc-800/40 rounded-xl transition-all"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="relative">
-                            {renderAvatar(friend.profileImage, 'w-9 h-9 text-base')}
-                            {onlineFriendIds.has(friend.id) ? (
-                              <span
-                                className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-zinc-900"
-                                title="オンライン"
-                              ></span>
-                            ) : (
-                              <span
-                                className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-zinc-600 ring-2 ring-zinc-900"
-                                title="オフライン"
-                              ></span>
-                            )}
-                          </div>
-                          <div>
-                            <div className="text-sm font-semibold text-zinc-100">{friend.username}</div>
-                            {friend.bio && (
-                              <div className="text-[10px] text-zinc-500 max-w-[130px] truncate">
-                                {friend.bio}
+                    {friends.map(friend => {
+                      const friendUnread = unreadCounts.get(friend.id) ?? 0;
+                      return (
+                        <div
+                          key={friend.id}
+                          className={`flex items-center justify-between p-3 rounded-xl transition-all ${
+                            friendUnread > 0
+                              ? 'bg-indigo-950/30 hover:bg-indigo-950/50 border border-indigo-500/50 shadow-sm shadow-indigo-500/10'
+                              : 'bg-zinc-950/40 hover:bg-zinc-950/80 border border-zinc-800/40'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="relative">
+                              {renderAvatar(friend.profileImage, 'w-9 h-9 text-base')}
+                              {onlineFriendIds.has(friend.id) ? (
+                                <span
+                                  className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-zinc-900"
+                                  title="オンライン"
+                                ></span>
+                              ) : (
+                                <span
+                                  className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-zinc-600 ring-2 ring-zinc-900"
+                                  title="オフライン"
+                                ></span>
+                              )}
+                            </div>
+                            <div>
+                              <div className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+                                <span>{friend.username}</span>
+                                {friendUnread > 0 && (
+                                  <span className="bg-indigo-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-extrabold animate-pulse">
+                                    未読 {friendUnread}
+                                  </span>
+                                )}
                               </div>
-                            )}
+                              {friend.bio && (
+                                <div className="text-[10px] text-zinc-500 max-w-[130px] truncate">
+                                  {friend.bio}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => router.push(`/messages?to=${friend.id}`)}
+                              className={`p-1.5 rounded-lg transition-all cursor-pointer relative ${
+                                friendUnread > 0
+                                  ? 'text-indigo-300 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/60 shadow-sm'
+                                  : 'text-zinc-500 hover:text-indigo-400 hover:bg-indigo-950/20 border border-transparent hover:border-indigo-900/30'
+                              }`}
+                              title={`${friend.username}とチャット（未読${friendUnread}件）`}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                              </svg>
+                              {friendUnread > 0 && (
+                                <span className="absolute -top-1 -right-1 min-w-[15px] h-3.5 px-1 bg-indigo-500 text-white text-[8px] font-black rounded-full flex items-center justify-center">
+                                  {friendUnread > 99 ? '99+' : friendUnread}
+                                </span>
+                              )}
+                            </button>
+                            <button
+                              onClick={() => openInfo(friend)}
+                              className="p-1.5 text-zinc-500 hover:text-indigo-400 hover:bg-indigo-950/20 border border-transparent hover:border-indigo-900/30 rounded-lg transition-all cursor-pointer"
+                              title="詳細"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </button>
                           </div>
                         </div>
-                        <button
-                          onClick={() => openInfo(friend)}
-                          className="p-1.5 text-zinc-500 hover:text-indigo-400 hover:bg-indigo-950/20 border border-transparent hover:border-indigo-900/30 rounded-lg transition-all cursor-pointer"
-                          title="詳細"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )
               ) : activeFriendTab === 'requests' ? (
