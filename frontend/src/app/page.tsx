@@ -848,38 +848,22 @@ export default function HomePage() {
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3 bg-zinc-900/60 pl-3 pr-4 py-1.5 rounded-full border border-zinc-800/80">
-            {renderAvatar(user.profileImage, 'w-8 h-8 text-base')}
+          {/* ユーザープロフィールボタン（クリックで設定・プロフィール表示） */}
+          <button
+            type="button"
+            onClick={openOptions}
+            className="flex items-center gap-3 bg-zinc-900/60 hover:bg-zinc-800/90 pl-2.5 pr-4 py-1.5 rounded-full border border-zinc-800/80 hover:border-zinc-700 transition-all cursor-pointer group text-left"
+            title="プロフィールを表示・編集"
+          >
+            <div className="relative">
+              {renderAvatar(user.profileImage, 'w-8 h-8 text-base group-hover:scale-105 transition-transform')}
+            </div>
             <div>
-              <div className="text-sm font-semibold text-zinc-100">{user.username}</div>
+              <div className="text-sm font-semibold text-zinc-100 group-hover:text-white transition-colors">
+                {user.username}
+              </div>
               {user.bio && <div className="text-[10px] text-zinc-500 truncate max-w-[100px]">{user.bio}</div>}
             </div>
-          </div>
-
-          <button
-            onClick={() => router.push('/messages')}
-            className="relative p-2 text-zinc-400 hover:text-white bg-zinc-900/60 hover:bg-zinc-800 rounded-full border border-zinc-800/80 transition-all cursor-pointer"
-            title="メッセージ"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-            {totalUnread > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-indigo-600 text-white text-[9px] font-extrabold rounded-full flex items-center justify-center">
-                {totalUnread > 99 ? '99+' : totalUnread}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={openOptions}
-            className="p-2 text-zinc-400 hover:text-white bg-zinc-900/60 hover:bg-zinc-800 rounded-full border border-zinc-800/80 transition-all cursor-pointer"
-            title="設定"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
           </button>
 
           <button
@@ -916,7 +900,7 @@ export default function HomePage() {
                 </div>
                 <div className="space-y-1">
                   <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
-                    部屋を作る
+                    部屋を作成
                   </h2>
                   <p className="text-xs text-zinc-400 leading-relaxed">
                     ホストになって部屋を作成し、コードを共有しよう！
@@ -981,7 +965,7 @@ export default function HomePage() {
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
-                  新規ルームを作成
+                  部屋を作る
                 </button>
               </div>
             </div>
@@ -1003,7 +987,7 @@ export default function HomePage() {
                   </svg>
                 </div>
                 <div className="space-y-1">
-                  <h2 className="text-xl font-bold text-zinc-100">部屋に参加する</h2>
+                  <h2 className="text-xl font-bold text-zinc-100">部屋に参加</h2>
                   <p className="text-xs text-zinc-400 leading-relaxed">
                     コードを入力して、部屋に参加しよう！
                   </p>
@@ -1060,7 +1044,7 @@ export default function HomePage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
-                    部屋に参加する
+                    部屋に参加
                   </button>
                 </form>
               </div>
@@ -1134,15 +1118,35 @@ export default function HomePage() {
         <div className="md:col-span-2 space-y-6">
           <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl shadow-xl flex flex-col min-h-[420px] overflow-hidden">
             <div className="border-b border-zinc-800/80 bg-zinc-900/40 px-4 py-1.5 flex items-center justify-between">
-              <div className="flex gap-2">
+              <div className="flex items-center gap-1 sm:gap-2">
                 <button
                   onClick={() => switchFriendTab('list')}
-                  className={`px-3 py-3 text-xs font-bold transition-all relative ${activeFriendTab === 'list' ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'
+                  className={`px-3 py-3 text-xs font-bold transition-all relative flex items-center gap-1.5 ${activeFriendTab === 'list' ? 'text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'
                     }`}
                 >
                   フレンド ({friends.length})
+                  {totalUnread > 0 && (
+                    <span className="bg-indigo-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-extrabold animate-bounce">
+                      {totalUnread > 99 ? '99+' : totalUnread}
+                    </span>
+                  )}
                   {activeFriendTab === 'list' && (
                     <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500"></div>
+                  )}
+                </button>
+                <button
+                  onClick={() => router.push('/messages')}
+                  className="px-3 py-3 text-xs font-bold transition-all relative flex items-center gap-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800/40 rounded-lg cursor-pointer group"
+                  title="チャット一覧を開く"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-400 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  <span>チャット</span>
+                  {totalUnread > 0 && (
+                    <span className="bg-indigo-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-extrabold animate-bounce">
+                      {totalUnread > 99 ? '99+' : totalUnread}
+                    </span>
                   )}
                 </button>
                 <button
@@ -1187,46 +1191,80 @@ export default function HomePage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {friends.map(friend => (
-                      <div
-                        key={friend.id}
-                        className="flex items-center justify-between p-3 bg-zinc-950/40 hover:bg-zinc-950/80 border border-zinc-800/40 rounded-xl transition-all"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="relative">
-                            {renderAvatar(friend.profileImage, 'w-9 h-9 text-base')}
-                            {onlineFriendIds.has(friend.id) ? (
-                              <span
-                                className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-zinc-900"
-                                title="オンライン"
-                              ></span>
-                            ) : (
-                              <span
-                                className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-zinc-600 ring-2 ring-zinc-900"
-                                title="オフライン"
-                              ></span>
-                            )}
-                          </div>
-                          <div>
-                            <div className="text-sm font-semibold text-zinc-100">{friend.username}</div>
-                            {friend.bio && (
-                              <div className="text-[10px] text-zinc-500 max-w-[130px] truncate">
-                                {friend.bio}
+                    {friends.map(friend => {
+                      const friendUnread = unreadCounts.get(friend.id) ?? 0;
+                      return (
+                        <div
+                          key={friend.id}
+                          className={`flex items-center justify-between p-3 rounded-xl transition-all ${
+                            friendUnread > 0
+                              ? 'bg-indigo-950/30 hover:bg-indigo-950/50 border border-indigo-500/50 shadow-sm shadow-indigo-500/10'
+                              : 'bg-zinc-950/40 hover:bg-zinc-950/80 border border-zinc-800/40'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="relative">
+                              {renderAvatar(friend.profileImage, 'w-9 h-9 text-base')}
+                              {onlineFriendIds.has(friend.id) ? (
+                                <span
+                                  className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-zinc-900"
+                                  title="オンライン"
+                                ></span>
+                              ) : (
+                                <span
+                                  className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-zinc-600 ring-2 ring-zinc-900"
+                                  title="オフライン"
+                                ></span>
+                              )}
+                            </div>
+                            <div>
+                              <div className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+                                <span>{friend.username}</span>
+                                {friendUnread > 0 && (
+                                  <span className="bg-indigo-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-extrabold animate-pulse">
+                                    未読 {friendUnread}
+                                  </span>
+                                )}
                               </div>
-                            )}
+                              {friend.bio && (
+                                <div className="text-[10px] text-zinc-500 max-w-[130px] truncate">
+                                  {friend.bio}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => router.push(`/messages?to=${friend.id}`)}
+                              className={`p-1.5 rounded-lg transition-all cursor-pointer relative ${
+                                friendUnread > 0
+                                  ? 'text-indigo-300 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/60 shadow-sm'
+                                  : 'text-zinc-500 hover:text-indigo-400 hover:bg-indigo-950/20 border border-transparent hover:border-indigo-900/30'
+                              }`}
+                              title={`${friend.username}とチャット（未読${friendUnread}件）`}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                              </svg>
+                              {friendUnread > 0 && (
+                                <span className="absolute -top-1 -right-1 min-w-[15px] h-3.5 px-1 bg-indigo-500 text-white text-[8px] font-black rounded-full flex items-center justify-center">
+                                  {friendUnread > 99 ? '99+' : friendUnread}
+                                </span>
+                              )}
+                            </button>
+                            <button
+                              onClick={() => openInfo(friend)}
+                              className="p-1.5 text-zinc-500 hover:text-indigo-400 hover:bg-indigo-950/20 border border-transparent hover:border-indigo-900/30 rounded-lg transition-all cursor-pointer"
+                              title="詳細"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </button>
                           </div>
                         </div>
-                        <button
-                          onClick={() => openInfo(friend)}
-                          className="p-1.5 text-zinc-500 hover:text-indigo-400 hover:bg-indigo-950/20 border border-transparent hover:border-indigo-900/30 rounded-lg transition-all cursor-pointer"
-                          title="詳細"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )
               ) : activeFriendTab === 'requests' ? (
