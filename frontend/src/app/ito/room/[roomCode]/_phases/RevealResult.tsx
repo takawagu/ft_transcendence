@@ -123,7 +123,6 @@ export function RevealResult({ state, myId, emit }: PhaseProps) {
       {roomPhase === 'ROUND_RESULT' && (
         <div className="w-full bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-md rounded-2xl p-5 text-center mt-4 space-y-4">
           <div className="flex justify-between items-center px-2">
-            <span className="text-zinc-500 text-xs uppercase tracking-wider font-semibold">ラウンド進行状況</span>
             <span className="text-xs bg-zinc-805 border border-zinc-800 text-zinc-300 font-bold px-2.5 py-1 rounded-full">
               ラウンド {state.currentRound ?? 1} / {state.totalRounds ?? 1}
             </span>
@@ -137,13 +136,13 @@ export function RevealResult({ state, myId, emit }: PhaseProps) {
                     onClick={() => emit('ito:nextRound')}
                     className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-4 py-3.5 font-bold text-sm text-white transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
                   >
-                    次のラウンドへ進む 🚀
+                    次のラウンドへ進む
                   </button>
                   <button
                     onClick={() => emit('ito:endGame')}
                     className="flex-1 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 border border-zinc-700 px-4 py-3.5 font-bold text-sm text-zinc-300 transition-all cursor-pointer"
                   >
-                    ゲームを途中で終了する 🏁
+                    部屋を解散する
                   </button>
                 </>
               ) : (
@@ -151,7 +150,7 @@ export function RevealResult({ state, myId, emit }: PhaseProps) {
                   onClick={() => emit('ito:endGame')}
                   className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-4 py-3.5 font-bold text-sm text-white transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
                 >
-                  結果を確認してゲームを終了する 🏆
+                  結果を確認してゲームを終了する 
                 </button>
               )}
             </div>

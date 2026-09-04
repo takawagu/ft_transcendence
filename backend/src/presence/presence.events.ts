@@ -33,6 +33,9 @@ export const PRESENCE_EVENTS = {
 
   /** 会話を既読にした時。本人の全タブへ送り、未読バッジを揃える */
   DM_READ: 'dm:read',
+
+  /** メッセージ入力中状態の変化 */
+  DM_TYPING: 'dm:typing',
 } as const;
 
 export interface PresenceSnapshotPayload {
@@ -73,4 +76,10 @@ export interface DmReadPayload {
   /** 既読にした会話の相手 */
   userId: number;
   lastReadMessageId: number;
+}
+
+export interface DmTypingPayload {
+  /** 入力状態が変化した相手 */
+  userId: number;
+  isTyping: boolean;
 }

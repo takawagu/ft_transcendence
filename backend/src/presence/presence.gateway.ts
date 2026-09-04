@@ -1,6 +1,9 @@
 import {
   WebSocketGateway,
   WebSocketServer,
+  SubscribeMessage,
+  ConnectedSocket,
+  MessageBody,
   OnGatewayInit,
   OnGatewayConnection,
   OnGatewayDisconnect,
@@ -8,6 +11,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { AuthService } from '../auth/auth.service';
 import { PresenceService } from './presence.service';
+import { PRESENCE_EVENTS } from './presence.events';
 
 /** 接続後にsocketへ保持する情報 */
 interface SocketData {
@@ -68,6 +72,19 @@ export class PresenceGateway
     if (userId === undefined) return;
 
     await this.presenceService.handleDisconnect(userId, client.id);
+  }
+
+  @SubscribeMessage(PRESENCE_EVENTS.DM_TYPING)
+  handleTyping(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { toUserId: number; isTyping: boolean },
+  ) {
+    const { userId } = client.data as SocketData;
+    if (!userId || typeof data?.toUserId !== 'number') return;
+    this.presenceService.emitToUser(data.toUserId, PRESENCE_EVENTS.DM_TYPING, {
+      userId,
+      isTyping: !!data.isTyping,
+    });
   }
 
   private resolveUserId(client: Socket): number | undefined {

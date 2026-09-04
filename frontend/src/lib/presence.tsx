@@ -38,8 +38,10 @@ export interface PresenceEventPayloads {
   'friend:accepted': { user: User };
   /** user は会話の相手。受信者には送信者、送信者には受信者が入る */
   'dm:received': { message: DirectMessage; user: User };
-  /** 自分が別タブで会話を既読にした時。userId は会話の相手 */
+  /** 自分が別タブで会話を既読にした時、または相手がメッセージを読んだ時 */
   'dm:read': { userId: number; lastReadMessageId: number };
+  /** 相手の入力状態が変化した時 */
+  'dm:typing': { userId: number; isTyping: boolean };
 }
 
 export type PresenceEventName = keyof PresenceEventPayloads;
@@ -51,6 +53,7 @@ const PRESENCE_EVENT_NAMES: PresenceEventName[] = [
   'friend:accepted',
   'dm:received',
   'dm:read',
+  'dm:typing',
 ];
 
 type Handler = (payload: any) => void;
@@ -70,6 +73,8 @@ interface PresenceContextValue {
    * 表示は即座に消し、サーバーへも記録する。
    */
   markConversationRead: (userId: number, lastMessageId: number) => void;
+  /** 相手への入力中状態の送信 */
+  sendTyping: (toUserId: number, isTyping: boolean) => void;
   /** サーバーイベントの購読。戻り値の関数を呼ぶと解除する */
   subscribe: <E extends PresenceEventName>(
     event: E,
@@ -106,6 +111,11 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
    * 取得していない間は null。
    */
   const clearedWhileFetchingRef = useRef<Set<number> | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+
+  const sendTyping = useCallback((toUserId: number, isTyping: boolean) => {
+    socketRef.current?.emit('dm:typing', { toUserId, isTyping });
+  }, []);
 
   /** サーバーへの記録を待たずにバッジを消す（往復を待つとタップの手応えが鈍るため） */
   const clearUnreadLocally = useCallback((userId: number) => {
@@ -198,6 +208,7 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
     }
 
     const socket: Socket = io(`${WS_URL}/presence`, { auth: { token } });
+    socketRef.current = socket;
 
     // 在席状態だけは Provider 自身が state として持つ（各ページが同じ集計をしないで済むように）
     socket.on('presence:snapshot', (p: PresenceEventPayloads['presence:snapshot']) => {
@@ -241,13 +252,14 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
     }
 
     return () => {
+      socketRef.current = null;
       socket.disconnect();
     };
   }, [token, clearUnreadLocally]);
 
   return (
     <PresenceContext.Provider
-      value={{ onlineFriendIds, unreadCounts, markConversationRead, subscribe }}
+      value={{ onlineFriendIds, unreadCounts, markConversationRead, sendTyping, subscribe }}
     >
       {children}
     </PresenceContext.Provider>

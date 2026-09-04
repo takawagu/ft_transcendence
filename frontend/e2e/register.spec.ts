@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
 test.describe('新規登録フォーム', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForSelector('text=AITO');
+    await page.waitForSelector('text=新規登録');
     await page.click('text=新規登録');
   });
 
