@@ -18,12 +18,16 @@ import { PauseOverlay } from './_phases/PauseOverlay';
 const BACKEND_URL = process.env.NEXT_PUBLIC_WS_URL ?? '';
 
 /**
- * 同一ブラウザの他タブに「この部屋を開いているか」を尋ねるチャネル。
+ * 同一ブラウザの他タブに「同じアカウントでゲームを開いているか」を尋ねるチャネル。
+ * 応答があれば接続せず、1アカウントが同時に持てるゲームタブを1つに保つ。
  *
- * サーバは「後から来た接続が正」として席を付け替える。切断検知までの間の再接続を
- * 通すためにそう決めており変えられないが、そのままだと同じブラウザで2つ目のタブを
- * 開いただけで先のタブがゲームから弾き出される。そこで、同一ブラウザ内の重複は
- * 接続する前にここで止める。
+ * 部屋コードでは絞らない。別々の部屋なら許すと、同じユーザーが2つのゲームを
+ * 並行して終えられてしまい、戦績の集計(recordRoundResults)が同一ユーザー行へ
+ * 同時に走りうるため。
+ *
+ * 接続する前に止めるのが要点。サーバは「後から来た接続が正」として席を付け替える
+ * （切断検知までの間の再接続を通すために必要で、変えられない）ので、
+ * 繋いでしまってからでは先のタブを弾き出した後になる。
  *
  * BroadcastChannelは自分の投稿を自分には配信しないので、単純なping/pongで足りる。
  * リロードでは旧タブが既に消えていて応答が返らないため、復帰の邪魔はしない。
@@ -306,32 +310,33 @@ export default function RoomPage() {
     const channel =
       typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(TAB_CHANNEL);
 
-    // 他タブからの問い合わせに答える側。実際に繋がっている部屋だけを名乗る
+    // 他タブからの問い合わせに答える側。
+    // 部屋コードは見ない。同じアカウントが別々の部屋で同時に遊べてしまうと、
+    // 戦績の集計(recordRoundResults)が同一ユーザー行へ同時に走りうるため。
     channel?.addEventListener('message', (ev: MessageEvent) => {
       const msg = ev.data;
-      if (msg?.type === 'probe' && msg.roomCode && msg.roomCode === joinedRoomCodeRef.current) {
-        channel.postMessage({ type: 'here', roomCode: msg.roomCode });
+      if (msg?.type === 'probe' && msg.playerId === playerId && joinedRoomCodeRef.current) {
+        channel.postMessage({ type: 'here', playerId });
       }
     });
 
     let probeTimer: ReturnType<typeof setTimeout> | undefined;
 
-    // BroadcastChannel非対応の環境では従来どおり繋ぐ（重複はサーバ側の席の付け替えに委ねる）。
-    // /new はまだ部屋が無いので重複しようがない
-    if (!channel || isCreating) {
+    // BroadcastChannel非対応の環境では従来どおり繋ぐ（重複はサーバ側の席の付け替えに委ねる）
+    if (!channel) {
       socket.connect();
     } else {
       let occupied = false;
       const onReply = (ev: MessageEvent) => {
-        if (ev.data?.type === 'here' && ev.data.roomCode === routeRoomCode) occupied = true;
+        if (ev.data?.type === 'here' && ev.data.playerId === playerId) occupied = true;
       };
       channel.addEventListener('message', onReply);
-      channel.postMessage({ type: 'probe', roomCode: routeRoomCode });
+      channel.postMessage({ type: 'probe', playerId });
 
       probeTimer = setTimeout(() => {
         channel.removeEventListener('message', onReply);
         if (occupied) {
-          leaveWith('この部屋は別のタブで開いています');
+          leaveWith('別のタブでゲームを開いています。同時に複数のゲームには参加できません');
           return;
         }
         socket.connect();
