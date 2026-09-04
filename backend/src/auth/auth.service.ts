@@ -118,4 +118,20 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired token');
     }
   }
+
+  /**
+   * WebSocketハンドシェイクのトークンからuserIdだけを取り出す。
+   * 接続時は「通ったか通らなかったか」しか要らないので、
+   * 未指定・不正・期限切れのいずれも例外ではなくundefinedで返す。
+   */
+  userIdFromToken(token: unknown): number | undefined {
+    if (typeof token !== 'string') return undefined;
+
+    try {
+      const payload = jwt.verify(token, this.jwtSecret) as { userId?: unknown };
+      return typeof payload?.userId === 'number' ? payload.userId : undefined;
+    } catch {
+      return undefined;
+    }
+  }
 }

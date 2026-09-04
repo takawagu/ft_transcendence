@@ -14,6 +14,13 @@ import { useSession, type User } from './session';
 /** nginxが同一オリジンで配信するため通常は空。itoルーム側と同じ扱い */
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? '';
 
+/**
+ * 同一アカウントの重複で拒否されたあと、繋ぎ直すまでの間隔。
+ * 先に開いていた方が閉じられたら自動で復帰させるために要る
+ * （socket.ioはミドルウェア起因のエラーでは自動再接続しないため）。
+ */
+const DUPLICATE_RETRY_MS = 5000;
+
 /** DateはJSONを経由するとISO文字列になるため string で受ける */
 export interface DirectMessage {
   id: number;
@@ -101,9 +108,11 @@ export function usePresence(): PresenceContextValue {
  * itoルームの `/ito` とは名前空間が違うので、2本が並存しても競合しない。
  */
 export function PresenceProvider({ children }: { children: React.ReactNode }) {
-  const { token, apiCall } = useSession();
+  const { token, apiCall, logout } = useSession();
   const [onlineFriendIds, setOnlineFriendIds] = useState<Set<number>>(new Set());
   const [unreadCounts, setUnreadCounts] = useState<Map<number, number>>(new Map());
+  /** 同一アカウントが既に別のタブ／端末で開いていて、接続を拒否された */
+  const [duplicateSession, setDuplicateSession] = useState(false);
 
   /**
    * 初期取得（/api/messages/unread）の応答待ちの間に既読にした相手。
@@ -210,6 +219,26 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
     const socket: Socket = io(`${WS_URL}/presence`, { auth: { token } });
     socketRef.current = socket;
 
+    socket.on('connect', () => setDuplicateSession(false));
+
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+    /*
+     * サーバのミドルウェアが接続を拒否した理由が message に入る。
+     * 文字列は backend/src/presence/presence.events.ts の PRESENCE_CONNECT_ERRORS と対応。
+     */
+    socket.on('connect_error', (err: Error) => {
+      if (err.message !== 'DUPLICATE_SESSION') return;
+      setDuplicateSession(true);
+
+      /*
+       * socket.ioはミドルウェア起因のエラーを回復不能として扱い、自動再接続しない。
+       * 自分で繋ぎ直さないと、先に開いていた方を閉じてもこのタブは死んだままになり、
+       * フレンドからはずっとオフラインに見える。
+       */
+      retryTimer = setTimeout(() => socket.connect(), DUPLICATE_RETRY_MS);
+    });
+
     // 在席状態だけは Provider 自身が state として持つ（各ページが同じ集計をしないで済むように）
     socket.on('presence:snapshot', (p: PresenceEventPayloads['presence:snapshot']) => {
       setOnlineFriendIds(new Set(p.onlineFriendIds));
@@ -253,6 +282,7 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       socketRef.current = null;
+      clearTimeout(retryTimer);
       socket.disconnect();
     };
   }, [token, clearUnreadLocally]);
@@ -262,6 +292,40 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
       value={{ onlineFriendIds, unreadCounts, markConversationRead, sendTyping, subscribe }}
     >
       {children}
+      {duplicateSession && <DuplicateSessionBlock onLogout={logout} />}
     </PresenceContext.Provider>
+  );
+}
+
+/**
+ * 同一アカウントが既に別の場所で開いているときの全画面ブロック。
+ * layout直下に置くProviderから出すので、itoルームを含むどの画面の上にも被さる。
+ */
+function DuplicateSessionBlock({ onLogout }: { onLogout: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4">
+      <div className="bg-zinc-800 rounded-2xl p-10 flex flex-col items-center gap-5 shadow-2xl max-w-md text-center">
+        <p className="text-xl font-bold text-white">
+          このアカウントは別のタブまたは端末で開いています
+        </p>
+        <p className="text-zinc-400 text-sm">
+          同時に使えるのは1つまでです。先に開いている方を閉じると、この画面は自動で復帰します。
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={() => window.location.reload()}
+            className="rounded-lg bg-indigo-600 px-6 py-2 font-semibold text-white hover:bg-indigo-500 transition-colors"
+          >
+            今すぐ再試行
+          </button>
+          <button
+            onClick={onLogout}
+            className="rounded-lg bg-zinc-700 px-6 py-2 font-semibold text-zinc-200 hover:bg-zinc-600 transition-colors"
+          >
+            ログアウト
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -150,10 +150,21 @@ export const ITO_EVENTS = {
 
   /** 再接続した本人にのみ送る、完全な状態復元用ペイロード */
   RESYNC_STATE: 'ito:resyncState',
+
+  /** 同じ席に別の接続が入り、この接続が席から外された（旧ソケットにのみ送る） */
+  SESSION_TAKEN_OVER: 'ito:sessionTakenOver',
 } as const;
 
 // ===== ペイロード型（Client → Server） =====
 
+/**
+ * 「自分は誰か」を表すplayerIdは、どのペイロードでも**ゲートウェイが
+ * ハンドシェイクのJWTから埋める**。クライアントが送っても捨てられる。
+ * 信用すると、roomCodeと他人のuserIdを知っているだけで席を奪えてしまうため。
+ *
+ * 一方 ExcludePlayerPayload / AwaitReturnPayload のplayerIdは「操作の対象」であって
+ * 名乗りではないので上書きしない（権限はホスト判定と切断中判定で担保している）。
+ */
 export class CreateRoomPayload {
   playerName: string;
   playerId: string;
@@ -298,4 +309,6 @@ export interface ResyncStatePayload extends RoomStatePayload {
   turnOrder: string[];
   messages: ChatMessagePayload[];
   myCardNumber?: number; // 本人のみに送る
+  /** 直近ラウンドの公開結果。ROUND_RESULT/GAME_OVER中に復帰した人の結果画面を復元する */
+  lastReveal?: CardsRevealedPayload;
 }

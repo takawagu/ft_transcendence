@@ -164,7 +164,9 @@ export class GameService {
       room.boardOrder.every((id, i) => id === correctOrder[i]);
 
     room.roomPhase = 'REVEAL';
-    this.broadcast.emitToRoom(room.id, ITO_EVENTS.CARDS_REVEALED, {
+    // CARDS_REVEALEDはこの一度しか飛ばないので、結果を部屋にも残しておく。
+    // ROUND_RESULT中に復帰した人へはRESYNC_STATE経由でこれを渡す。
+    room.lastReveal = {
       revealedCards: placed.map((p) => ({
         playerId: p.playerId,
         cardNumber: p.cardNumber!,
@@ -172,7 +174,12 @@ export class GameService {
       submittedOrder: [...room.boardOrder],
       correctOrder,
       success,
-    });
+    };
+    this.broadcast.emitToRoom(
+      room.id,
+      ITO_EVENTS.CARDS_REVEALED,
+      room.lastReveal,
+    );
 
     room.roomPhase = 'ROUND_RESULT';
     this.broadcast.broadcastPhaseChange(room);
@@ -291,6 +298,9 @@ export class GameService {
     room.boardOrder = [];
     room.currentTurnIndex = 0;
     room.roundHostId = '';
+    // 前ラウンドの結果はここで捨てる。purgeExcludedの直後なので、
+    // 残すと既にroom.playersから消えたプレイヤーを指したまま復帰者へ送られてしまう。
+    room.lastReveal = undefined;
     // turnOrderは意図的に残す。buildTurnOrderが次ラウンドの手番順を
     // 「前ラウンドの順を1つ回転させたもの」として組み立てる回転元になるため、
     // ここで空にすると次ラウンドの手番順が空になりゲームが進行不能になる。

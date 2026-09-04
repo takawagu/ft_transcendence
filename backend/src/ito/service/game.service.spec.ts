@@ -171,6 +171,63 @@ describe('GameService turn order', () => {
     expect(room.turnOrder).toEqual(['b', 'a']);
   });
 
+  describe('reveal snapshot', () => {
+    /** ORDERING中の部屋を作り、ホストaのソケットを繋いだ状態にする */
+    function seedOrdering(): ItoRoom {
+      const room = makeRoom({
+        roomPhase: 'ORDERING',
+        turnOrder: ['a', 'b', 'c'],
+        boardOrder: ['a', 'b', 'c'],
+        roundHostId: 'a',
+        players: [
+          makePlayer({ playerId: 'a', isRoomOwner: true, cardNumber: 10 }),
+          makePlayer({ playerId: 'b', cardNumber: 20 }),
+          makePlayer({ playerId: 'c', cardNumber: 30 }),
+        ],
+      });
+      const store = (service as any).store as RoomStore;
+      store.addRoom(room);
+      store.linkSocket('sock-a', room.id, 'a');
+      return room;
+    }
+
+    it('keeps the revealed result on the room so a late rejoin can still see it', () => {
+      // 回帰: cardsRevealedは公開の瞬間にしか飛ばないため、保存しないと
+      // ROUND_RESULT中に復帰した人の結果画面が空欄になっていた。
+      const room = seedOrdering();
+
+      service.confirmOrder({ id: 'sock-a' } as any);
+
+      expect(room.lastReveal).toEqual({
+        revealedCards: [
+          { playerId: 'a', cardNumber: 10 },
+          { playerId: 'b', cardNumber: 20 },
+          { playerId: 'c', cardNumber: 30 },
+        ],
+        submittedOrder: ['a', 'b', 'c'],
+        correctOrder: ['a', 'b', 'c'],
+        success: true,
+      });
+      // 保存したものと配信したものが同一であること（片方だけ直る事故を防ぐ）
+      expect(broadcast.emitToRoom).toHaveBeenCalledWith(
+        room.id,
+        'ito:cardsRevealed',
+        room.lastReveal,
+      );
+    });
+
+    it('drops the stored result at the round boundary', () => {
+      // purgeExcludedの直後なので、残すと既に消えたプレイヤーを指したまま復帰者へ送られる
+      const room = seedOrdering();
+      service.confirmOrder({ id: 'sock-a' } as any);
+      expect(room.lastReveal).toBeDefined();
+
+      service.nextRound({ id: 'sock-a' } as any);
+
+      expect(room.lastReveal).toBeUndefined();
+    });
+  });
+
   it('round>=2: all players excluded except host still produces a valid single-player order', () => {
     const room = makeRoom({
       currentRound: 3,

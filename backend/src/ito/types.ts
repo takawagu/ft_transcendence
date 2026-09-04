@@ -1,4 +1,9 @@
-import { ChatMessagePayload, PlayerPhase, PlayerStatus } from './ito.events';
+import {
+  CardsRevealedPayload,
+  ChatMessagePayload,
+  PlayerPhase,
+  PlayerStatus,
+} from './ito.events';
 
 export interface ItoPlayer {
   /** 現在紐づいている接続。切断中はnull。identityとしては使わない（playerIdを使うこと） */
@@ -36,6 +41,12 @@ export interface ItoRoom {
    */
   paused: boolean;
   messages: ChatMessagePayload[];
+  /**
+   * 直近ラウンドの公開結果。CARDS_REVEALEDは公開の瞬間に一度しか飛ばないため、
+   * ROUND_RESULT/GAME_OVER中に復帰した人にはこれをRESYNC_STATEで渡さないと結果画面が空になる。
+   * ラウンド境界（nextRound）でクリアする。
+   */
+  lastReveal?: CardsRevealedPayload;
 }
 
 export const SPEAKING_PHASES = [

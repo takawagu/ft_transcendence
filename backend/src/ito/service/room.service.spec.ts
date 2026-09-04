@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import { RoomService } from './room.service';
-import { RoomStore } from './room.store';
+import { ROOM_DISPOSE_GRACE_MS, RoomStore } from './room.store';
 import { BroadcastService } from './broadcast.service';
 import { GameService } from './game.service';
 import { ItoPlayer, ItoRoom } from '../types';
@@ -50,7 +50,11 @@ describe('RoomService disconnect handling', () => {
   let broadcast: jest.Mocked<
     Pick<
       BroadcastService,
-      'emitToRoom' | 'broadcastRoomState' | 'broadcastPhaseChange' | 'emitResyncState'
+      | 'emitToRoom'
+      | 'broadcastRoomState'
+      | 'broadcastPhaseChange'
+      | 'emitResyncState'
+      | 'dropSocket'
     >
   >;
   let gameService: jest.Mocked<Pick<GameService, 'advancePhaseIfComplete'>>;
@@ -61,6 +65,7 @@ describe('RoomService disconnect handling', () => {
       broadcastRoomState: jest.fn(),
       broadcastPhaseChange: jest.fn(),
       emitResyncState: jest.fn(),
+      dropSocket: jest.fn(),
     };
     gameService = { advancePhaseIfComplete: jest.fn() };
     store = new RoomStore();
@@ -306,6 +311,171 @@ describe('RoomService disconnect handling', () => {
 
       expect(returning.emit).toHaveBeenCalledWith('ito:error', expect.anything());
       expect(room.players.map((p) => p.playerId)).toEqual(['a']);
+    });
+  });
+
+  describe('seat takeover', () => {
+    it('cuts the old socket loose when a second connection takes the seat', () => {
+      // 回帰: 旧ソケットを部屋に残すと、操作は全てresolveで弾かれるのに
+      // ブロードキャストだけは届き続ける「何も効かないタブ」になっていた。
+      const room = seedRoom(['a', 'b']);
+
+      service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
+
+      expect(broadcast.dropSocket).toHaveBeenCalledWith('sock-b', room.id);
+      expect(store.resolve('sock-b')).toBeUndefined();
+      expect(store.resolve('sock-b2')?.player.playerId).toBe('b');
+    });
+
+    it('has nothing to cut loose when the seat was already empty', () => {
+      seedRoom(['a', 'b']);
+      service.handleDisconnect('sock-b');
+
+      service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
+
+      expect(broadcast.dropSocket).not.toHaveBeenCalled();
+    });
+
+    it('does not announce a reconnect when the seat was never seen to drop', () => {
+      // 別タブが席を引き継いだだけ。他プレイヤーは離脱を見ていないので通知は嘘になる
+      const room = seedRoom(['a', 'b']);
+
+      service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
+
+      expect(broadcast.emitToRoom).not.toHaveBeenCalledWith(
+        room.id,
+        'ito:playerReconnected',
+        expect.anything(),
+      );
+    });
+
+    it('announces a reconnect when the player really had dropped', () => {
+      const room = seedRoom(['a', 'b']);
+      service.handleDisconnect('sock-b');
+
+      service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
+
+      expect(broadcast.emitToRoom).toHaveBeenCalledWith(room.id, 'ito:playerReconnected', {
+        playerId: 'b',
+        playerName: 'pb',
+      });
+    });
+
+    it('does not cut loose the very socket that is rejoining', () => {
+      // 同じソケットからrejoinが二度来ても、自分を部屋から外してはいけない
+      seedRoom(['a', 'b']);
+
+      service.rejoin(fakeSocket('sock-b'), { roomCode: 'ABC123', playerId: 'b' });
+
+      expect(broadcast.dropSocket).not.toHaveBeenCalled();
+      expect(store.resolve('sock-b')?.player.playerId).toBe('b');
+    });
+  });
+
+  describe('disposal grace period', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    /** 猶予が確実に切れるところまで時計を進める */
+    function waitOutGrace() {
+      jest.advanceTimersByTime(ROOM_DISPOSE_GRACE_MS + 1);
+    }
+
+    it('keeps a started room alive when the last connected player drops', () => {
+      seedRoom(['a', 'b']);
+
+      service.handleDisconnect('sock-b');
+      service.handleDisconnect('sock-a');
+
+      expect(store.getRoomByCode('ABC123')).toBeDefined();
+    });
+
+    it('disposes the room once the grace period passes with nobody back', () => {
+      seedRoom(['a', 'b']);
+
+      service.handleDisconnect('sock-b');
+      service.handleDisconnect('sock-a');
+      waitOutGrace();
+
+      expect(store.getRoomByCode('ABC123')).toBeUndefined();
+    });
+
+    it('revives the room when someone rejoins inside the grace period', () => {
+      const room = seedRoom(['a', 'b']);
+      service.handleDisconnect('sock-b');
+      service.handleDisconnect('sock-a');
+
+      service.rejoin(fakeSocket('sock-a2'), { roomCode: 'ABC123', playerId: 'a' });
+      waitOutGrace();
+
+      expect(store.getRoomByCode('ABC123')).toBe(room);
+      expect(room.players.find((p) => p.playerId === 'a')?.status).toBe('ACTIVE');
+      // 相手はまだ戻っていないので、ホストが対応するまでポーズは続く
+      expect(room.paused).toBe(true);
+      expect(awolPlayers(room).map((p) => p.playerId)).toEqual(['b']);
+    });
+
+    it('hands the host role to whoever comes back first', () => {
+      // ホストaが最後に落ちた部屋では移譲が起きないため、bが戻った時点でbがホストになる
+      const room = seedRoom(['a', 'b']);
+      service.handleDisconnect('sock-b');
+      service.handleDisconnect('sock-a');
+
+      service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
+
+      expect(room.players.filter((p) => p.isRoomOwner).map((p) => p.playerId)).toEqual([
+        'b',
+      ]);
+    });
+
+    it('does not take the host role from a connected host', () => {
+      const room = seedRoom(['a', 'b', 'c']);
+      service.handleDisconnect('sock-c');
+
+      service.rejoin(fakeSocket('sock-c2'), { roomCode: 'ABC123', playerId: 'c' });
+
+      expect(room.players.filter((p) => p.isRoomOwner).map((p) => p.playerId)).toEqual([
+        'a',
+      ]);
+    });
+
+    it('keeps an empty lobby alive so a solo host can reload back into it', () => {
+      const room = makeRoom({
+        roomPhase: 'WAITING',
+        currentRound: 0,
+        players: [makePlayer({ playerId: 'a', isRoomOwner: true })],
+      });
+      store.addRoom(room);
+      store.linkSocket('sock-a', room.id, 'a');
+
+      service.handleDisconnect('sock-a');
+      expect(room.players).toHaveLength(0);
+      expect(store.getRoomByCode('ABC123')).toBe(room);
+
+      service.rejoin(fakeSocket('sock-a2'), {
+        roomCode: 'ABC123',
+        playerId: 'a',
+        playerName: 'pa',
+      });
+      waitOutGrace();
+
+      expect(store.getRoomByCode('ABC123')).toBe(room);
+      expect(room.players.map((p) => p.playerId)).toEqual(['a']);
+      expect(room.players[0].isRoomOwner).toBe(true);
+    });
+
+    it('still deletes the room immediately when the last player leaves on purpose', () => {
+      const room = makeRoom({
+        roomPhase: 'WAITING',
+        currentRound: 0,
+        players: [makePlayer({ playerId: 'a', isRoomOwner: true })],
+      });
+      store.addRoom(room);
+      store.linkSocket('sock-a', room.id, 'a');
+
+      service.leaveRoom(fakeSocket('sock-a'));
+
+      expect(store.getRoomByCode('ABC123')).toBeUndefined();
     });
   });
 });
