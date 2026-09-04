@@ -420,91 +420,99 @@ export default function HomePage() {
   // --- TITLE SCREEN (Not logged in) ---
   if (!token || !user) {
     return (
-      <main className="min-h-screen flex flex-col justify-between items-center bg-[#050811] text-white relative overflow-hidden px-4 py-6 select-none font-sans">
-        {/* Fullscreen Game Background Image */}
+      <main className="h-dvh min-h-screen flex flex-col justify-between items-center bg-[#050811] text-white relative overflow-hidden px-4 py-4 sm:py-6 select-none font-sans">
+        {/* Fullscreen Game Background Texture */}
         <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
-          {/* Shift image container further up so '4ito' logo sits higher */}
-          <div className="absolute inset-x-0 -top-[22vh] sm:-top-[26vh] h-[125vh]">
-            <Image
-              src="/title-bg.jpg"
-              alt="4ito Title Background"
-              fill
-              priority
-              className="object-cover object-center scale-100 opacity-100 brightness-110 contrast-105"
-            />
-          </div>
-          {/* Subtle bottom fade to seamlessly blend into background */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#050811] via-transparent to-transparent pointer-events-none" />
+          <Image
+            src="/title-bg-clean.jpg"
+            alt="Game Background"
+            fill
+            priority
+            className="object-cover object-center scale-105 opacity-100"
+          />
+          {/* Subtle bottom fade */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#050811]/90 via-transparent to-[#050811]/40 pointer-events-none" />
         </div>
 
-        {/* Top spacer: Change this height (e.g. h-[40vh], h-[42vh]) to directly move buttons up/down */}
-        <div className="h-[65vh] w-full shrink-0" />
-
-        {/* Action Menu Buttons */}
-        <div className="z-10 text-center max-w-xl w-full mx-auto space-y-4">
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
-            <button
-              type="button"
-              onClick={() => {
-                setIsLoginTab(true);
-                setAuthModal('login');
-                setAuthError('');
-                setRegisterSuccessMsg('');
-              }}
-              className="w-full sm:w-60 py-4 px-8 rounded-2xl font-bold text-base tracking-wide transition-all duration-200 flex items-center justify-center gap-2.5 bg-zinc-900/90 hover:bg-zinc-800 text-white border border-white/40 hover:border-white/80 shadow-2xl backdrop-blur-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-              </svg>
-              ログイン
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setIsLoginTab(false);
-                setAuthModal('register');
-                setAuthError('');
-                setRegisterSuccessMsg('');
-              }}
-              className="w-full sm:w-60 py-4 px-8 rounded-2xl font-bold text-base tracking-wide transition-all duration-200 flex items-center justify-center gap-2.5 bg-zinc-900/90 hover:bg-zinc-800 text-white border border-white/40 hover:border-white/80 shadow-2xl backdrop-blur-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-              </svg>
-              新規登録
-            </button>
+        {/* Main Content Area (Logo & Action Buttons) */}
+        <div className="z-10 flex-1 flex flex-col items-center justify-center min-h-0 w-full max-w-2xl md:max-w-3xl lg:max-w-4xl mx-auto py-2">
+          {/* Dynamically Scaled 4ito Logo Container */}
+          <div className="flex-1 flex items-center justify-center min-h-0 w-full px-4 my-auto">
+            <div className="relative w-full max-w-[82vw] sm:max-w-lg md:max-w-2xl lg:max-w-3xl flex items-center justify-center">
+              <Image
+                src="/4ito-logo.png"
+                alt="4ito"
+                width={1000}
+                height={536}
+                priority
+                className="w-full h-auto max-h-[30vh] sm:max-h-[36vh] md:max-h-[42vh] lg:max-h-[46vh] object-contain select-none"
+              />
+            </div>
           </div>
 
-          {/* Quick Dev Login (make test 時のみ表示) */}
-          {showDevLogin && (
-            <div className="flex items-center justify-center gap-2 pt-1">
-              <span className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider">DEV:</span>
+          {/* Action Menu Buttons */}
+          <div className="w-full text-center space-y-3 sm:space-y-4 pt-2 pb-4 sm:pb-6 shrink-0">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-5 px-4 max-w-md sm:max-w-xl mx-auto">
               <button
                 type="button"
-                onClick={() => handleDevLogin(1)}
-                disabled={loading}
-                className="px-3 py-1 rounded-md bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200 text-xs font-mono transition-all cursor-pointer"
+                onClick={() => {
+                  setIsLoginTab(true);
+                  setAuthModal('login');
+                  setAuthError('');
+                  setRegisterSuccessMsg('');
+                }}
+                className="w-full sm:w-60 py-3.5 sm:py-4 px-8 rounded-2xl font-bold text-sm sm:text-base tracking-wide transition-all duration-200 flex items-center justify-center gap-2.5 bg-zinc-900/90 hover:bg-zinc-800 text-white border border-white/40 hover:border-white/80 shadow-2xl backdrop-blur-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
               >
-                Dev1 🚀
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+                ログイン
               </button>
+
               <button
                 type="button"
-                onClick={() => handleDevLogin(2)}
-                disabled={loading}
-                className="px-3 py-1 rounded-md bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200 text-xs font-mono transition-all cursor-pointer"
+                onClick={() => {
+                  setIsLoginTab(false);
+                  setAuthModal('register');
+                  setAuthError('');
+                  setRegisterSuccessMsg('');
+                }}
+                className="w-full sm:w-60 py-3.5 sm:py-4 px-8 rounded-2xl font-bold text-sm sm:text-base tracking-wide transition-all duration-200 flex items-center justify-center gap-2.5 bg-zinc-900/90 hover:bg-zinc-800 text-white border border-white/40 hover:border-white/80 shadow-2xl backdrop-blur-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
               >
-                Dev2 👾
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                </svg>
+                新規登録
               </button>
             </div>
-          )}
+
+            {/* Quick Dev Login (make test 時のみ表示) */}
+            {showDevLogin && (
+              <div className="flex items-center justify-center gap-2 pt-1">
+                <span className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider">DEV:</span>
+                <button
+                  type="button"
+                  onClick={() => handleDevLogin(1)}
+                  disabled={loading}
+                  className="px-3 py-1 rounded-md bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200 text-xs font-mono transition-all cursor-pointer"
+                >
+                  Dev1 🚀
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDevLogin(2)}
+                  disabled={loading}
+                  className="px-3 py-1 rounded-md bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200 text-xs font-mono transition-all cursor-pointer"
+                >
+                  Dev2 👾
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Bottom spacer absorbing the remaining space down to the footer */}
-        <div className="flex-1 w-full" />
-
         {/* Footer */}
-        <footer className="z-10 flex justify-center gap-6 py-2">
+        <footer className="z-10 flex justify-center gap-6 py-2 shrink-0">
           <button type="button" onClick={() => setActiveModal('terms')} className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">利用規約</button>
           <span className="text-zinc-600 text-xs">•</span>
           <button type="button" onClick={() => setActiveModal('privacy')} className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">プライバシーポリシー</button>
@@ -1517,13 +1525,7 @@ export default function HomePage() {
                 </label>
                 <div className="flex items-center gap-4 mb-2 p-3 bg-zinc-950 rounded-lg border border-zinc-800">
                   <div className="shrink-0">
-                    {editProfileImage ? (
-                      <img src={editProfileImage} alt="Preview" className="w-12 h-12 rounded-full object-cover border border-zinc-700" />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-500 text-xs">
-                        No Image
-                      </div>
-                    )}
+                    {renderAvatar(editProfileImage, 'w-12 h-12 text-2xl')}
                   </div>
                   <div className="flex-1">
                     <input
