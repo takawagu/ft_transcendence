@@ -93,11 +93,11 @@ export class ItoGateway
   }
 
   @SubscribeMessage(ITO_EVENTS.JOIN_ROOM)
-  handleJoinRoom(
+  async handleJoinRoom(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: JoinRoomPayload,
   ) {
-    this.roomService.joinRoom(client, {
+    await this.roomService.joinRoom(client, {
       ...payload,
       playerId: this.playerIdOf(client),
     });
@@ -164,11 +164,11 @@ export class ItoGateway
   }
 
   @SubscribeMessage(ITO_EVENTS.REJOIN)
-  handleRejoin(
+  async handleRejoin(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: RejoinPayload,
   ) {
-    this.roomService.rejoin(client, {
+    await this.roomService.rejoin(client, {
       ...payload,
       playerId: this.playerIdOf(client),
     });
