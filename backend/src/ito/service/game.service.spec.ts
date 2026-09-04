@@ -1,8 +1,10 @@
+import { Socket } from 'socket.io';
 import { GameService } from './game.service';
 import { RoomStore } from './room.store';
 import { BroadcastService } from './broadcast.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ItoRoom, ItoPlayer } from '../types';
+import { CHAT_MESSAGE_MAX_LENGTH } from '../ito.events';
 
 function makePlayer(overrides: Partial<ItoPlayer>): ItoPlayer {
   return {
@@ -242,5 +244,100 @@ describe('GameService turn order', () => {
     const order: string[] = (service as any).buildTurnOrder(room);
 
     expect(order).toEqual(['c']);
+  });
+});
+
+/**
+ * /ito名前空間にはグローバルのValidationPipeが効かず、payloadは申告されたまま届く。
+ * クライアントのmaxLengthは迂回できるので、上限はサーバ側で担保する必要がある。
+ */
+describe('GameService chat validation', () => {
+  let service: GameService;
+  let store: RoomStore;
+  let broadcast: jest.Mocked<Pick<BroadcastService, 'emitToRoom'>>;
+  let room: ItoRoom;
+
+  function fakeSocket(id: string): Socket {
+    return {
+      id,
+      join: jest.fn(),
+      leave: jest.fn(),
+      emit: jest.fn(),
+    } as unknown as Socket;
+  }
+
+  beforeEach(() => {
+    broadcast = { emitToRoom: jest.fn() };
+    store = new RoomStore();
+    service = new GameService(
+      store,
+      broadcast as unknown as BroadcastService,
+      {} as PrismaService,
+    );
+
+    // チャットが使えるのはORDERING中かつポーズしていない部屋だけ
+    room = makeRoom({
+      roomPhase: 'ORDERING',
+      players: [makePlayer({ playerId: 'a' })],
+    });
+    store.addRoom(room);
+    store.linkSocket('sock-a', room.id, 'a');
+  });
+
+  /** 配信された本文。何も配信されていなければundefined */
+  function broadcastedMessage(): string | undefined {
+    const payload = broadcast.emitToRoom.mock.calls[0]?.[2] as
+      | { message?: string }
+      | undefined;
+    return payload?.message;
+  }
+
+  it('accepts a message at exactly the limit', () => {
+    const message = 'あ'.repeat(CHAT_MESSAGE_MAX_LENGTH);
+
+    service.sendChat(fakeSocket('sock-a'), { message });
+
+    expect(broadcastedMessage()).toBe(message);
+    expect(room.messages).toHaveLength(1);
+  });
+
+  it('refuses a message one character over the limit', () => {
+    const client = fakeSocket('sock-a');
+
+    service.sendChat(client, {
+      message: 'あ'.repeat(CHAT_MESSAGE_MAX_LENGTH + 1),
+    });
+
+    expect(broadcast.emitToRoom).not.toHaveBeenCalled();
+    expect(room.messages).toHaveLength(0);
+    expect(client.emit).toHaveBeenCalledWith(
+      'ito:error',
+      expect.objectContaining({ message: expect.stringContaining('200') }),
+    );
+  });
+
+  it('measures the trimmed body, so trailing spaces do not push it over', () => {
+    const message = 'あ'.repeat(CHAT_MESSAGE_MAX_LENGTH);
+
+    service.sendChat(fakeSocket('sock-a'), { message: `  ${message}  ` });
+
+    expect(broadcastedMessage()).toBe(message);
+  });
+
+  it('drops a whitespace-only message', () => {
+    service.sendChat(fakeSocket('sock-a'), { message: '   \n  ' });
+
+    expect(broadcast.emitToRoom).not.toHaveBeenCalled();
+    expect(room.messages).toHaveLength(0);
+  });
+
+  it('drops a non-string message instead of broadcasting it', () => {
+    // ValidationPipeが効かない以上、messageは文字列とは限らない
+    service.sendChat(fakeSocket('sock-a'), {
+      message: 12345 as unknown as string,
+    });
+
+    expect(broadcast.emitToRoom).not.toHaveBeenCalled();
+    expect(room.messages).toHaveLength(0);
   });
 });

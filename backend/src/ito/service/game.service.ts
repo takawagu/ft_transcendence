@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Socket } from 'socket.io';
 import {
+  CHAT_MESSAGE_MAX_LENGTH,
   ITO_EVENTS,
   PlaceCardPayload,
   ReorderCardsPayload,
@@ -212,10 +213,29 @@ export class GameService {
     const { room, player } = resolved;
     if (room.roomPhase !== 'ORDERING' || room.paused) return;
 
+    /*
+     * /ito名前空間にはグローバルのValidationPipeが効かず、payloadは申告されたまま届く。
+     * クライアント側のmaxLengthはDevToolsでも生のsocket.io接続でも迂回できるので、
+     * 型と長さの検証はここで必ず行う。ここを通った文字列がそのまま全員へ配信され、
+     * room.messagesにも積まれる（部屋が消えるまでメモリに残る）。
+     */
+    if (typeof payload?.message !== 'string') return;
+
+    // 保存も配信もtrim済みの本文で行う。空白だけの送信は無視する（DMのSendMessageDtoと同じ扱い）
+    const message = payload.message.trim();
+    if (!message) return;
+
+    if (message.length > CHAT_MESSAGE_MAX_LENGTH) {
+      client.emit('ito:error', {
+        message: `メッセージは${CHAT_MESSAGE_MAX_LENGTH}文字以内で入力してください`,
+      });
+      return;
+    }
+
     const chatMessage = {
       playerId: player.playerId,
       playerName: player.name,
-      message: payload.message,
+      message,
       timestamp: Date.now(),
     };
     room.messages.push(chatMessage);

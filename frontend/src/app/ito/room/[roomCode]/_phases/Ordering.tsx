@@ -3,6 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PhaseProps } from '@/lib/ito/types';
 
+/** チャット1件の上限。バックエンドの CHAT_MESSAGE_MAX_LENGTH と揃えること */
+const CHAT_MESSAGE_MAX_LENGTH = 200;
+
+/** 残り何文字から文字数表示を出すか。常に出すと狭いチャット欄の邪魔になる */
+const COUNTER_VISIBLE_FROM = 30;
+
 const DragHandleIcon = () => (
   <svg
     className="w-4 h-4 text-zinc-500 cursor-grab active:cursor-grabbing hover:text-zinc-300 transition-colors"
@@ -89,9 +95,15 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
     setDragOverIndex(null);
   };
 
+  // maxLength と同じ数え方（UTF-16のコード単位）で残量を出す
+  const trimmedChat = chatInput.trim();
+  const chatRemaining = CHAT_MESSAGE_MAX_LENGTH - chatInput.length;
+  // maxLength を外されても送信させない。サーバ側でも同じ上限で弾く
+  const canSendChat = trimmedChat.length > 0 && trimmedChat.length <= CHAT_MESSAGE_MAX_LENGTH;
+
   const sendChat = () => {
-    if (!chatInput.trim()) return;
-    emit('ito:sendChat', { message: chatInput.trim() });
+    if (!canSendChat) return;
+    emit('ito:sendChat', { message: trimmedChat });
     setChatInput('');
   };
 
@@ -289,25 +301,41 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
             </div>
 
             {/* Input Bar */}
-            <div className="p-3 bg-zinc-800/40 border-t border-zinc-800/80 flex gap-2">
-              <input
-                className="flex-1 rounded-lg bg-zinc-900 border border-zinc-700/50 px-3 py-1.5 text-white text-xs placeholder-zinc-500 outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 transition-all"
-                placeholder="メッセージを入力..."
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                    sendChat();
-                  }
-                }}
-              />
-              <button
-                onClick={sendChat}
-                disabled={!chatInput.trim()}
-                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-xs font-semibold text-white transition-colors cursor-pointer"
-              >
-                送信
-              </button>
+            <div className="p-3 bg-zinc-800/40 border-t border-zinc-800/80">
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 rounded-lg bg-zinc-900 border border-zinc-700/50 px-3 py-1.5 text-white text-xs placeholder-zinc-500 outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 transition-all"
+                  placeholder="メッセージを入力..."
+                  value={chatInput}
+                  maxLength={CHAT_MESSAGE_MAX_LENGTH}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                      sendChat();
+                    }
+                  }}
+                />
+                <button
+                  onClick={sendChat}
+                  disabled={!canSendChat}
+                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-xs font-semibold text-white transition-colors cursor-pointer"
+                >
+                  送信
+                </button>
+              </div>
+              {/* maxLength は上限に達すると無言で入力を受け付けなくなるので、
+                  近づいたら残量を出して打ち止めの理由が分かるようにする */}
+              {chatRemaining <= COUNTER_VISIBLE_FROM && (
+                <p
+                  className={`mt-1.5 text-right text-[10px] tabular-nums ${
+                    chatRemaining === 0 ? 'text-red-400 font-bold' : 'text-zinc-500'
+                  }`}
+                >
+                  {chatRemaining === 0
+                    ? `上限の ${CHAT_MESSAGE_MAX_LENGTH} 文字に達しました`
+                    : `残り ${chatRemaining} 文字`}
+                </p>
+              )}
             </div>
           </div>
         </div>
