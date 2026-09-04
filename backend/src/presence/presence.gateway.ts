@@ -11,7 +11,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { AuthService } from '../auth/auth.service';
 import { PresenceService } from './presence.service';
-import { PRESENCE_EVENTS } from './presence.events';
+import { PRESENCE_CONNECT_ERRORS, PRESENCE_EVENTS } from './presence.events';
 
 /** 接続後にsocketへ保持する情報 */
 interface SocketData {
@@ -52,18 +52,47 @@ export class PresenceGateway
 
   afterInit(server: Server) {
     this.presenceService.setServer(server);
+
+    /*
+     * 接続の可否はここで決める。handleConnectionでdisconnect()すると理由を
+     * クライアントへ渡せない（emitした直後にcloseすると取りこぼす）が、
+     * ミドルウェアがErrorを返せば connect_error の message として確実に届く。
+     * socket.ioのクライアントはミドルウェア起因のエラーでは自動再接続しないので、
+     * 拒否した接続がリトライで殴り続けることもない。
+     */
+    server.use((client, next) => {
+      const userId = this.authService.userIdFromToken(client.handshake.auth?.token);
+      if (userId === undefined) {
+        next(new Error(PRESENCE_CONNECT_ERRORS.UNAUTHORIZED));
+        return;
+      }
+
+      /*
+       * 同一アカウントの接続は1つまで（先勝ち）。
+       * ログイン時にも同じ判定をしているが（auth.service.ts）、
+       * localStorageにトークンが残っている端末からの再訪はログインを通らないため、
+       * そちらだけでは同時接続を防げない。接続そのものを入口にして塞ぐ。
+       *
+       * リロードやタブを閉じる操作は切断が即座に通知されるので影響しない。
+       * クラッシュ・回線断・スリープのような異常切断の後だけ、
+       * pingTimeoutでフラグが下りるまで（最大約18秒）繋ぎ直せない。
+       */
+      if (this.presenceService.isOnline(userId)) {
+        next(new Error(PRESENCE_CONNECT_ERRORS.DUPLICATE_SESSION));
+        return;
+      }
+
+      // handleDisconnectではhandshakeを再検証できないため、解決したuserIdをソケットに持たせる
+      (client.data as SocketData).userId = userId;
+      next();
+    });
   }
 
   async handleConnection(client: Socket) {
-    const userId = this.resolveUserId(client);
-    if (userId === undefined) {
-      // 認証できない接続は保持しない
-      client.disconnect();
-      return;
-    }
+    // ミドルウェアを通った接続だけがここへ来る
+    const { userId } = client.data as SocketData;
+    if (userId === undefined) return;
 
-    // handleDisconnectではhandshakeを再検証できないため、解決したuserIdをソケットに持たせる
-    (client.data as SocketData).userId = userId;
     await this.presenceService.handleConnect(userId, client.id);
   }
 
@@ -87,7 +116,4 @@ export class PresenceGateway
     });
   }
 
-  private resolveUserId(client: Socket): number | undefined {
-    return this.authService.userIdFromToken(client.handshake.auth?.token);
-  }
 }

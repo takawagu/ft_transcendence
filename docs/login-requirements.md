@@ -115,10 +115,33 @@ status: 実装済み
 - タブ／ブラウザを閉じる（正常クローズならTCP FINで即座に検知）
 - ブラウザのクラッシュ・回線断の場合は最大約18秒待つ
 
+### 2026-09-04 の改訂: 判定をログインから接続へ移した
+
+既知の制約として挙げていた**「同一アカウントの複数タブは影響を受けない」を解消した**。
+
+ログイン処理だけを見張っても、`localStorage`にトークンが残っている端末は
+[session.tsx](frontend/src/lib/session.tsx)がログインAPIを通さずセッションを復元するため素通りする。
+トークンは7日有効なので、「前にログインしたことがある別ブラウザ」からいつでも同時接続できていた。
+itoの戦績集計（`recordRoundResults`）が同一ユーザー行へ同時に走りうるため、これを塞ぐ。
+
+- 判定を**presenceの接続時**にも置いた。[presence.gateway.ts](backend/src/presence/presence.gateway.ts)の
+  `afterInit`でsocket.ioのミドルウェアを張り、`isOnline(userId)`が真なら`DUPLICATE_SESSION`で拒否する
+  - `handleConnection`での`disconnect()`ではなく**ミドルウェア**にしたのは、拒否の理由をクライアントへ確実に渡すため。
+    emitした直後にcloseすると取りこぼす。ミドルウェアが`Error`を返せば`connect_error`の`message`として届き、
+    socket.ioのクライアントはミドルウェア起因のエラーでは自動再接続しないのでリトライで殴り続けることもない
+  - 認証（トークン検証）も同じミドルウェアへ移し、接続の可否を1箇所にまとめた
+- フロントは[presence.tsx](frontend/src/lib/presence.tsx)で`connect_error`を受け、全画面ブロックを出す。
+  Providerは`layout`直下なのでitoルームを含むどの画面にも被さる。「再読み込み」と「ログアウト」を置いている
+- itoルーム側の`BroadcastChannel`ガードは**残す**。presenceを拒否されたタブでも`/ito`への接続は別途走るため、
+  これが無いとブロック画面を出しながら先のタブの席を奪ってしまう（[reconnect-design.md](reconnect-design.md)参照）
+- 解放条件は従来と同じ。リロードやタブを閉じる操作は即座に検知されるので影響せず、
+  異常切断（クラッシュ・回線断・スリープ）の後だけ最大約18秒繋ぎ直せない
+
 ### 既知の制約
 
-- **同一アカウントの複数タブは影響を受けない**。2枚目以降のタブはlocalStorageのトークンを復元するだけでログインAPIを叩かないため。presence側も`userId → Set<socketId>`で複数接続を許容している
 - **フェイルオープン**。presenceのWSが繋がらない環境では`isOnline`が常にfalseになり判定が素通りする。誰もログインできなくなる方向には壊れない
+- 異常切断の直後は最大約18秒、同じアカウントで繋ぎ直せない（`pingTimeout`でフラグが下りるまで）
+- バックエンドを複数プロセスへ水平スケールすると、Mapがプロセスローカルなため判定が壊れる（presence機能自体の既存の制約と同じ）
 - バックエンドを複数プロセスへ水平スケールすると、Mapがプロセスローカルなため判定が壊れる（presence機能自体の既存の制約と同じ）
 
 ---
