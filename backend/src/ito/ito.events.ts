@@ -194,6 +194,17 @@ export class ReorderCardsPayload {
   orderedPlayerIds: string[];
 }
 
+/**
+ * ゲーム内チャット1件の上限。フロントの CHAT_MESSAGE_MAX_LENGTH と揃えること。
+ * DMの1000より短いのは、話し合いフェーズの1行入力欄で使う短文チャットであり、
+ * 長文が1件来ると狭いチャット欄が埋まって進行が読めなくなるため。
+ *
+ * 数え方はUTF-16のコード単位（JSのString#length、HTMLのmaxLengthと同じ）。
+ * サーバとクライアントで同じ数え方にしないと、入力欄では打てるのに送ると弾かれる、
+ * という食い違いが出る。
+ */
+export const CHAT_MESSAGE_MAX_LENGTH = 200;
+
 export class SendChatPayload {
   message: string;
 }
