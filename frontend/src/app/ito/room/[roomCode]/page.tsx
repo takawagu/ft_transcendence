@@ -17,6 +17,22 @@ import { PauseOverlay } from './_phases/PauseOverlay';
 // nginx を経由しないローカル開発時のみ .env.local で明示的にURLを指定する。
 const BACKEND_URL = process.env.NEXT_PUBLIC_WS_URL ?? '';
 
+/**
+ * 同一ブラウザの他タブに「この部屋を開いているか」を尋ねるチャネル。
+ *
+ * サーバは「後から来た接続が正」として席を付け替える。切断検知までの間の再接続を
+ * 通すためにそう決めており変えられないが、そのままだと同じブラウザで2つ目のタブを
+ * 開いただけで先のタブがゲームから弾き出される。そこで、同一ブラウザ内の重複は
+ * 接続する前にここで止める。
+ *
+ * BroadcastChannelは自分の投稿を自分には配信しないので、単純なping/pongで足りる。
+ * リロードでは旧タブが既に消えていて応答が返らないため、復帰の邪魔はしない。
+ */
+const TAB_CHANNEL = 'ito_room_tab';
+
+/** 他タブの応答を待つ時間。同一ブラウザ内の配送なので数ms、余裕を見てこの値 */
+const TAB_PROBE_MS = 200;
+
 export default function RoomPage() {
   const params = useParams();
   const router = useRouter();
@@ -97,8 +113,12 @@ export default function RoomPage() {
     const playerId = String(userObj.id);
     setMyId(playerId);
 
-    // playerIdはサーバがこのトークンから導出する。以降クライアントは名乗らない
-    const socket = io(`${BACKEND_URL}/ito`, { auth: { token: storedToken } });
+    // playerIdはサーバがこのトークンから導出する。以降クライアントは名乗らない。
+    // 接続は他タブの確認が済んでから（このeffectの末尾）。繋いでしまってからでは席を奪った後になる
+    const socket = io(`${BACKEND_URL}/ito`, {
+      auth: { token: storedToken },
+      autoConnect: false,
+    });
     socketRef.current = socket;
 
     socket.on('connect', () => {
@@ -252,6 +272,8 @@ export default function RoomPage() {
       // 送った操作も全て無視されるので、自分から切って離脱画面を出す。
       // 明示的なdisconnectなのでsocket.ioは自動再接続せず、席を奪い返しには行かない。
       socket.disconnect();
+      // もうこの部屋の席を持っていないので、他タブの問い合わせに在席を返さない
+      joinedRoomCodeRef.current = null;
       leaveWith('別の場所でこの部屋に接続したため、この画面は切断されました');
     });
 
@@ -281,7 +303,44 @@ export default function RoomPage() {
       leaveWith(data.reason ?? 'ゲームが中断されました');
     });
 
+    const channel =
+      typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(TAB_CHANNEL);
+
+    // 他タブからの問い合わせに答える側。実際に繋がっている部屋だけを名乗る
+    channel?.addEventListener('message', (ev: MessageEvent) => {
+      const msg = ev.data;
+      if (msg?.type === 'probe' && msg.roomCode && msg.roomCode === joinedRoomCodeRef.current) {
+        channel.postMessage({ type: 'here', roomCode: msg.roomCode });
+      }
+    });
+
+    let probeTimer: ReturnType<typeof setTimeout> | undefined;
+
+    // BroadcastChannel非対応の環境では従来どおり繋ぐ（重複はサーバ側の席の付け替えに委ねる）。
+    // /new はまだ部屋が無いので重複しようがない
+    if (!channel || isCreating) {
+      socket.connect();
+    } else {
+      let occupied = false;
+      const onReply = (ev: MessageEvent) => {
+        if (ev.data?.type === 'here' && ev.data.roomCode === routeRoomCode) occupied = true;
+      };
+      channel.addEventListener('message', onReply);
+      channel.postMessage({ type: 'probe', roomCode: routeRoomCode });
+
+      probeTimer = setTimeout(() => {
+        channel.removeEventListener('message', onReply);
+        if (occupied) {
+          leaveWith('この部屋は別のタブで開いています');
+          return;
+        }
+        socket.connect();
+      }, TAB_PROBE_MS);
+    }
+
     return () => {
+      clearTimeout(probeTimer);
+      channel?.close();
       socket.disconnect();
     };
   }, []);
