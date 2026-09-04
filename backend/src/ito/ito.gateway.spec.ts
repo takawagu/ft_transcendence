@@ -69,11 +69,11 @@ describe('ItoGateway authentication', () => {
     expect((client.data as { playerId?: string }).playerId).toBe('42');
   });
 
-  it('ignores the playerId a client claims when rejoining', () => {
+  it('ignores the playerId a client claims when rejoining', async () => {
     // 他人のuserIdを名乗って席を奪おうとするケース
     const client = connected();
 
-    gateway.handleRejoin(client, {
+    await gateway.handleRejoin(client, {
       roomCode: 'ABC123',
       playerId: '99',
       playerName: 'なりすまし',
@@ -86,10 +86,10 @@ describe('ItoGateway authentication', () => {
     });
   });
 
-  it('ignores the playerId a client claims when joining or creating', () => {
+  it('ignores the playerId a client claims when joining or creating', async () => {
     const client = connected();
 
-    gateway.handleJoinRoom(client, {
+    await gateway.handleJoinRoom(client, {
       roomCode: 'ABC123',
       playerName: 'pa',
       playerId: '99',

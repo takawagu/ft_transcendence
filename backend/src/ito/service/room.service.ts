@@ -12,6 +12,7 @@ import { RoomStore } from './room.store';
 import { BroadcastService } from './broadcast.service';
 import { GameService } from './game.service';
 import { activeCount, awolPlayers, connectedPlayers } from './player-utils';
+import { FriendsService } from '../../friends/friends.service';
 
 @Injectable()
 export class RoomService {
@@ -19,6 +20,7 @@ export class RoomService {
     private readonly store: RoomStore,
     private readonly broadcast: BroadcastService,
     private readonly gameService: GameService,
+    private readonly friends: FriendsService,
   ) {}
 
   createRoom(client: Socket, playerName: string, playerId: string, totalRounds?: number) {
@@ -60,12 +62,39 @@ export class RoomService {
     console.log(`[ITO] room created: ${roomCode} by ${playerName}`);
   }
 
-  joinRoom(client: Socket, payload: JoinRoomPayload) {
+  async joinRoom(client: Socket, payload: JoinRoomPayload) {
     const room = this.store.getRoomByCode(payload.roomCode);
     if (!room) {
       client.emit('ito:error', { message: 'ルームが見つかりません' });
       return;
     }
+
+    // ブロック判定はこのメソッド唯一のawait点。他の検証より先に済ませることで、
+    // 「検証を通ってから席を追加するまで」を同期のまま保ち、その間に別の参加が
+    // 割り込んで満員判定をすり抜ける余地を作らない。
+    let blocked: boolean;
+    try {
+      blocked = await this.isBlockedByHost(room, payload.playerId);
+    } catch (err) {
+      // ブロックの有無を確かめられないまま通すと遮断が意味をなさないので、失敗は拒否に倒す。
+      // ここで握り潰さないとクライアントは応答を受け取れず「接続中...」のまま固まる。
+      console.error(`[ITO] block check failed for room ${payload.roomCode}:`, err);
+      client.emit('ito:error', {
+        message: 'ルームに参加できませんでした。時間をおいてお試しください',
+      });
+      return;
+    }
+    if (blocked) {
+      client.emit('ito:error', { message: 'このルームには参加できません' });
+      return;
+    }
+    // awaitを跨いだ間に部屋が解散・破棄されている可能性がある。
+    // 消えた部屋のplayersに積んでも、誰にも届かない席を持つだけの幽霊になる。
+    if (!this.store.hasRoom(room.id)) {
+      client.emit('ito:error', { message: 'ルームが見つかりません' });
+      return;
+    }
+
     if (room.roomPhase !== 'WAITING') {
       client.emit('ito:error', { message: 'ゲームはすでに開始されています' });
       return;
@@ -219,7 +248,7 @@ export class RoomService {
     console.log(`[ITO] ${player.name} disconnected, room ${room.roomCode} paused`);
   }
 
-  rejoin(client: Socket, payload: RejoinPayload) {
+  async rejoin(client: Socket, payload: RejoinPayload) {
     const room = this.store.getRoomByCode(payload.roomCode);
     if (!room) {
       client.emit('ito:error', { message: 'ルームが見つかりません' });
@@ -232,7 +261,7 @@ export class RoomService {
       // ここで見つからないのは異常ではなく正常系。新規参加に倒す。
       // 逆にWAITING以外で見つからない＝purgeExcludedで掃除済み＝戻してはいけない人。
       if (room.roomPhase === 'WAITING' && payload.playerName) {
-        this.joinRoom(client, {
+        await this.joinRoom(client, {
           roomCode: payload.roomCode,
           playerId: payload.playerId,
           playerName: payload.playerName,
@@ -418,5 +447,33 @@ export class RoomService {
     // ポーズ中に完了していた画像生成などをここで消化する
     this.gameService.advancePhaseIfComplete(room);
     this.broadcast.broadcastRoomState(room);
+  }
+
+  /**
+   * 参加希望者とホストの間にブロックがあるか（向きは問わない）。
+   *
+   * itoのルームは「コードを知っていれば誰でも入れる」設計なので、招待経路を塞ぐだけでは
+   * ブロックした相手の同席を防げない（docs/room-invite-requirements.md セクション0）。
+   * 参加そのものを止められるのはjoinRoomだけで、その判定がここ。
+   *
+   * 判定相手をホストに限るのは、その部屋で誰と同席するかを決める権利を持つのがホストだから。
+   * ホスト以外の参加者との関係まで見ると、先に入った人は後から来る人を弾ける一方、
+   * 既に居る人は追い出せないという非対称が生まれる。
+   * ホスト不在（猶予中の空ロビー）なら比較対象が無いので通す。
+   */
+  private async isBlockedByHost(
+    room: ItoRoom,
+    joiningPlayerId: string,
+  ): Promise<boolean> {
+    const host = room.players.find((p) => p.isRoomOwner);
+    if (!host || host.playerId === joiningPlayerId) return false;
+
+    const hostId = Number(host.playerId);
+    const joinerId = Number(joiningPlayerId);
+    // playerIdは双方ともJWTから導出した数値なので通常ここは通らない。
+    // 壊れた値のままクエリを投げないための保険
+    if (!Number.isInteger(hostId) || !Number.isInteger(joinerId)) return false;
+
+    return this.friends.areBlockedEitherWay(hostId, joinerId);
   }
 }
