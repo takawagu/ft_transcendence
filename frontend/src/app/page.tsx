@@ -390,6 +390,19 @@ export default function HomePage() {
     setEditError('');
     setEditSuccess('');
 
+    if (editBio.length > 100) {
+      setEditError('自己紹介は100文字以内で入力してください。');
+      return;
+    }
+    if (editPassword && editPassword.length < 8) {
+      setEditError('新しいパスワードは8文字以上で入力してください。');
+      return;
+    }
+    if (!editUsername.trim()) {
+      setEditError('ユーザー名を入力してください。');
+      return;
+    }
+
     try {
       const updated = await apiCall('/api/users/me', 'PUT', {
         username: editUsername,
@@ -1507,16 +1520,37 @@ export default function HomePage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-                  自己紹介
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                    自己紹介
+                  </label>
+                  <span
+                    className={`text-xs tabular-nums ${
+                      editBio.length > 100
+                        ? 'text-red-400 font-bold'
+                        : editBio.length === 100
+                        ? 'text-amber-400 font-medium'
+                        : 'text-zinc-500'
+                    }`}
+                  >
+                    {editBio.length} / 100
+                  </span>
+                </div>
                 <textarea
-                  maxLength={500}
                   value={editBio}
                   onChange={e => setEditBio(e.target.value)}
                   rows={2}
-                  className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:border-indigo-500 transition-all resize-none"
+                  className={`w-full rounded-lg bg-zinc-950 border ${
+                    editBio.length > 100
+                      ? 'border-red-500 focus:border-red-500'
+                      : 'border-zinc-800 focus:border-indigo-500'
+                  } px-4 py-2 text-sm text-white placeholder-zinc-600 outline-none transition-all resize-none`}
                 />
+                {editBio.length > 100 && (
+                  <p className="mt-1 text-xs text-red-400">
+                    自己紹介は100文字以内で入力してください（現在 {editBio.length} 文字）
+                  </p>
+                )}
               </div>
 
               <div>
@@ -1590,7 +1624,12 @@ export default function HomePage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-xs transition-all shadow-md cursor-pointer"
+                  disabled={
+                    editBio.length > 100 ||
+                    !editUsername.trim() ||
+                    (editPassword.length > 0 && editPassword.length < 8)
+                  }
+                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-indigo-600 text-white font-bold text-xs transition-all shadow-md cursor-pointer"
                 >
                   変更を保存
                 </button>

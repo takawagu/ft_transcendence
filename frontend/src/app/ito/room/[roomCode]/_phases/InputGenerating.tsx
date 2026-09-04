@@ -3,6 +3,23 @@
 import { useState, useEffect } from 'react';
 import type { PhaseProps } from '@/lib/ito/types';
 
+function splitThemeByLength(str: string, chunkSize = 15): string[] {
+  if (!str) return [];
+  const lines: string[] = [];
+  const rawLines = str.split('\n');
+  for (const rawLine of rawLines) {
+    if (rawLine === '') {
+      lines.push('');
+      continue;
+    }
+    const chars = Array.from(rawLine);
+    for (let i = 0; i < chars.length; i += chunkSize) {
+      lines.push(chars.slice(i, i + chunkSize).join(''));
+    }
+  }
+  return lines;
+}
+
 export function InputGenerating({ state, myId, emit }: PhaseProps) {
   const [prompt, setPrompt] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -182,7 +199,11 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
         {/* Theme Panel */}
         <div className="cyber-panel-flat rounded-xl p-4 flex flex-col items-center text-center">
           <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider mb-1 font-cyber">お題</p>
-          <p className="text-white font-bold text-xl font-pixel">{state.myTheme ?? ''}</p>
+          <div className="text-white font-bold text-xl font-pixel break-all">
+            {splitThemeByLength(state.myTheme ?? '', 15).map((line, idx) => (
+              <div key={idx}>{line}</div>
+            ))}
+          </div>
         </div>
 
         {/* Input area */}
