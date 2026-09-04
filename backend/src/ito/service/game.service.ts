@@ -40,7 +40,20 @@ export class GameService {
       return;
     }
 
-    room.theme = payload.theme;
+    // Validate theme length (max 100 characters)
+    if (
+      !payload.theme ||
+      typeof payload.theme !== 'string' ||
+      payload.theme.trim().length === 0 ||
+      payload.theme.trim().length > 100
+    ) {
+      client.emit('ito:error', {
+        message: 'お題は1文字以上100文字以内で入力してください。',
+      });
+      return;
+    }
+
+    room.theme = payload.theme.trim();
     room.totalRounds = room.totalRounds || payload.totalRounds || 3;
     room.currentRound = room.currentRound === 0 ? 1 : room.currentRound + 1;
     room.roomPhase = 'DEALING';

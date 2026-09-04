@@ -19,7 +19,7 @@ export class UpdateMeDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(500)
+  @MaxLength(100)
   bio?: string;
 
   @IsOptional()

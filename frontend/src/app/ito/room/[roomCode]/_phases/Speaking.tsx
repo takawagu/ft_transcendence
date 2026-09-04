@@ -208,17 +208,17 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
   };
 
   return (
-    <div className="h-full w-full flex flex-col justify-start items-center gap-8 p-6 max-w-5xl mx-auto overflow-y-auto">
+    <div className="h-full w-full flex flex-col justify-start items-center gap-4 md:gap-8 p-3 sm:p-4 md:p-6 max-w-5xl mx-auto overflow-y-auto">
 
       {/* Main Split Columns (Responsive side-by-side) */}
-      <div className="flex flex-col md:flex-row gap-8 items-center justify-center w-full min-h-0">
+      <div className="flex flex-col md:flex-row gap-4 md:gap-8 items-center justify-center w-full min-h-0 flex-shrink-0">
 
         {/* Left Pane: Theme, Board, and Drag Instructions */}
-        <div className="flex-1 bg-zinc-800/10 border border-zinc-800/40 rounded-2xl p-5 flex flex-col gap-4">
+        <div className="w-full md:flex-1 bg-zinc-800/10 border border-zinc-800/40 rounded-2xl p-4 md:p-5 flex flex-col gap-4 flex-shrink-0">
           {/* Header (Theme) */}
           <div className="text-center md:text-left border-b border-zinc-800 pb-3 select-none">
             <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider">お題</p>
-            <h1 className="text-xl font-bold text-white mt-0.5">{state.myTheme}</h1>
+            <h1 className="text-xl font-bold text-white font-pixel mt-0.5 break-all">{state.myTheme}</h1>
             {/* Other player's turn info */}
             {!isMyTurn && (
               <div className="mt-2 text-xs text-zinc-400 font-medium">
@@ -353,7 +353,11 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
         </div>
 
         {/* Right Pane: Hand Card, Number, and Status */}
-        <div className="w-full md:w-80 bg-zinc-800/10 border border-zinc-800/40 rounded-2xl p-5 flex flex-col items-center justify-center min-h-[220px] md:min-h-0">
+        <div
+          className={`w-full md:w-80 bg-zinc-800/10 border border-zinc-800/40 rounded-2xl p-4 md:p-5 flex flex-col items-center justify-center flex-shrink-0 ${
+            draftPosition !== null ? 'min-h-0' : 'min-h-[220px] md:min-h-0'
+          }`}
+        >
           {canInteract && draftPosition !== null ? (
             <div className="flex flex-col items-center justify-center w-full select-none gap-3">
               <button
@@ -420,7 +424,7 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
       </div>
 
       {/* Footer Area: All players list (Extremely compact horizontal pills to prevent scrolling) */}
-      <div className="border-t border-zinc-800/30 pt-4 w-full">
+      <div className="border-t border-zinc-800/30 pt-3 md:pt-4 w-full flex-shrink-0 mt-auto md:mt-0">
         <p className="text-[10px] text-zinc-600 mb-2 text-center select-none uppercase tracking-wider font-semibold">プレイヤー</p>
         <div className="flex flex-wrap items-center justify-center gap-1.5">
           {state.players.map(p => (
