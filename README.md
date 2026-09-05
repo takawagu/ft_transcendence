@@ -243,7 +243,7 @@ erDiagram
 
 ## Modules
 
-> Counted directly against the `ft_transcendence` subject's official module list (`en.subject.pdf` / `ft_transcendence.pdf`), based on what is actually implemented in the code. 14 points are required; this totals **16 points**, i.e. one extra major module's worth of margin if something doesn't validate during evaluation.
+> Counted directly against the `ft_transcendence` subject's official module list (`en.subject.pdf` / `ft_transcendence.pdf`), based on what is actually implemented in the code. 14 points are required; this totals **19 points**, i.e. 5 points of margin if something doesn't validate during evaluation.
 
 | # | Category | Module | Type | Pts | Notes |
 |---|---|---|---|---|---|
@@ -256,13 +256,14 @@ erDiagram
 | 7 | Gaming and UX | A complete web-based game where users play against each other | Major | 2 | **ito**, a real-time card game with clear rules and win/loss conditions per round — card games are explicitly listed as a valid game type in the subject. |
 | 8 | Gaming and UX | Remote players (separate computers, real-time, reconnection logic) | Major | 2 | LAN access via the `Makefile`'s IP auto-detection, plus a full disconnect/pause/rejoin/resync flow — see `docs/reconnect-design.md`. |
 | 9 | Gaming and UX | Multiplayer game (more than two players) | Major | 2 | ito rooms support 3–6 simultaneous players (2 is the floor, not the cap), with synchronized turn order across all clients. |
+| 10 | Gaming and UX | Advanced chat features | Minor | 1 | Builds on the basic chat from module 3: per-conversation read receipts (`ConversationRead` cursor, persisted in Postgres) with unread badge counts synced live across tabs/devices over the presence WebSocket channel (`PRESENCE_EVENTS.DM_READ`), plus input validation (trimming blank-only messages, remaining-character feedback). See `backend/src/messages/messages.service.ts`. |
+| 11 | Devops | Backend as microservices | Major | 2 | The backend is decomposed into independently built/deployed containers — `postgres`, `redis`, `backend` (NestJS API + Socket.IO gateway), `frontend` (Next.js), and `nginx` (TLS termination / reverse proxy) — each with its own Dockerfile, communicating only over the internal `app-network`, orchestrated by `docker-compose.yml`. |
 
-**Total: 16 points** (14 required + 2 bonus, pending full functional validation of every claimed module during evaluation).
+**Total: 19 points** (14 required + 5 bonus, pending full functional validation of every claimed module during evaluation).
 
 ### Considered but not claimed
 
 - **Public API (Web, Major)** — the REST API has enough endpoints, but no API-key auth, rate limiting, or documentation exists, all three of which the module explicitly requires.
-- **Advanced chat features (Gaming and UX, Minor)** — blocking and chat-history persistence exist, but typing indicators and read receipts are explicitly out of scope (`docs/dm-requirements.md` §6), so the module isn't claimed as a whole.
 - **42 OAuth (User Management, Minor) and 2FA (User Management, Minor)** — deliberately descoped; see `docs/login-requirements.md` §1 and §5. The `.env` OAuth variables are reserved for a future implementation.
 - **AI Opponent / LLM system interface (Artificial Intelligence)** — the ito game's per-player "image generation" step is currently a stub (a placeholder image after a simulated delay, see `stubGenerateImage` in `backend/src/ito/service/game.service.ts`), not a real AI integration, so no AI module is claimed.
 
