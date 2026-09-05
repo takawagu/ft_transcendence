@@ -6,9 +6,27 @@ import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import { PresenceService } from '../presence/presence.service';
 
+/**
+ * 署名鍵はデフォルト値を持たせない。
+ * 鍵が未設定でも動くようにしてしまうと、公開されている既知の鍵で署名した状態のまま
+ * アプリが正常に動作してしまい（DBのパスワードと違い接続エラーで気づけない）、
+ * 誰でも任意のuserIdのトークンを自作できてしまう。
+ */
+function requireJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+
+  if (!secret) {
+    throw new Error(
+      'JWT_SECRET が設定されていません。.env に `openssl rand -base64 48` で生成した値を入れてください。',
+    );
+  }
+
+  return secret;
+}
+
 @Injectable()
 export class AuthService {
-  private readonly jwtSecret = process.env.JWT_SECRET || 'secret';
+  private readonly jwtSecret = requireJwtSecret();
 
   constructor(
     private readonly prisma: PrismaService,

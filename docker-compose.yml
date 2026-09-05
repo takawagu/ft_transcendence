@@ -4,10 +4,13 @@ services:
     container_name: ft_postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      # パスワードの実値は git 管理外の .env にだけ置く。
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?.env に POSTGRES_PASSWORD を設定してください（.env.example を参照）}
       POSTGRES_DB: ${POSTGRES_DB:-ft_transcendence}
     ports:
-      - "5432:5432"
+      # ホスト（psql / Prisma Studio / prisma migrate）から触れるようにしつつ、
+      # 同じ LAN の他端末には見せないためループバックに限定する
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -22,7 +25,8 @@ services:
     image: redis:7-alpine
     container_name: ft_redis
     ports:
-      - "6380:6379"
+      # 認証なしの Redis なので LAN には出さない（ホストからのデバッグ用のみ）
+      - "127.0.0.1:6380:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -43,9 +47,11 @@ services:
     # クローン直後（ファイルが1つも無い状態）でもこれで揃う
     command: sh -c "npx prisma generate && npx prisma migrate deploy && npm run start:dev"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-ft_transcendence}
+      # POSTGRES_PASSWORD の必須チェックは postgres サービス側で行っている
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ft_transcendence}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_change_this}
+      # デフォルト値は置かない。未設定なら compose の起動時点で失敗させる
+      JWT_SECRET: ${JWT_SECRET:?.env に JWT_SECRET を設定してください（openssl rand -base64 48 で生成）}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       PORT: 3000
     volumes:
