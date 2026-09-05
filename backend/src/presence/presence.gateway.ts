@@ -61,7 +61,9 @@ export class PresenceGateway
      * 拒否した接続がリトライで殴り続けることもない。
      */
     server.use((client, next) => {
-      const userId = this.authService.userIdFromToken(client.handshake.auth?.token);
+      const userId = this.authService.userIdFromToken(
+        client.handshake.auth?.token,
+      );
       if (userId === undefined) {
         next(new Error(PRESENCE_CONNECT_ERRORS.UNAUTHORIZED));
         return;
@@ -115,5 +117,4 @@ export class PresenceGateway
       isTyping: !!data.isTyping,
     });
   }
-
 }

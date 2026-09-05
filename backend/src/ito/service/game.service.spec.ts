@@ -45,7 +45,10 @@ describe('GameService turn order', () => {
   let broadcast: jest.Mocked<
     Pick<
       BroadcastService,
-      'emitToRoom' | 'broadcastRoomState' | 'broadcastPhaseChange' | 'emitToSocket'
+      | 'emitToRoom'
+      | 'broadcastRoomState'
+      | 'broadcastPhaseChange'
+      | 'emitToSocket'
     >
   >;
 
@@ -58,7 +61,11 @@ describe('GameService turn order', () => {
     };
     const store = new RoomStore();
     const prisma = {} as PrismaService;
-    service = new GameService(store, broadcast as unknown as BroadcastService, prisma);
+    service = new GameService(
+      store,
+      broadcast as unknown as BroadcastService,
+      prisma,
+    );
   });
 
   it('round1: buildTurnOrder includes exactly the active players', () => {
@@ -113,7 +120,9 @@ describe('GameService turn order', () => {
     expect(room.turnOrder).not.toContain('a');
     expect(room.roundHostId).not.toBe('a');
     const currentTurnPlayerId = room.turnOrder[room.currentTurnIndex];
-    const currentPlayer = room.players.find((p) => p.playerId === currentTurnPlayerId);
+    const currentPlayer = room.players.find(
+      (p) => p.playerId === currentTurnPlayerId,
+    );
     expect(currentPlayer?.status).toBe('ACTIVE');
   });
 

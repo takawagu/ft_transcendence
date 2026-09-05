@@ -5,13 +5,18 @@ import { Pool } from 'pg';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+export class PrismaService
+  extends PrismaClient
+  implements OnModuleInit, OnModuleDestroy
+{
   private static pool: Pool;
   private static adapter: PrismaPg;
 
   constructor() {
     if (!PrismaService.pool) {
-      const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/ft_transcendence';
+      const connectionString =
+        process.env.DATABASE_URL ||
+        'postgresql://postgres:postgres@localhost:5432/ft_transcendence';
       PrismaService.pool = new Pool({ connectionString });
       PrismaService.adapter = new PrismaPg(PrismaService.pool);
     }
@@ -69,9 +74,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         where: {
           OR: [
             { applicantId: dev1.id, approverId: dev2.id },
-            { applicantId: dev2.id, approverId: dev1.id }
-          ]
-        }
+            { applicantId: dev2.id, approverId: dev1.id },
+          ],
+        },
       });
 
       if (!friendship) {
@@ -79,8 +84,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           data: {
             applicantId: dev1.id,
             approverId: dev2.id,
-            status: 'ACCEPTED'
-          }
+            status: 'ACCEPTED',
+          },
         });
         console.log('Seed: Created Friendship between Dev1 and Dev2');
       }

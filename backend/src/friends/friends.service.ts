@@ -356,7 +356,10 @@ export class FriendsService {
    * areFriends と違ってフレンドかどうかは見ない。ito はフレンド関係を前提にしない
    * （ルームコードさえ知っていれば誰でも入れる）ので、遮断の根拠を Block 行そのものに置く。
    */
-  async areBlockedEitherWay(userIdA: number, userIdB: number): Promise<boolean> {
+  async areBlockedEitherWay(
+    userIdA: number,
+    userIdB: number,
+  ): Promise<boolean> {
     const block = await this.prisma.block.findFirst({
       where: {
         OR: [

@@ -30,7 +30,9 @@ export class SendMessageDto {
    * 「空なら400」を空白だけの入力にも効かせる。保存される本文も trim 済みになる。
    */
   @IsString()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsNotEmpty()
   @MaxLength(MESSAGE_MAX_LENGTH)
   content: string;

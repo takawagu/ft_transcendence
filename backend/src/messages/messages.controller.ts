@@ -10,6 +10,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
+import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { MessagesService } from './messages.service';
 import {
   SendMessageDto,
@@ -24,18 +25,18 @@ export class MessagesController {
   constructor(private readonly messagesService: MessagesService) {}
 
   @Get('conversations')
-  getConversations(@Request() req: any) {
+  getConversations(@Request() req: AuthenticatedRequest) {
     return this.messagesService.getConversations(req.user.id);
   }
 
   // ':userId' より先に宣言すること。後ろに置くと /messages/unread がそちらに吸われる
   @Get('unread')
-  getUnreadCounts(@Request() req: any) {
+  getUnreadCounts(@Request() req: AuthenticatedRequest) {
     return this.messagesService.getUnreadCounts(req.user.id);
   }
 
   @Post('read')
-  markRead(@Request() req: any, @Body() body: MarkReadDto) {
+  markRead(@Request() req: AuthenticatedRequest, @Body() body: MarkReadDto) {
     return this.messagesService.markRead(
       req.user.id,
       body.userId,
@@ -46,7 +47,10 @@ export class MessagesController {
   // POST なので下の @Get(':userId') とは食い合わない。
   // 将来 GET /invite を足す場合は ':userId' より前に置くこと
   @Post('invite')
-  sendRoomInvite(@Request() req: any, @Body() body: SendRoomInviteDto) {
+  sendRoomInvite(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: SendRoomInviteDto,
+  ) {
     return this.messagesService.sendRoomInvite(
       req.user.id,
       body.receiverId,
@@ -56,7 +60,7 @@ export class MessagesController {
 
   @Get(':userId')
   getHistory(
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
     @Param('userId', ParseIntPipe) userId: number,
     @Query() query: HistoryQueryDto,
   ) {
@@ -69,7 +73,10 @@ export class MessagesController {
   }
 
   @Post()
-  sendMessage(@Request() req: any, @Body() body: SendMessageDto) {
+  sendMessage(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: SendMessageDto,
+  ) {
     return this.messagesService.sendMessage(
       req.user.id,
       body.receiverId,

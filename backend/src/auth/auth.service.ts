@@ -1,10 +1,19 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import { PresenceService } from '../presence/presence.service';
+
+/** JWTに載せている中身。userId以外は入れていない */
+export interface TokenPayload {
+  userId: number;
+}
 
 /**
  * 署名鍵はデフォルト値を持たせない。
@@ -38,11 +47,8 @@ export class AuthService {
 
     const existingUser = await this.prisma.user.findFirst({
       where: {
-        OR: [
-          { email },
-          { username }
-        ]
-      }
+        OR: [{ email }, { username }],
+      },
     });
 
     if (existingUser) {
@@ -129,12 +135,25 @@ export class AuthService {
     return jwt.sign({ userId }, this.jwtSecret, { expiresIn: '7d' });
   }
 
-  verifyToken(token: string): any {
+  /**
+   * トークンを検証してペイロードを返す。
+   * 戻り値をanyにすると呼び出し側（AuthGuard）まで型が消えるので、
+   * userIdがnumberであることをここで確かめてから返す。
+   */
+  verifyToken(token: string): TokenPayload {
+    let payload: { userId?: unknown };
+
     try {
-      return jwt.verify(token, this.jwtSecret);
+      payload = jwt.verify(token, this.jwtSecret) as { userId?: unknown };
     } catch {
       throw new UnauthorizedException('Invalid or expired token');
     }
+
+    if (typeof payload?.userId !== 'number') {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+
+    return { userId: payload.userId };
   }
 
   /**

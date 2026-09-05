@@ -1,0 +1,5 @@
+# Prisma Client の生成物（gitignore 済み・レビュー対象外）
+src/generated/
+
+# ビルド成果物
+dist/

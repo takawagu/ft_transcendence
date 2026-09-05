@@ -52,7 +52,9 @@ export class ItoGateway
   }
 
   handleConnection(client: Socket) {
-    const userId = this.authService.userIdFromToken(client.handshake.auth?.token);
+    const userId = this.authService.userIdFromToken(
+      client.handshake.auth?.token,
+    );
     if (userId === undefined) {
       // 認証できない接続は保持しない（presence gatewayと同じ扱い）
       client.disconnect();
