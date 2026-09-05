@@ -46,9 +46,14 @@ On top of the game itself, the platform implements the account, social and real-
 
 ### Configuration
 
-1. Copy the environment template and adjust it if needed:
+1. Copy the environment template, then fill in `POSTGRES_PASSWORD` and `JWT_SECRET` — both are required (no default) and the app won't start until they're set:
    ```bash
    cp .env.example .env
+   ```
+   ```bash
+   # in .env
+   POSTGRES_PASSWORD="$(openssl rand -base64 32)"
+   JWT_SECRET="$(openssl rand -base64 48)"
    ```
 
 2. Generate a self-signed TLS certificate for Nginx:
@@ -61,9 +66,9 @@ On top of the game itself, the platform implements the account, social and real-
 ```
 
 3. Relevant variables (see `.env.example`):
-   - `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` — database credentials
-   - `JWT_SECRET` / `JWT_EXPIRES_IN` — auth token signing
-   - `HTTP_PORT` / `HTTPS_PORT` — public ports exposed by Nginx (default `8080` / `8443`)
+   - `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` — database credentials; `POSTGRES_PASSWORD` has no default and must be set (see step 1)
+   - `JWT_SECRET` / `JWT_EXPIRES_IN` — auth token signing; `JWT_SECRET` has no default and must be set (see step 1)
+   - `HTTP_PORT` / `HTTPS_PORT` — public ports exposed by Nginx (default `80` / `443`)
    - `FORTYTWO_CLIENT_ID` / `FORTYTWO_CLIENT_SECRET` / `FORTYTWO_CALLBACK_URL` — reserved for a future 42 OAuth integration; **not currently used** (see [Known Limitations](#known-limitations))
 
 ### Running the project
@@ -74,8 +79,10 @@ make        # equivalent to `make up`: builds and starts every service, waits un
 
 Once it's up, the Makefile prints the URL(s) to open:
 
-- From this machine: `https://localhost:8443/`
-- From another device on the same network: `https://<your-LAN-IP>:8443/`
+- From this machine: `https://localhost/`
+- From another device on the same network: `https://<your-LAN-IP>/`
+
+(These assume the default `HTTPS_PORT=443`; if you changed it in `.env`, append `:<HTTPS_PORT>` to the URL.)
 
 Because the certificate is self-signed, your browser will warn you on first visit — accept it (e.g. "Advanced → Continue") to proceed.
 
