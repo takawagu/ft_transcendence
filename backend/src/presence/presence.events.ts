@@ -33,6 +33,21 @@ export const PRESENCE_EVENTS = {
 
   /** 会話を既読にした時。本人の全タブへ送り、未読バッジを揃える */
   DM_READ: 'dm:read',
+
+  /** メッセージ入力中状態の変化 */
+  DM_TYPING: 'dm:typing',
+} as const;
+
+/**
+ * 接続を拒否した理由。socket.ioのミドルウェアがErrorのmessageとして返し、
+ * クライアントには connect_error の err.message として届く。
+ * フロント側（frontend/src/lib/presence.tsx）に同じ文字列がある。
+ */
+export const PRESENCE_CONNECT_ERRORS = {
+  /** トークンが無い・不正・期限切れ */
+  UNAUTHORIZED: 'UNAUTHORIZED',
+  /** 同じアカウントが既に別のタブ／端末で接続している */
+  DUPLICATE_SESSION: 'DUPLICATE_SESSION',
 } as const;
 
 export interface PresenceSnapshotPayload {
@@ -60,6 +75,10 @@ export interface DmReceivedPayload {
     receiverId: number;
     content: string;
     createdAt: Date;
+    /** TEXT | ROOM_INVITE。招待も同じイベントで流す（docs/room-invite-requirements.md セクション2） */
+    type: string;
+    /** type = 'ROOM_INVITE' のときだけ入る招待先のルームコード */
+    roomCode: string | null;
   };
   /** 会話の相手。受信者には送信者、送信者には受信者が入る */
   user: PublicUser;
@@ -69,4 +88,10 @@ export interface DmReadPayload {
   /** 既読にした会話の相手 */
   userId: number;
   lastReadMessageId: number;
+}
+
+export interface DmTypingPayload {
+  /** 入力状態が変化した相手 */
+  userId: number;
+  isTyping: boolean;
 }

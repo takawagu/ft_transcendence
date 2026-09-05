@@ -11,7 +11,7 @@ export type RoomPhase =
   | 'ROUND_RESULT'
   | 'GAME_OVER';
 
-export type PlayerPhase = 'INPUT' | 'GENERATING' | 'DONE';
+export type PlayerPhase = 'INPUT' | 'DONE';
 
 /**
  * プレイヤーの参加状態。
@@ -33,6 +33,7 @@ export interface PlayerInGameInfo extends PlayerInfo {
   playerPhase?: PlayerPhase; // INPUT_GENERATING中のみ有効
   hasSubmittedPrompt: boolean; // 他プレイヤーから見える（プロンプト内容は非公開）
   imageUrl?: string; // SPEAKING以降で全員に公開
+  prompt?: string; // SPEAKING以降で全員に公開
   status: PlayerStatus;
   /** ホストが「復帰を待つ」を明示選択済み。表示専用でゲームロジックは参照しない */
   awaitingReturn: boolean;
@@ -149,10 +150,21 @@ export const ITO_EVENTS = {
 
   /** 再接続した本人にのみ送る、完全な状態復元用ペイロード */
   RESYNC_STATE: 'ito:resyncState',
+
+  /** 同じ席に別の接続が入り、この接続が席から外された（旧ソケットにのみ送る） */
+  SESSION_TAKEN_OVER: 'ito:sessionTakenOver',
 } as const;
 
 // ===== ペイロード型（Client → Server） =====
 
+/**
+ * 「自分は誰か」を表すplayerIdは、どのペイロードでも**ゲートウェイが
+ * ハンドシェイクのJWTから埋める**。クライアントが送っても捨てられる。
+ * 信用すると、roomCodeと他人のuserIdを知っているだけで席を奪えてしまうため。
+ *
+ * 一方 ExcludePlayerPayload / AwaitReturnPayload のplayerIdは「操作の対象」であって
+ * 名乗りではないので上書きしない（権限はホスト判定と切断中判定で担保している）。
+ */
 export class CreateRoomPayload {
   playerName: string;
   playerId: string;
@@ -182,6 +194,17 @@ export class ReorderCardsPayload {
   orderedPlayerIds: string[];
 }
 
+/**
+ * ゲーム内チャット1件の上限。フロントの CHAT_MESSAGE_MAX_LENGTH と揃えること。
+ * DMの1000より短いのは、話し合いフェーズの1行入力欄で使う短文チャットであり、
+ * 長文が1件来ると狭いチャット欄が埋まって進行が読めなくなるため。
+ *
+ * 数え方はUTF-16のコード単位（JSのString#length、HTMLのmaxLengthと同じ）。
+ * サーバとクライアントで同じ数え方にしないと、入力欄では打てるのに送ると弾かれる、
+ * という食い違いが出る。
+ */
+export const CHAT_MESSAGE_MAX_LENGTH = 200;
+
 export class SendChatPayload {
   message: string;
 }
@@ -189,6 +212,11 @@ export class SendChatPayload {
 export class RejoinPayload {
   roomCode: string;
   playerId: string;
+  /**
+   * WAITING中は席が保持されないため、復帰ではなく新規参加にフォールバックする。
+   * その際に名前が要る。省略時はフォールバックせず通常の失敗として扱う（旧クライアント互換）。
+   */
+  playerName?: string;
 }
 
 export class ExcludePlayerPayload {
@@ -292,4 +320,6 @@ export interface ResyncStatePayload extends RoomStatePayload {
   turnOrder: string[];
   messages: ChatMessagePayload[];
   myCardNumber?: number; // 本人のみに送る
+  /** 直近ラウンドの公開結果。ROUND_RESULT/GAME_OVER中に復帰した人の結果画面を復元する */
+  lastReveal?: CardsRevealedPayload;
 }

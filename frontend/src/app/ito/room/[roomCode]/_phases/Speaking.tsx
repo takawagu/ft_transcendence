@@ -91,22 +91,14 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
     return (
       <div 
         onClick={isMe ? toggleShowNumber : () => setInspectPlayerId(pid)}
-        className={`w-full h-full relative ${isMe ? 'cursor-pointer' : 'cursor-zoom-in'}`}
+        className={`w-full h-full rounded-lg border border-cyan-500/30 bg-gradient-to-br from-[#0c1020] to-[#151c3c] flex flex-col items-center justify-between p-3 select-none relative shadow-md shadow-black/40 ${isMe ? 'cursor-pointer' : 'cursor-zoom-in'}`}
       >
-        {p?.imageUrl ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={p.imageUrl}
-            alt={p.name}
-            className="w-full h-full rounded-lg object-cover"
-            draggable={false}
-          />
-        ) : (
-          <div className="w-full h-full rounded-lg bg-zinc-700 flex flex-col items-center justify-center text-zinc-400 font-bold select-none text-sm">
-            <span>{p?.name?.[0]}</span>
-            <span className="text-[8px] text-zinc-500 font-normal mt-1 truncate max-w-[80px]">{p?.name}</span>
-          </div>
-        )}
+        <div className="text-xs text-cyan-400 font-cyber font-bold tracking-wider uppercase truncate w-full">
+          {p?.name}
+        </div>
+        <div className="flex-1 w-full flex items-center justify-center text-center px-1 overflow-y-auto min-h-0 text-base font-semibold text-white break-words scrollbar-thin">
+          {p?.prompt || '未入力'}
+        </div>
       </div>
     );
   };
@@ -216,22 +208,22 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
   };
 
   return (
-    <div className="h-full w-full flex flex-col justify-center items-center gap-8 p-6 max-w-5xl mx-auto">
+    <div className="h-full w-full flex flex-col justify-start items-center gap-4 md:gap-8 p-3 sm:p-4 md:p-6 max-w-5xl mx-auto overflow-y-auto">
 
       {/* Main Split Columns (Responsive side-by-side) */}
-      <div className="flex flex-col md:flex-row gap-8 items-center justify-center w-full min-h-0">
+      <div className="flex flex-col md:flex-row gap-4 md:gap-8 items-center justify-center w-full min-h-0 flex-shrink-0">
 
         {/* Left Pane: Theme, Board, and Drag Instructions */}
-        <div className="flex-1 bg-zinc-800/10 border border-zinc-800/40 rounded-2xl p-5 flex flex-col gap-4">
+        <div className="w-full md:flex-1 bg-zinc-800/10 border border-zinc-800/40 rounded-2xl p-4 md:p-5 flex flex-col gap-4 flex-shrink-0">
           {/* Header (Theme) */}
           <div className="text-center md:text-left border-b border-zinc-800 pb-3 select-none">
             <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider">お題</p>
-            <h1 className="text-xl font-bold text-white mt-0.5">{state.myTheme}</h1>
+            <h1 className="text-xl font-bold text-white font-pixel mt-0.5 break-all">{state.myTheme}</h1>
             {/* Other player's turn info */}
             {!isMyTurn && (
               <div className="mt-2 text-xs text-zinc-400 font-medium">
                 {alreadyPlaced ? (
-                  <span><span className="text-white font-semibold">{currentPlayer?.name}</span> のターンを見守りましょう</span>
+                  <span><span className="text-white font-semibold">{currentPlayer?.name}</span> のターン</span>
                 ) : (
                   <span><span className="text-white font-semibold">{currentPlayer?.name}</span> のターン</span>
                 )}
@@ -241,7 +233,7 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
 
           {/* Board Card Area */}
           <div className="flex-1 flex flex-col justify-center">
-            <p className="text-xs text-zinc-600 mb-2 font-semibold select-none">場 ({state.boardOrder.length} / {boardTotal}人)</p>
+            <p className="text-xs text-zinc-600 mb-2 font-semibold select-none">フィールド ({state.boardOrder.length} / {boardTotal}人)</p>
             {boardWithDraft.length === 0 ? (
               <div
                 onDragOver={e => {
@@ -271,7 +263,7 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                   }
                 `}
               >
-                {isMyTurn ? 'ここにカードをドラッグ＆ドロップまたはクリックで置く' : 'まだカードが置かれていません'}
+                {isMyTurn ? 'カードをドラッグ＆ドロップまたはクリックで置く' : 'まだカードが置かれていません'}
               </div>
             ) : (
               <div
@@ -303,7 +295,7 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                         }}
                         onDragOver={e => handleDragOverCard(e, i)}
                         onDrop={e => handleDropCard(e, i)}
-                        className={`text-center bg-zinc-800 p-1.5 rounded-xl border transition-all duration-200 select-none w-36 h-36 flex items-center justify-center overflow-hidden relative
+                        className={`text-center bg-zinc-800 p-1.5 rounded-xl border transition-all duration-200 select-none w-44 h-56 flex items-center justify-center overflow-hidden relative
                           ${isDraftCard ? 'cursor-grab active:cursor-grabbing' : ''}
                           ${dragOverPosition === i ? 'border-indigo-500 bg-indigo-950/20 scale-[1.02] shadow-lg' : isDraftCard ? 'border-dashed border-indigo-500/80 ring-2 ring-indigo-500/20' : 'border-zinc-700/30'}
                         `}
@@ -361,16 +353,13 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
         </div>
 
         {/* Right Pane: Hand Card, Number, and Status */}
-        <div className="w-full md:w-80 bg-zinc-800/10 border border-zinc-800/40 rounded-2xl p-5 flex flex-col items-center justify-center min-h-[220px] md:min-h-0">
+        <div
+          className={`w-full md:w-80 bg-zinc-800/10 border border-zinc-800/40 rounded-2xl p-4 md:p-5 flex flex-col items-center justify-center flex-shrink-0 ${
+            draftPosition !== null ? 'min-h-0' : 'min-h-[220px] md:min-h-0'
+          }`}
+        >
           {canInteract && draftPosition !== null ? (
             <div className="flex flex-col items-center justify-center w-full select-none gap-3">
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
-                配置プレビュー中（未確定）
-              </span>
-              <p className="text-xs text-zinc-400 text-center">
-                カードをクリックして、数字と画像を変換
-              </p>
-
               <button
                 onClick={handleConfirm}
                 className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 font-semibold text-white hover:bg-indigo-500 transition-colors mt-2 cursor-pointer"
@@ -387,10 +376,10 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
           ) : (
             <div className="flex flex-col items-center justify-center w-full select-none gap-3">
               <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">
-                あなたの手札
+                あなたのカード
               </span>
               <p className="text-[10px] text-zinc-500 text-center font-medium">
-                カードをクリックして、数字と画像を変換
+                カードをタップして、数字と回答を変換
               </p>
 
               {/* Hand Card (Draggable only if it's my turn to place and I haven't placed yet) */}
@@ -406,7 +395,7 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                   setIsDraggingMyCard(false);
                   setDragOverPosition(null);
                 }}
-                className={`w-36 h-36 bg-zinc-800 rounded-2xl border shadow-2xl transition-all duration-300 hover:scale-[1.02] flex items-center justify-center overflow-hidden
+                className={`w-44 h-56 bg-zinc-800 rounded-2xl border shadow-2xl transition-all duration-300 hover:scale-[1.02] flex items-center justify-center overflow-hidden
                   ${isDraggingMyCard ? 'opacity-20 scale-95 border-dashed border-indigo-500' : 'border-indigo-500/80 ring-2 ring-indigo-500/30'}
                 `}
               >
@@ -425,7 +414,7 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                   </div>
                 ) : (
                   <p className="text-[10px] text-indigo-400 mt-1 font-pixel animate-pulse">
-                    カードをボードへドラッグしてください
+                    カードをボードへ配置してください
                   </p>
                 )}
               </div>
@@ -435,7 +424,7 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
       </div>
 
       {/* Footer Area: All players list (Extremely compact horizontal pills to prevent scrolling) */}
-      <div className="border-t border-zinc-800/30 pt-4 w-full">
+      <div className="border-t border-zinc-800/30 pt-3 md:pt-4 w-full flex-shrink-0 mt-auto md:mt-0">
         <p className="text-[10px] text-zinc-600 mb-2 text-center select-none uppercase tracking-wider font-semibold">プレイヤー</p>
         <div className="flex flex-wrap items-center justify-center gap-1.5">
           {state.players.map(p => (
@@ -512,21 +501,14 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                 <h3 className="text-lg font-bold text-indigo-400 font-pixel mt-0.5">{p.name}</h3>
               </div>
 
-              {/* Large Card Image */}
-              <div className="w-72 h-72 rounded-xl overflow-hidden border border-zinc-700 bg-zinc-800 shadow-lg">
-                {p.imageUrl ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={p.imageUrl}
-                    alt={p.name}
-                    className="w-full h-full object-cover select-none"
-                    draggable={false}
-                  />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 font-bold text-sm gap-2">
-                    <span>画像がありません</span>
-                  </div>
-                )}
+              {/* Large Card Content */}
+              <div className="w-72 h-72 rounded-xl overflow-hidden border border-cyan-500/30 bg-gradient-to-br from-[#0c1020] to-[#18224b] shadow-lg flex flex-col p-6 items-center justify-center text-center">
+                <span className="text-xs text-cyan-400 font-cyber font-bold tracking-widest uppercase mb-4">
+                  {p.name}の宣言
+                </span>
+                <div className="flex-1 w-full flex items-center justify-center text-base font-medium text-white break-words overflow-y-auto px-2">
+                  {p.prompt || '未入力'}
+                </div>
               </div>
               
               <p className="text-[10px] text-zinc-500 font-pixel text-center">

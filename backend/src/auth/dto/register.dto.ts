@@ -22,11 +22,11 @@ export class RegisterDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(500)
+  @MaxLength(100)
   bio?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(512)
+  @MaxLength(2000000)
   profileImage?: string;
 }

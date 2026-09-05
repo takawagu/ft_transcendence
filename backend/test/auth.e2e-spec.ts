@@ -20,7 +20,9 @@ describe('Auth (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     await app.init();
 
     prisma = app.get(PrismaService);
@@ -113,7 +115,11 @@ describe('Auth (e2e)', () => {
 
     await request(app.getHttpServer())
       .post('/api/auth/register')
-      .send({ email, username: testUsername('checkemail'), password: 'password123' })
+      .send({
+        email,
+        username: testUsername('checkemail'),
+        password: 'password123',
+      })
       .expect(201);
 
     const after = await request(app.getHttpServer())
@@ -142,7 +148,11 @@ describe('Auth (e2e)', () => {
 
     await request(app.getHttpServer())
       .post('/api/auth/register')
-      .send({ email, username: testUsername('wrongpw'), password: 'password123' })
+      .send({
+        email,
+        username: testUsername('wrongpw'),
+        password: 'password123',
+      })
       .expect(201);
 
     await request(app.getHttpServer())

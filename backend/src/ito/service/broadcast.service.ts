@@ -37,6 +37,20 @@ export class BroadcastService {
     this.server.to(socketId).emit(event, payload);
   }
 
+  /**
+   * 席を奪われた旧ソケットを部屋から切り離す。
+   * 放置すると、操作は全てresolveで弾かれるのにブロードキャストだけは届き続ける
+   * 「画面は生きているのに何も効かないタブ」になるため、通知した上で部屋から外す。
+   *
+   * 切断はしない。クライアント側のsocket.ioが自動再接続してrejoinを送り直し、
+   * 2つのタブが席を奪い合い続けるため（離脱するかどうかは通知を受けた側が決める）。
+   * 既に切れているソケットに対しては何も起きない。
+   */
+  dropSocket(socketId: string, roomId: string): void {
+    this.server.to(socketId).emit(ITO_EVENTS.SESSION_TAKEN_OVER, {});
+    this.server.in(socketId).socketsLeave(roomId);
+  }
+
   emitResyncState(room: ItoRoom, player: ItoPlayer): void {
     if (!player.socketId) return;
     const payload: ResyncStatePayload = {
@@ -47,6 +61,7 @@ export class BroadcastService {
       turnOrder: [...room.turnOrder],
       messages: [...room.messages],
       myCardNumber: player.cardNumber,
+      lastReveal: room.lastReveal,
     };
     this.server.to(player.socketId).emit(ITO_EVENTS.RESYNC_STATE, payload);
   }
@@ -81,6 +96,7 @@ export class BroadcastService {
           room.roomPhase === 'INPUT_GENERATING' ? p.playerPhase : undefined,
         hasSubmittedPrompt: p.hasSubmittedPrompt,
         imageUrl: showImages ? p.imageUrl : undefined,
+        prompt: showImages ? p.prompt : undefined,
         status: p.status,
         awaitingReturn: p.awaitingReturn,
       })),

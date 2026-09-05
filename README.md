@@ -227,7 +227,7 @@ erDiagram
 |---|---|---|
 | Registration & login | Email/password signup and login, bcrypt-hashed, JWT issued on success | `takawagu` |
 | Live username/email availability check | Debounced uniqueness check while typing, plus a server-side check on submit as a race-condition backstop | `takawagu` |
-| Profile management | Edit username, bio, avatar and password, with validated limits on each field | `takawagu` |
+| Profile management | Edit username, bio, avatar and password, with validated limits on each field | `takawagu`, `squinn` |
 | Friends system | Send/accept/reject/remove friend requests, partial-match user search | `takawagu` |
 | Blocking | Block/unblock a user; blocking clears any existing friendship | `takawagu` |
 | Online presence | Live online/offline status and friend-request notifications over a dedicated WebSocket namespace | `takawagu` |

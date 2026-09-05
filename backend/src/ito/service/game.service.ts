@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Socket } from 'socket.io';
 import {
+  CHAT_MESSAGE_MAX_LENGTH,
   ITO_EVENTS,
   PlaceCardPayload,
   ReorderCardsPayload,
@@ -40,7 +41,20 @@ export class GameService {
       return;
     }
 
-    room.theme = payload.theme;
+    // Validate theme length (max 100 characters)
+    if (
+      !payload.theme ||
+      typeof payload.theme !== 'string' ||
+      payload.theme.trim().length === 0 ||
+      payload.theme.trim().length > 100
+    ) {
+      client.emit('ito:error', {
+        message: 'お題は1文字以上100文字以内で入力してください。',
+      });
+      return;
+    }
+
+    room.theme = payload.theme.trim();
     room.totalRounds = room.totalRounds || payload.totalRounds || 3;
     room.currentRound = room.currentRound === 0 ? 1 : room.currentRound + 1;
     room.roomPhase = 'DEALING';
@@ -78,11 +92,24 @@ export class GameService {
     if (room.roomPhase !== 'INPUT_GENERATING' || room.paused) return;
     if (player.playerPhase !== 'INPUT') return;
 
-    player.prompt = payload.prompt;
-    player.hasSubmittedPrompt = true;
-    player.playerPhase = 'GENERATING';
+    // Validate prompt length (max 100 characters)
+    if (
+      !payload.prompt ||
+      typeof payload.prompt !== 'string' ||
+      payload.prompt.trim().length === 0 ||
+      payload.prompt.trim().length > 100
+    ) {
+      client.emit('ito:error', {
+        message: 'お題の回答は1文字以上100文字以内で入力してください。',
+      });
+      return;
+    }
 
-    this.broadcast.emitPlayerPhaseChange(room.id, player.playerId, 'GENERATING');
+    player.prompt = payload.prompt.trim();
+    player.hasSubmittedPrompt = true;
+    player.playerPhase = 'DONE';
+
+    this.broadcast.emitPlayerPhaseChange(room.id, player.playerId, 'DONE');
 
     // 分子・分母の両方を除外者抜きで数える。片方だけにすると完了条件が永久に成立しなくなる。
     const active = activePlayers(room);
@@ -91,7 +118,7 @@ export class GameService {
       totalCount: active.length,
     });
 
-    this.stubGenerateImage(room, player.playerId);
+    this.advancePhaseIfComplete(room);
   }
 
   placeCard(client: Socket, payload: PlaceCardPayload) {
@@ -158,7 +185,9 @@ export class GameService {
       room.boardOrder.every((id, i) => id === correctOrder[i]);
 
     room.roomPhase = 'REVEAL';
-    this.broadcast.emitToRoom(room.id, ITO_EVENTS.CARDS_REVEALED, {
+    // CARDS_REVEALEDはこの一度しか飛ばないので、結果を部屋にも残しておく。
+    // ROUND_RESULT中に復帰した人へはRESYNC_STATE経由でこれを渡す。
+    room.lastReveal = {
       revealedCards: placed.map((p) => ({
         playerId: p.playerId,
         cardNumber: p.cardNumber!,
@@ -166,7 +195,12 @@ export class GameService {
       submittedOrder: [...room.boardOrder],
       correctOrder,
       success,
-    });
+    };
+    this.broadcast.emitToRoom(
+      room.id,
+      ITO_EVENTS.CARDS_REVEALED,
+      room.lastReveal,
+    );
 
     room.roomPhase = 'ROUND_RESULT';
     this.broadcast.broadcastPhaseChange(room);
@@ -186,10 +220,29 @@ export class GameService {
     const { room, player } = resolved;
     if (room.roomPhase !== 'ORDERING' || room.paused) return;
 
+    /*
+     * /ito名前空間にはグローバルのValidationPipeが効かず、payloadは申告されたまま届く。
+     * クライアント側のmaxLengthはDevToolsでも生のsocket.io接続でも迂回できるので、
+     * 型と長さの検証はここで必ず行う。ここを通った文字列がそのまま全員へ配信され、
+     * room.messagesにも積まれる（部屋が消えるまでメモリに残る）。
+     */
+    if (typeof payload?.message !== 'string') return;
+
+    // 保存も配信もtrim済みの本文で行う。空白だけの送信は無視する（DMのSendMessageDtoと同じ扱い）
+    const message = payload.message.trim();
+    if (!message) return;
+
+    if (message.length > CHAT_MESSAGE_MAX_LENGTH) {
+      client.emit('ito:error', {
+        message: `メッセージは${CHAT_MESSAGE_MAX_LENGTH}文字以内で入力してください`,
+      });
+      return;
+    }
+
     const chatMessage = {
       playerId: player.playerId,
       playerName: player.name,
-      message: payload.message,
+      message,
       timestamp: Date.now(),
     };
     room.messages.push(chatMessage);
@@ -217,7 +270,10 @@ export class GameService {
     }
 
     if (room.roomPhase === 'SPEAKING') {
-      if (room.turnOrder.length > 0 && room.boardOrder.length >= room.turnOrder.length) {
+      if (
+        room.turnOrder.length > 0 &&
+        room.boardOrder.length >= room.turnOrder.length
+      ) {
         room.roomPhase = 'ORDERING';
         this.broadcast.broadcastPhaseChange(room);
         this.broadcast.broadcastRoomState(room);
@@ -245,32 +301,6 @@ export class GameService {
         });
       }),
     );
-  }
-
-  private stubGenerateImage(room: ItoRoom, playerId: string) {
-    const delay = 1000 + Math.random() * 2000;
-    setTimeout(() => {
-      if (!this.store.hasRoom(room.id)) return;
-      const player = room.players.find((p) => p.playerId === playerId);
-      if (!player || player.playerPhase !== 'GENERATING') return;
-
-      player.imageUrl = `https://placehold.co/300x300/1a1a2e/00d4ff?text=${encodeURIComponent(player.name)}`;
-      player.playerPhase = 'DONE';
-
-      const active = activePlayers(room);
-
-      this.broadcast.emitPlayerPhaseChange(room.id, playerId, 'DONE');
-
-      this.broadcast.emitToRoom(room.id, ITO_EVENTS.IMAGE_GENERATED, {
-        playerId,
-        imageUrl: player.imageUrl,
-        generatedCount: active.filter((p) => p.playerPhase === 'DONE').length,
-        totalCount: active.length,
-      });
-
-      // ポーズ中ならここでは進めない。ホストが再開したときにまとめて消化される。
-      this.advancePhaseIfComplete(room);
-    }, delay);
   }
 
   private transitionToSpeaking(room: ItoRoom) {
@@ -310,6 +340,9 @@ export class GameService {
     room.boardOrder = [];
     room.currentTurnIndex = 0;
     room.roundHostId = '';
+    // 前ラウンドの結果はここで捨てる。purgeExcludedの直後なので、
+    // 残すと既にroom.playersから消えたプレイヤーを指したまま復帰者へ送られてしまう。
+    room.lastReveal = undefined;
     // turnOrderは意図的に残す。buildTurnOrderが次ラウンドの手番順を
     // 「前ラウンドの順を1つ回転させたもの」として組み立てる回転元になるため、
     // ここで空にすると次ラウンドの手番順が空になりゲームが進行不能になる。

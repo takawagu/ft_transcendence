@@ -12,6 +12,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession, type User } from '@/lib/session';
 import { usePresence, type DirectMessage } from '@/lib/presence';
 import { renderAvatar } from '@/lib/avatar';
+import { isInviteExpired, joinInvitedRoom } from '@/lib/room-invite';
+import { FriendInfoWindow } from '@/lib/friend-info';
 
 /** 本文の上限。SendMessageDto の @MaxLength と揃える */
 const MESSAGE_MAX_LENGTH = 1000;
@@ -49,11 +51,71 @@ function formatTime(iso: string) {
   return `${date.getMonth() + 1}/${date.getDate()} ${hh}:${mm}`;
 }
 
+/**
+ * スレッド内のルーム招待（docs/room-invite-requirements.md セクション4-c）。
+ * 自分が送った招待も同じカードで描く。ただし自分は既にその部屋に居るので参加ボタンは出さない。
+ */
+function RoomInviteCard({
+  roomCode,
+  mine,
+  expired,
+  onJoin,
+}: {
+  roomCode: string;
+  mine: boolean;
+  expired: boolean;
+  onJoin: () => void;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border px-3 py-2.5 ${
+        expired
+          ? 'border-zinc-700 bg-zinc-900/60'
+          : 'border-indigo-800/60 bg-indigo-950/40'
+      }`}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className="text-sm">🎮</span>
+        <span className="text-[11px] font-bold text-zinc-200">
+          ゲームルームへの招待
+        </span>
+        {expired && (
+          <span className="text-[9px] font-bold text-zinc-500 border border-zinc-700 rounded-full px-1.5 py-0.5">
+            期限切れ
+          </span>
+        )}
+      </div>
+
+      <p
+        className={`mt-1.5 text-center font-mono text-base font-bold tracking-widest ${
+          expired ? 'text-zinc-600' : 'text-indigo-300'
+        }`}
+      >
+        {roomCode}
+      </p>
+
+      {mine ? (
+        <p className="mt-1.5 text-center text-[10px] text-zinc-500">
+          招待を送信しました
+        </p>
+      ) : (
+        <button
+          onClick={onJoin}
+          disabled={expired}
+          className="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 transition-all cursor-pointer disabled:cursor-not-allowed"
+        >
+          参加
+        </button>
+      )}
+    </div>
+  );
+}
+
 function MessagesView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { mounted, token, user, apiCall } = useSession();
-  const { onlineFriendIds, unreadCounts, subscribe, markConversationRead } = usePresence();
+  const { onlineFriendIds, unreadCounts, subscribe, markConversationRead, sendTyping } = usePresence();
 
   const [friends, setFriends] = useState<User[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -65,8 +127,16 @@ function MessagesView() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
 
+  /** 相手がどこまで読んだか（既読判定用） */
+  const [partnerLastReadMessageId, setPartnerLastReadMessageId] = useState<number>(0);
+  /** 相手が入力中かどうか */
+  const [isPartnerTyping, setIsPartnerTyping] = useState(false);
+
   const [draft, setDraft] = useState('');
   const [sendError, setSendError] = useState('');
+
+  /** プロフィールウィンドウの対象。null なら非表示 */
+  const [infoTarget, setInfoTarget] = useState<User | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   /** ?to= による初期選択は最初の一度だけ行う（以降のクリックを上書きしないため） */
@@ -77,6 +147,10 @@ function MessagesView() {
   const lastMessageIdRef = useRef<number | null>(null);
   /** 過去を読み足した直後にスクロール位置を戻すための、読み足す前の高さ */
   const restoreHeightRef = useRef<number | null>(null);
+  /** 相手の入力中表示を一定時間後に解除するタイマー */
+  const partnerTypingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  /** 自分の入力中通知を一定時間後に止めるタイマー */
+  const myTypingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -152,19 +226,26 @@ function MessagesView() {
   useEffect(() => {
     if (!token || selectedId === null) {
       setMessages([]);
+      setPartnerLastReadMessageId(0);
+      setIsPartnerTyping(false);
       return;
     }
     let cancelled = false;
     setHistoryLoading(true);
     setSendError('');
+    setIsPartnerTyping(false);
     (async () => {
       try {
-        const history: DirectMessage[] = await apiCall(
+        const res: any = await apiCall(
           `/api/messages/${selectedId}?limit=${HISTORY_PAGE_SIZE}`,
         );
         if (cancelled) return;
+        const history: DirectMessage[] = Array.isArray(res) ? res : res.messages;
         setMessages(history || []);
         setHasMore((history?.length ?? 0) === HISTORY_PAGE_SIZE);
+        if (res?.partnerLastReadMessageId !== undefined) {
+          setPartnerLastReadMessageId(res.partnerLastReadMessageId);
+        }
         // 既読は履歴が取れてから打つ。どこまで読んだかを表すIDが要るため
         const last = history?.[history.length - 1];
         if (last) markConversationRead(selectedId, last.id);
@@ -182,10 +263,10 @@ function MessagesView() {
     };
   }, [token, selectedId, apiCall, markConversationRead]);
 
-  // リアルタイム受信
+  // リアルタイム受信 (dm:received, dm:read, dm:typing)
   useEffect(() => {
     if (!token) return;
-    return subscribe('dm:received', ({ message, user: partner }) => {
+    const unsubReceived = subscribe('dm:received', ({ message, user: partner }) => {
       setConversations(prev => [
         {
           userId: partner.id,
@@ -204,6 +285,34 @@ function MessagesView() {
         prev.some(m => m.id === message.id) ? prev : [...prev, message],
       );
     });
+
+    const unsubRead = subscribe('dm:read', ({ userId, lastReadMessageId }) => {
+      // 相手がこちらのメッセージを読んだ時、既読カーソルを更新
+      if (selectedIdRef.current === userId) {
+        setPartnerLastReadMessageId(prev => Math.max(prev, lastReadMessageId));
+      }
+    });
+
+    const unsubTyping = subscribe('dm:typing', ({ userId, isTyping }) => {
+      if (selectedIdRef.current === userId) {
+        if (isTyping) {
+          setIsPartnerTyping(true);
+          if (partnerTypingTimeoutRef.current) clearTimeout(partnerTypingTimeoutRef.current);
+          partnerTypingTimeoutRef.current = setTimeout(() => {
+            setIsPartnerTyping(false);
+          }, 4000);
+        } else {
+          setIsPartnerTyping(false);
+          if (partnerTypingTimeoutRef.current) clearTimeout(partnerTypingTimeoutRef.current);
+        }
+      }
+    });
+
+    return () => {
+      unsubReceived();
+      unsubRead();
+      unsubTyping();
+    };
   }, [token, subscribe, markConversationRead]);
 
   // 過去の読み足しでは、増えた分だけ下へずらして見えている位置を保つ
@@ -221,10 +330,10 @@ function MessagesView() {
    */
   useEffect(() => {
     const lastId = messages.length > 0 ? messages[messages.length - 1].id : null;
-    if (lastId === lastMessageIdRef.current) return;
+    if (lastId === lastMessageIdRef.current && !isPartnerTyping) return;
     lastMessageIdRef.current = lastId;
     scrollToBottom();
-  }, [messages, scrollToBottom]);
+  }, [messages, isPartnerTyping, scrollToBottom]);
 
   /** 上端に達したら過去を読み足す */
   const handleScroll = async () => {
@@ -235,11 +344,15 @@ function MessagesView() {
     setLoadingMore(true);
     restoreHeightRef.current = el.scrollHeight;
     try {
-      const older: DirectMessage[] = await apiCall(
+      const res: any = await apiCall(
         `/api/messages/${selectedId}?before=${messages[0].id}&limit=${HISTORY_PAGE_SIZE}`,
       );
+      const older: DirectMessage[] = Array.isArray(res) ? res : res.messages;
       setMessages(prev => [...(older || []), ...prev]);
       setHasMore((older?.length ?? 0) === HISTORY_PAGE_SIZE);
+      if (res?.partnerLastReadMessageId !== undefined) {
+        setPartnerLastReadMessageId(prev => Math.max(prev, res.partnerLastReadMessageId));
+      }
     } catch {
       restoreHeightRef.current = null;
       setHasMore(false);
@@ -248,9 +361,28 @@ function MessagesView() {
     }
   };
 
+  const handleDraftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setDraft(value);
+    if (selectedId) {
+      if (value.trim()) {
+        sendTyping(selectedId, true);
+        if (myTypingTimeoutRef.current) clearTimeout(myTypingTimeoutRef.current);
+        myTypingTimeoutRef.current = setTimeout(() => {
+          if (selectedIdRef.current) sendTyping(selectedIdRef.current, false);
+        }, 2500);
+      } else {
+        sendTyping(selectedId, false);
+        if (myTypingTimeoutRef.current) clearTimeout(myTypingTimeoutRef.current);
+      }
+    }
+  };
+
   const handleSend = async () => {
     const content = draft.trim();
     if (!content || selectedId === null) return;
+    if (myTypingTimeoutRef.current) clearTimeout(myTypingTimeoutRef.current);
+    sendTyping(selectedId, false);
     setSendError('');
     setDraft('');
     try {
@@ -273,6 +405,27 @@ function MessagesView() {
     if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
     e.preventDefault();
     handleSend();
+  };
+
+  /**
+   * フレンド削除・ブロックの後片付け。どちらも相手がフレンドでなくなるので、
+   * 一覧から消して会話も閉じる（開いたままだと履歴取得が403になる）。
+   * 失敗した時はウィンドウを閉じてから出す。開いたままだとメッセージが裏に隠れる。
+   */
+  const endFriendship = async (
+    endpoint: string,
+    body: Record<string, number>,
+    friendId: number,
+  ) => {
+    setSendError('');
+    setInfoTarget(null);
+    try {
+      await apiCall(endpoint, 'POST', body);
+      setFriends(prev => prev.filter(f => f.id !== friendId));
+      setSelectedId(null);
+    } catch (err: any) {
+      setSendError(err.message || '操作に失敗しました。');
+    }
   };
 
   const selectConversation = (userId: number) => {
@@ -418,14 +571,24 @@ function MessagesView() {
                   </svg>
                 </button>
                 {renderAvatar(selectedFriend.profileImage, 'w-8 h-8 text-base')}
-                <div>
-                  <div className="text-sm font-semibold text-zinc-100">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-zinc-100 truncate">
                     {selectedFriend.username}
                   </div>
                   <div className="text-[10px] text-zinc-500">
                     {onlineFriendIds.has(selectedFriend.id) ? 'オンライン' : 'オフライン'}
                   </div>
                 </div>
+                {/* 会話画面から相手のプロフィールを開く。ホーム画面の「詳細」と同じウィンドウ */}
+                <button
+                  onClick={() => setInfoTarget(selectedFriend)}
+                  className="shrink-0 p-1.5 text-zinc-500 hover:text-indigo-400 hover:bg-indigo-950/20 border border-transparent hover:border-indigo-900/30 rounded-lg transition-all cursor-pointer"
+                  title="プロフィール"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
               </div>
 
               <div
@@ -474,22 +637,65 @@ function MessagesView() {
                             {speaker.username}
                           </span>
                         )}
-                        <div
-                          className={`px-3 py-2 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap break-words ${
-                            mine
-                              ? 'bg-indigo-600 text-white rounded-br-sm'
-                              : 'bg-zinc-800 text-zinc-100 rounded-bl-sm'
-                          }`}
-                        >
-                          {message.content}
+                        {/* 招待は吹き出しではなくカードで描く。content（固定文言）は
+                            会話一覧のプレビュー専用なのでここでは使わない */}
+                        {message.type === 'ROOM_INVITE' && message.roomCode ? (
+                          <RoomInviteCard
+                            roomCode={message.roomCode}
+                            mine={mine}
+                            expired={isInviteExpired(message.createdAt)}
+                            onJoin={() =>
+                              joinInvitedRoom(
+                                message.roomCode!,
+                                user.username,
+                                router,
+                              )
+                            }
+                          />
+                        ) : (
+                          <div
+                            className={`px-3 py-2 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap break-words ${
+                              mine
+                                ? 'bg-indigo-600 text-white rounded-br-sm'
+                                : 'bg-zinc-800 text-zinc-100 rounded-bl-sm'
+                            }`}
+                          >
+                            {message.content}
+                          </div>
+                        )}
+                        <div className={`flex items-center gap-1.5 mt-0.5 px-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
+                          {mine && message.id <= partnerLastReadMessageId && (
+                            <span className="text-[9px] font-bold text-indigo-400 select-none flex items-center gap-0.5">
+                              既読
+                            </span>
+                          )}
+                          <span className="text-[9px] text-zinc-600">
+                            {formatTime(message.createdAt)}
+                          </span>
                         </div>
-                        <span className="mt-0.5 text-[9px] text-zinc-600 px-1">
-                          {formatTime(message.createdAt)}
-                        </span>
                       </div>
                     </div>
                   );
                 })}
+
+                {/* 相手の入力中インジケーター */}
+                {isPartnerTyping && (
+                  <div className="flex items-center gap-2 pt-2 pb-1">
+                    <div className="w-8 shrink-0">
+                      {renderAvatar(selectedFriend.profileImage, 'w-8 h-8 text-base')}
+                    </div>
+                    <div className="bg-zinc-800/80 border border-zinc-700/60 rounded-2xl rounded-bl-sm px-3.5 py-2 flex items-center gap-2 shadow-sm">
+                      <span className="text-xs text-zinc-300 font-medium">
+                        {selectedFriend.username} が入力中
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce"></span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce [animation-delay:0.2s]"></span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce [animation-delay:0.4s]"></span>
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="shrink-0 border-t border-zinc-700 bg-zinc-900/50 p-3">
@@ -499,7 +705,7 @@ function MessagesView() {
                 <div className="flex items-end gap-2">
                   <textarea
                     value={draft}
-                    onChange={e => setDraft(e.target.value)}
+                    onChange={handleDraftChange}
                     onKeyDown={handleKeyDown}
                     rows={1}
                     maxLength={MESSAGE_MAX_LENGTH}
@@ -532,6 +738,21 @@ function MessagesView() {
           )}
         </section>
       </div>
+
+      {infoTarget && (
+        <FriendInfoWindow
+          friend={infoTarget}
+          online={onlineFriendIds.has(infoTarget.id)}
+          onClose={() => setInfoTarget(null)}
+          /* onMessage は渡さない。今まさにその相手との会話を開いている */
+          onRemoveFriend={friendId =>
+            endFriendship('/api/friends/remove', { friendId }, friendId)
+          }
+          onBlock={userId =>
+            endFriendship('/api/friends/block', { userId }, userId)
+          }
+        />
+      )}
     </main>
   );
 }

@@ -32,7 +32,8 @@ ft_transcendence subject の以下の要件に対応するための定義書。
 
 status: 実装済み（マイグレーション適用済み）
 
-`DirectMessage`（[schema.prisma:70-79](backend/prisma/schema.prisma#L70-L79)）は既に定義されており、**カラム構成は変更しない**。
+`DirectMessage`（[schema.prisma:70-79](backend/prisma/schema.prisma#L70-L79)）は既に定義されており、**本書の範囲ではカラム構成を変更しない**。
+（後続の [room-invite-requirements.md](docs/room-invite-requirements.md) で、ルーム招待のために `type` / `roomCode` の2列を追加する。既存の送受信・履歴・未読の仕様はそのまま維持される。）
 
 | カラム | 意味 |
 |---|---|
@@ -300,6 +301,15 @@ status: 実装済み（[messages/page.tsx](frontend/src/app/messages/page.tsx)�
 
 `renderAvatar` はホーム画面のローカル関数だったが、`/messages` でも同じ見た目が要るので [avatar.tsx](frontend/src/lib/avatar.tsx) へ切り出した。
 
+### 会話相手のプロフィール
+
+subject の Advanced chat features「Access to user profiles from chat interface」に対応する（セクション6）。
+
+- 会話ヘッダーの右端に ⓘ ボタンを置き、押すと相手のプロフィールウィンドウ（アバター・自己紹介・在席・フレンド削除・ブロック）を開く
+- ウィンドウはホーム画面のフレンド一覧の「詳細」と**同じ実体**。ホームのインラインJSXを [friend-info.tsx](frontend/src/lib/friend-info.tsx) の `FriendInfoWindow` へ切り出し、両方から使う。ブロックの確認ステップはウィンドウ内部の state に閉じ込めた（呼び出し側が知る必要がないため）
+- `/messages` では「メッセージ」ボタンを出さない（今まさにその会話を開いているため）。`onMessage` を渡さないと消える
+- フレンド削除・ブロックが成功したら相手はフレンドでなくなるので、一覧から取り除いて**会話も閉じる**。開いたままにすると履歴取得が403になる（セクション3）
+
 ### 入力の上限
 
 `content` の入力欄に `maxLength={1000}` を付ける（セクション1の DTO と揃える）。**残り100文字を切ったら残量を表示し、0で赤字に変える。** `maxLength` は上限に達すると無言で入力を受け付けなくなるため、打ち止めの理由が分かるようにする。
@@ -326,17 +336,19 @@ status: 未着手
 | 要求機能 | 現状 |
 |---|---|
 | Ability to block users from messaging you | ✅ ブロック機能で実現済み（セクション3） |
-| Access to user profiles from chat interface | ⏳ フレンド詳細ウィンドウを `/messages` から開けるようにすれば満たせる |
+| Access to user profiles from chat interface | ✅ 会話ヘッダーの ⓘ からプロフィールウィンドウを開ける（セクション5） |
 | Chat history persistence | ✅ 本書の実装で満たす |
-| Invite users to play games directly from chat | ❌ ito ルームへの招待導線が必要 |
+| Invite users to play games directly from chat | ✅ [room-invite-requirements.md](docs/room-invite-requirements.md) の実装で実現済み（`DirectMessage` に `type` / `roomCode` を足して相乗りさせた） |
 | Game/tournament notifications in chat | ❌ 未着手 |
 | Typing indicators and read receipts | ⏳ 既読カーソル（`ConversationRead`）は実装済み。UIとtyping通知が未着手 |
 
-前半3つは本書の実装でほぼ揃うため、**追加1点の獲得は残り3項目の実装次第**になる。
+6項目のうち5項目が実装済みになった。**残るは Game/tournament notifications（❌）と typing indicators（⏳。既読カーソルはあるがUIが無い）の2つ**。
+「Invite users to play games directly from chat」は [room-invite-requirements.md](docs/room-invite-requirements.md) の実装で満たした。本書のセクション1で決めた `DirectMessage` のカラム構成に `type` / `roomCode` の2列が加わっている。
 
 ---
 
 ## 関連ドキュメント
 
 - [friend-requirements.md](docs/friend-requirements.md) — フレンド機能・ブロック・`/presence` の設計
+- [room-invite-requirements.md](docs/room-invite-requirements.md) — ito ルームへの招待。`DirectMessage` に相乗りする
 - [login-requirements.md](docs/login-requirements.md) — 認証とバリデーション方針

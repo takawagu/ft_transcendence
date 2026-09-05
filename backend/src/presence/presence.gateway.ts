@@ -1,6 +1,9 @@
 import {
   WebSocketGateway,
   WebSocketServer,
+  SubscribeMessage,
+  ConnectedSocket,
+  MessageBody,
   OnGatewayInit,
   OnGatewayConnection,
   OnGatewayDisconnect,
@@ -8,11 +11,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { AuthService } from '../auth/auth.service';
 import { PresenceService } from './presence.service';
-
-/** AuthService.verifyToken は any を返すため、必要な形だけをここで表明する */
-interface JwtPayload {
-  userId?: unknown;
-}
+import { PRESENCE_CONNECT_ERRORS, PRESENCE_EVENTS } from './presence.events';
 
 /** 接続後にsocketへ保持する情報 */
 interface SocketData {
@@ -24,7 +23,22 @@ interface SocketData {
  * nginxは `location /socket.io/` でsocket.ioを一括プロキシしており、
  * 名前空間は同一パス上を通るためnginx側の設定追加は不要。
  */
-@WebSocketGateway({ namespace: '/presence', cors: { origin: '*' } })
+@WebSocketGateway({
+  namespace: '/presence',
+  cors: { origin: '*' },
+  /*
+   * 既定(25s/20s)より短くして切断検知を速める。
+   * この接続の有無が「ログイン中か」の判定そのものなので（auth.service.ts の login）、
+   * ブラウザのクラッシュや回線断でFINが届かない場合の解放待ちを最大約18秒に抑える。
+   * これ以上短くすると不安定な回線でフレンドのオンライン表示がちらつきやすくなる。
+   *
+   * 注意: engine.ioのインスタンスは全ゲートウェイで1つなので、この設定は
+   * `/ito` 名前空間にも効く（itoの切断検知＝ゲーム一時停止も同じだけ速くなる）。
+   * 名前空間ごとには分けられない。
+   */
+  pingInterval: 10000,
+  pingTimeout: 8000,
+})
 export class PresenceGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
@@ -38,18 +52,49 @@ export class PresenceGateway
 
   afterInit(server: Server) {
     this.presenceService.setServer(server);
+
+    /*
+     * 接続の可否はここで決める。handleConnectionでdisconnect()すると理由を
+     * クライアントへ渡せない（emitした直後にcloseすると取りこぼす）が、
+     * ミドルウェアがErrorを返せば connect_error の message として確実に届く。
+     * socket.ioのクライアントはミドルウェア起因のエラーでは自動再接続しないので、
+     * 拒否した接続がリトライで殴り続けることもない。
+     */
+    server.use((client, next) => {
+      const userId = this.authService.userIdFromToken(
+        client.handshake.auth?.token,
+      );
+      if (userId === undefined) {
+        next(new Error(PRESENCE_CONNECT_ERRORS.UNAUTHORIZED));
+        return;
+      }
+
+      /*
+       * 同一アカウントの接続は1つまで（先勝ち）。
+       * ログイン時にも同じ判定をしているが（auth.service.ts）、
+       * localStorageにトークンが残っている端末からの再訪はログインを通らないため、
+       * そちらだけでは同時接続を防げない。接続そのものを入口にして塞ぐ。
+       *
+       * リロードやタブを閉じる操作は切断が即座に通知されるので影響しない。
+       * クラッシュ・回線断・スリープのような異常切断の後だけ、
+       * pingTimeoutでフラグが下りるまで（最大約18秒）繋ぎ直せない。
+       */
+      if (this.presenceService.isOnline(userId)) {
+        next(new Error(PRESENCE_CONNECT_ERRORS.DUPLICATE_SESSION));
+        return;
+      }
+
+      // handleDisconnectではhandshakeを再検証できないため、解決したuserIdをソケットに持たせる
+      (client.data as SocketData).userId = userId;
+      next();
+    });
   }
 
   async handleConnection(client: Socket) {
-    const userId = this.resolveUserId(client);
-    if (userId === undefined) {
-      // 認証できない接続は保持しない
-      client.disconnect();
-      return;
-    }
+    // ミドルウェアを通った接続だけがここへ来る
+    const { userId } = client.data as SocketData;
+    if (userId === undefined) return;
 
-    // handleDisconnectではhandshakeを再検証できないため、解決したuserIdをソケットに持たせる
-    (client.data as SocketData).userId = userId;
     await this.presenceService.handleConnect(userId, client.id);
   }
 
@@ -60,15 +105,16 @@ export class PresenceGateway
     await this.presenceService.handleDisconnect(userId, client.id);
   }
 
-  private resolveUserId(client: Socket): number | undefined {
-    const token: unknown = client.handshake.auth?.token;
-    if (typeof token !== 'string') return undefined;
-
-    try {
-      const payload = this.authService.verifyToken(token) as JwtPayload;
-      return typeof payload?.userId === 'number' ? payload.userId : undefined;
-    } catch {
-      return undefined;
-    }
+  @SubscribeMessage(PRESENCE_EVENTS.DM_TYPING)
+  handleTyping(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { toUserId: number; isTyping: boolean },
+  ) {
+    const { userId } = client.data as SocketData;
+    if (!userId || typeof data?.toUserId !== 'number') return;
+    this.presenceService.emitToUser(data.toUserId, PRESENCE_EVENTS.DM_TYPING, {
+      userId,
+      isTyping: !!data.isTyping,
+    });
   }
 }

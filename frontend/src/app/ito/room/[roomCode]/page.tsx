@@ -17,6 +17,26 @@ import { PauseOverlay } from './_phases/PauseOverlay';
 // nginx を経由しないローカル開発時のみ .env.local で明示的にURLを指定する。
 const BACKEND_URL = process.env.NEXT_PUBLIC_WS_URL ?? '';
 
+/**
+ * 同一ブラウザの他タブに「同じアカウントでゲームを開いているか」を尋ねるチャネル。
+ * 応答があれば接続せず、1アカウントが同時に持てるゲームタブを1つに保つ。
+ *
+ * 部屋コードでは絞らない。別々の部屋なら許すと、同じユーザーが2つのゲームを
+ * 並行して終えられてしまい、戦績の集計(recordRoundResults)が同一ユーザー行へ
+ * 同時に走りうるため。
+ *
+ * 接続する前に止めるのが要点。サーバは「後から来た接続が正」として席を付け替える
+ * （切断検知までの間の再接続を通すために必要で、変えられない）ので、
+ * 繋いでしまってからでは先のタブを弾き出した後になる。
+ *
+ * BroadcastChannelは自分の投稿を自分には配信しないので、単純なping/pongで足りる。
+ * リロードでは旧タブが既に消えていて応答が返らないため、復帰の邪魔はしない。
+ */
+const TAB_CHANNEL = 'ito_room_tab';
+
+/** 他タブの応答を待つ時間。同一ブラウザ内の配送なので数ms、余裕を見てこの値 */
+const TAB_PROBE_MS = 200;
+
 export default function RoomPage() {
   const params = useParams();
   const router = useRouter();
@@ -27,8 +47,11 @@ export default function RoomPage() {
 
   const socketRef = useRef<Socket | null>(null);
   const [myId, setMyId] = useState('');
-  const [dissolved, setDissolved] = useState(false);
-  const [abortedReason, setAbortedReason] = useState<string | null>(null);
+  /**
+   * 部屋から出る以外にやることが無くなった理由（解散・中断・入室失敗・席の移動）。
+   * トーストと違い、画面を先に進めさせない。
+   */
+  const [exitMessage, setExitMessage] = useState<string | null>(null);
   const [state, setState] = useState<GameState>({
     roomCode: '',
     roomPhase: 'WAITING',
@@ -40,6 +63,12 @@ export default function RoomPage() {
 
   const emit = (event: string, payload?: unknown) => {
     socketRef.current?.emit(event, payload);
+  };
+
+  /** 部屋から出る以外にやることが無い状態にして、しばらく後にトップへ戻す */
+  const leaveWith = (message: string) => {
+    setExitMessage(message);
+    setTimeout(() => router.push('/'), 3000);
   };
 
   const [scale, setScale] = useState(1);
@@ -57,12 +86,16 @@ export default function RoomPage() {
       
       const scaleX = windowWidth / virtualWidth;
       const scaleY = windowHeight / virtualHeight;
+      
+      // Fit exactly to the viewport for both orientations (no vertical scrolling)
       const newScale = Math.min(scaleX, scaleY);
       
-      // Limit minimum scale to 0.65 to maintain readability
-      const finalScale = Math.max(newScale, 0.65);
+      // Limits to keep layout looking premium and highly readable
+      const minScale = portrait ? 0.65 : 0.85;
+      const maxScale = portrait ? 1.5 : 2.0;
+      const finalScale = Math.max(Math.min(newScale, maxScale), minScale);
       
-      setScale(Math.min(finalScale, 1.5));
+      setScale(finalScale);
       setIsPortrait(portrait);
     };
     
@@ -84,24 +117,40 @@ export default function RoomPage() {
     const playerId = String(userObj.id);
     setMyId(playerId);
 
-    const savedSessionRaw = sessionStorage.getItem('ito_room_session');
-    const savedSession = savedSessionRaw ? JSON.parse(savedSessionRaw) : null;
-
-    const socket = io(`${BACKEND_URL}/ito`);
+    // playerIdはサーバがこのトークンから導出する。以降クライアントは名乗らない。
+    // 接続は他タブの確認が済んでから（このeffectの末尾）。繋いでしまってからでは席を奪った後になる
+    const socket = io(`${BACKEND_URL}/ito`, {
+      auth: { token: storedToken },
+      autoConnect: false,
+    });
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      const totalRounds = parseInt(sessionStorage.getItem('ito_total_rounds') || '3', 10);
-      if (joinedRoomCodeRef.current) {
-        // 同一ページ内でのsocket.io自動再接続: 既に参加済みの部屋へ再接続する
-        socket.emit('ito:rejoin', { roomCode: joinedRoomCodeRef.current, playerId });
-      } else if (!isCreating && savedSession && savedSession.roomCode === routeRoomCode) {
-        // ページリロード後: sessionStorageに記録された同じ部屋へ再接続する
-        socket.emit('ito:rejoin', { roomCode: savedSession.roomCode, playerId });
-      } else if (isCreating) {
-        socket.emit('ito:createRoom', { playerName, playerId, totalRounds });
-      } else {
-        socket.emit('ito:joinRoom', { roomCode: routeRoomCode, playerName, playerId });
+      // まだ部屋が無い(=/new)ときだけ作成。作成後の自動再接続はjoinedRoomCodeRefで拾う
+      if (isCreating && !joinedRoomCodeRef.current) {
+        const totalRounds = parseInt(sessionStorage.getItem('ito_total_rounds') || '3', 10);
+        socket.emit('ito:createRoom', { playerName, totalRounds });
+        return;
+      }
+      /*
+       * 部屋コードが分かっているなら、初回参加・リロード・自動再接続を区別せず常にrejoinを送る。
+       * 「復帰すべきか新規参加か」を判断できるのは席を持っているサーバだけで、
+       * クライアント側の状態(sessionStorage)で当てにいくと必ずどちらかに倒し損ねる:
+       *   - 記録が残りすぎる(退室後の同コード再入室) → 復帰扱いで弾かれる
+       *   - 記録が足りない(別タブ・招待経由)         → 新規参加扱いで「開始済み」に弾かれる
+       * サーバはWAITINGで席が無ければjoinRoomへ倒すので、この1本で両方賄える。
+       */
+      socket.emit('ito:rejoin', {
+        roomCode: joinedRoomCodeRef.current ?? routeRoomCode,
+        playerName,
+      });
+    });
+
+    socket.on('disconnect', reason => {
+      // サーバが明示的に切るのは認証に失敗したときだけ（席を奪われた場合は切らない）。
+      // 拾わないと画面が「接続中...」のまま固まる
+      if (reason === 'io server disconnect') {
+        leaveWith('認証に失敗しました。ログインし直してください');
       }
     });
 
@@ -123,7 +172,6 @@ export default function RoomPage() {
         window.history.replaceState(null, '', `/ito/room/${data.roomCode}`);
       }
       joinedRoomCodeRef.current = data.roomCode;
-      sessionStorage.setItem('ito_room_session', JSON.stringify({ roomCode: data.roomCode, playerId }));
     });
 
     socket.on('ito:resyncState', (data: any) => {
@@ -139,11 +187,13 @@ export default function RoomPage() {
         myCardNumber: data.myCardNumber,
         myTheme: data.theme,
         chatMessages: data.messages ?? [],
+        // ROUND_RESULT/GAME_OVER中の復帰。cardsRevealedは公開の瞬間にしか飛ばないため、
+        // ここで受け取らないと結果画面が空のままになる
+        revealResult: data.lastReveal ?? prev.revealResult,
         currentRound: data.currentRound,
         totalRounds: data.totalRounds,
       }));
       joinedRoomCodeRef.current = data.roomCode;
-      sessionStorage.setItem('ito_room_session', JSON.stringify({ roomCode: data.roomCode, playerId }));
     });
 
     socket.on('ito:phaseChange', (data: any) => {
@@ -207,13 +257,41 @@ export default function RoomPage() {
     });
 
     socket.on('ito:error', (data: any) => {
+      // 一度も入室できていない状態でのエラーは復帰不能。トーストで流すと
+      // 画面が「接続中...」のまま固まり、ユーザーには操作不能にしか見えない
+      if (!joinedRoomCodeRef.current) {
+        leaveWith(data.message ?? 'ルームに参加できませんでした');
+        return;
+      }
       setState(prev => ({ ...prev, error: data.message }));
       setTimeout(() => setState(prev => ({ ...prev, error: undefined })), 3000);
     });
 
     socket.on('ito:roomDissolved', () => {
-      setDissolved(true);
-      setTimeout(() => router.push('/'), 3000);
+      leaveWith('部屋が解散されました');
+    });
+
+    socket.on('ito:sessionTakenOver', () => {
+      // 同じ席に別のタブ/端末が入った。この接続はもう部屋のブロードキャストを受け取らず、
+      // 送った操作も全て無視されるので、自分から切って離脱画面を出す。
+      // 明示的なdisconnectなのでsocket.ioは自動再接続せず、席を奪い返しには行かない。
+      socket.disconnect();
+      // もうこの部屋の席を持っていないので、他タブの問い合わせに在席を返さない
+      joinedRoomCodeRef.current = null;
+      leaveWith('別の場所でこの部屋に接続したため、この画面は切断されました');
+    });
+
+    socket.on('ito:playerReconnected', (data: any) => {
+      // 自分の復帰を自分に知らせても仕方がない。myIdはこの時点ではまだ空なのでplayerIdで比べる
+      if (data.playerId === playerId) return;
+
+      const notice = `${data.playerName} が再接続しました`;
+      setState(prev => ({ ...prev, notice }));
+      // 続けて別の人が戻ってきた場合に、古いタイマーが新しい通知を消さないようにする
+      setTimeout(
+        () => setState(prev => (prev.notice === notice ? { ...prev, notice: undefined } : prev)),
+        3000,
+      );
     });
 
     socket.on('ito:gamePaused', () => {
@@ -226,11 +304,48 @@ export default function RoomPage() {
     });
 
     socket.on('ito:gameAborted', (data: any) => {
-      setAbortedReason(data.reason ?? 'ゲームが中断されました');
-      setTimeout(() => router.push('/'), 3000);
+      leaveWith(data.reason ?? 'ゲームが中断されました');
     });
 
+    const channel =
+      typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(TAB_CHANNEL);
+
+    // 他タブからの問い合わせに答える側。
+    // 部屋コードは見ない。同じアカウントが別々の部屋で同時に遊べてしまうと、
+    // 戦績の集計(recordRoundResults)が同一ユーザー行へ同時に走りうるため。
+    channel?.addEventListener('message', (ev: MessageEvent) => {
+      const msg = ev.data;
+      if (msg?.type === 'probe' && msg.playerId === playerId && joinedRoomCodeRef.current) {
+        channel.postMessage({ type: 'here', playerId });
+      }
+    });
+
+    let probeTimer: ReturnType<typeof setTimeout> | undefined;
+
+    // BroadcastChannel非対応の環境では従来どおり繋ぐ（重複はサーバ側の席の付け替えに委ねる）
+    if (!channel) {
+      socket.connect();
+    } else {
+      let occupied = false;
+      const onReply = (ev: MessageEvent) => {
+        if (ev.data?.type === 'here' && ev.data.playerId === playerId) occupied = true;
+      };
+      channel.addEventListener('message', onReply);
+      channel.postMessage({ type: 'probe', playerId });
+
+      probeTimer = setTimeout(() => {
+        channel.removeEventListener('message', onReply);
+        if (occupied) {
+          leaveWith('別のタブでゲームを開いています。同時に複数のゲームには参加できません');
+          return;
+        }
+        socket.connect();
+      }, TAB_PROBE_MS);
+    }
+
     return () => {
+      clearTimeout(probeTimer);
+      channel?.close();
       socket.disconnect();
     };
   }, []);
@@ -262,41 +377,26 @@ export default function RoomPage() {
   };
 
   return (
-    <div className="h-screen overflow-auto text-white flex flex-col relative items-center justify-center">
-      {state.error && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 text-sm">
-          {state.error}
+    <div className="h-screen overflow-hidden text-white flex flex-col relative items-center justify-center">
+      {/* ポーズ中でも読めるよう、オーバーレイ(z-50)より上に出す */}
+      {(state.error || state.notice) && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col items-center gap-2">
+          {state.error && (
+            <div className="bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg text-sm">
+              {state.error}
+            </div>
+          )}
+          {state.notice && (
+            <div className="bg-zinc-800 border border-emerald-700/70 text-emerald-200 px-6 py-3 rounded-lg shadow-lg text-sm">
+              {state.notice}
+            </div>
+          )}
         </div>
       )}
-      {dissolved && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-zinc-800 rounded-2xl p-10 flex flex-col items-center gap-6 shadow-2xl">
-            <p className="text-xl font-bold text-white">部屋が解散されました</p>
-            <p className="text-zinc-400 text-sm">まもなくトップへ戻ります...</p>
-            <button
-              onClick={() => router.push('/')}
-              className="rounded-lg bg-indigo-600 px-6 py-2 font-semibold text-white hover:bg-indigo-500 transition-colors"
-            >
-              今すぐ戻る
-            </button>
-          </div>
-        </div>
+      {exitMessage && (
+        <ExitDialog message={exitMessage} onBack={() => router.push('/')} />
       )}
-      {abortedReason && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-zinc-800 rounded-2xl p-10 flex flex-col items-center gap-6 shadow-2xl">
-            <p className="text-xl font-bold text-white">{abortedReason}</p>
-            <p className="text-zinc-400 text-sm">まもなくトップへ戻ります...</p>
-            <button
-              onClick={() => router.push('/')}
-              className="rounded-lg bg-indigo-600 px-6 py-2 font-semibold text-white hover:bg-indigo-500 transition-colors"
-            >
-              今すぐ戻る
-            </button>
-          </div>
-        </div>
-      )}
-      {state.paused && !abortedReason && (
+      {state.paused && !exitMessage && (
         <PauseOverlay state={state} myId={myId} emit={emit} />
       )}
 
@@ -312,6 +412,24 @@ export default function RoomPage() {
         }}
       >
         {renderPhase()}
+      </div>
+    </div>
+  );
+}
+
+/** 部屋から出る以外にやることが無い状態（解散・中断・入室失敗）の全画面表示 */
+function ExitDialog({ message, onBack }: { message: string; onBack: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-zinc-800 rounded-2xl p-10 flex flex-col items-center gap-6 shadow-2xl max-w-md">
+        <p className="text-xl font-bold text-white text-center">{message}</p>
+        <p className="text-zinc-400 text-sm">まもなくトップへ戻ります...</p>
+        <button
+          onClick={onBack}
+          className="rounded-lg bg-indigo-600 px-6 py-2 font-semibold text-white hover:bg-indigo-500 transition-colors"
+        >
+          今すぐ戻る
+        </button>
       </div>
     </div>
   );

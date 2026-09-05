@@ -351,6 +351,27 @@ export class FriendsService {
     return friendship !== null;
   }
 
+  /**
+   * 2人の間に、向きを問わずブロックが存在するか。ito のルーム参加可否に使う。
+   * areFriends と違ってフレンドかどうかは見ない。ito はフレンド関係を前提にしない
+   * （ルームコードさえ知っていれば誰でも入れる）ので、遮断の根拠を Block 行そのものに置く。
+   */
+  async areBlockedEitherWay(
+    userIdA: number,
+    userIdB: number,
+  ): Promise<boolean> {
+    const block = await this.prisma.block.findFirst({
+      where: {
+        OR: [
+          { blockerId: userIdA, blockedId: userIdB },
+          { blockerId: userIdB, blockedId: userIdA },
+        ],
+      },
+      select: { id: true },
+    });
+    return block !== null;
+  }
+
   /** 他モジュールから相手の公開情報を引くための入口 */
   async getPublicUserById(userId: number) {
     return this.getPublicUser(userId);

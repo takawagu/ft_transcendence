@@ -3,6 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PhaseProps } from '@/lib/ito/types';
 
+/** チャット1件の上限。バックエンドの CHAT_MESSAGE_MAX_LENGTH と揃えること */
+const CHAT_MESSAGE_MAX_LENGTH = 200;
+
+/** 残り何文字から文字数表示を出すか。常に出すと狭いチャット欄の邪魔になる */
+const COUNTER_VISIBLE_FROM = 30;
+
 const DragHandleIcon = () => (
   <svg
     className="w-4 h-4 text-zinc-500 cursor-grab active:cursor-grabbing hover:text-zinc-300 transition-colors"
@@ -89,14 +95,20 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
     setDragOverIndex(null);
   };
 
+  // maxLength と同じ数え方（UTF-16のコード単位）で残量を出す
+  const trimmedChat = chatInput.trim();
+  const chatRemaining = CHAT_MESSAGE_MAX_LENGTH - chatInput.length;
+  // maxLength を外されても送信させない。サーバ側でも同じ上限で弾く
+  const canSendChat = trimmedChat.length > 0 && trimmedChat.length <= CHAT_MESSAGE_MAX_LENGTH;
+
   const sendChat = () => {
-    if (!chatInput.trim()) return;
-    emit('ito:sendChat', { message: chatInput.trim() });
+    if (!canSendChat) return;
+    emit('ito:sendChat', { message: trimmedChat });
     setChatInput('');
   };
 
   return (
-    <div className="h-full w-full flex flex-col gap-6 p-6 max-w-6xl mx-auto">
+    <div className="h-full w-full flex flex-col gap-6 p-6 max-w-6xl mx-auto overflow-y-auto">
       {/* Main Split Layout */}
       <div className="flex flex-col md:flex-row gap-6 items-stretch w-full flex-1">
         
@@ -114,7 +126,7 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
               </p>
               {isHost ? (
                 <p className="text-indigo-400 text-xs mt-2 font-medium">
-                  あなたがホストです。カードをタップ選択し、下の矢印ボタンで順番を変更できます
+                  あなたがホストです！カードをタップし、矢印かスワップで順番を変更できます
                 </p>
               ) : (
                 <p className="text-zinc-500 text-xs mt-2 font-medium">
@@ -141,29 +153,21 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
                         setSelectedPlayerId(selectedPlayerId === pid ? null : pid);
                       }
                     }}
-                    className={`flex flex-col items-center bg-zinc-800 rounded-xl p-2.5 border select-none w-32 text-center transition-all duration-200 
+                    className={`flex flex-col items-center bg-zinc-800 rounded-xl p-2.5 border select-none w-48 text-center transition-all duration-200 
                       ${isHost ? 'cursor-pointer hover:bg-zinc-700/60' : ''}
                       ${selectedPlayerId === pid ? 'border-indigo-500 bg-indigo-900/30 scale-[1.04] shadow-lg ring-2 ring-indigo-500/20' : 'border-zinc-700/30'}
                       ${draggedIndex === i ? 'opacity-30 border-dashed border-indigo-500 scale-[0.98]' : ''}
                       ${dragOverIndex === i && draggedIndex !== i ? 'border-indigo-500 bg-indigo-900/20 scale-[1.03] shadow-lg shadow-indigo-500/15' : ''}
                     `}
                   >
-                    {/* Player Image Wrapper */}
-                    <div className="relative w-28 h-28 rounded-lg overflow-hidden shadow-inner">
-                      {p?.imageUrl ? (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img
-                          src={p.imageUrl}
-                          alt={p.name}
-                          className="w-full h-full object-cover"
-                          draggable={false}
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-zinc-700 flex flex-col items-center justify-center text-zinc-400 font-bold text-xl select-none">
-                          <span>{p?.name?.[0]}</span>
-                          <span className="text-[8px] text-zinc-500 font-normal mt-1 truncate max-w-[80px]">{p?.name}</span>
-                        </div>
-                      )}
+                    {/* Player Card Content */}
+                    <div className="relative w-44 h-56 rounded-lg overflow-hidden border border-cyan-500/20 bg-gradient-to-br from-[#0c1020] to-[#151c3c] flex flex-col items-center justify-between p-3 shadow-inner">
+                      <div className="text-xs text-cyan-400 font-cyber font-bold tracking-wider uppercase truncate w-full">
+                        {p?.name}
+                      </div>
+                      <div className="flex-1 w-full flex items-center justify-center text-center px-1 overflow-y-auto min-h-0 text-base font-semibold text-white break-words scrollbar-thin">
+                        {p?.prompt || '未入力'}
+                      </div>
                     </div>
                   </div>
                 );
@@ -297,25 +301,41 @@ export function Ordering({ state, myId, emit }: PhaseProps) {
             </div>
 
             {/* Input Bar */}
-            <div className="p-3 bg-zinc-800/40 border-t border-zinc-800/80 flex gap-2">
-              <input
-                className="flex-1 rounded-lg bg-zinc-900 border border-zinc-700/50 px-3 py-1.5 text-white text-xs placeholder-zinc-500 outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 transition-all"
-                placeholder="メッセージを入力..."
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                    sendChat();
-                  }
-                }}
-              />
-              <button
-                onClick={sendChat}
-                disabled={!chatInput.trim()}
-                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-xs font-semibold text-white transition-colors cursor-pointer"
-              >
-                送信
-              </button>
+            <div className="p-3 bg-zinc-800/40 border-t border-zinc-800/80">
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 rounded-lg bg-zinc-900 border border-zinc-700/50 px-3 py-1.5 text-white text-xs placeholder-zinc-500 outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/30 transition-all"
+                  placeholder="メッセージを入力..."
+                  value={chatInput}
+                  maxLength={CHAT_MESSAGE_MAX_LENGTH}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                      sendChat();
+                    }
+                  }}
+                />
+                <button
+                  onClick={sendChat}
+                  disabled={!canSendChat}
+                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-xs font-semibold text-white transition-colors cursor-pointer"
+                >
+                  送信
+                </button>
+              </div>
+              {/* maxLength は上限に達すると無言で入力を受け付けなくなるので、
+                  近づいたら残量を出して打ち止めの理由が分かるようにする */}
+              {chatRemaining <= COUNTER_VISIBLE_FROM && (
+                <p
+                  className={`mt-1.5 text-right text-[10px] tabular-nums ${
+                    chatRemaining === 0 ? 'text-red-400 font-bold' : 'text-zinc-500'
+                  }`}
+                >
+                  {chatRemaining === 0
+                    ? `上限の ${CHAT_MESSAGE_MAX_LENGTH} 文字に達しました`
+                    : `残り ${chatRemaining} 文字`}
+                </p>
+              )}
             </div>
           </div>
         </div>

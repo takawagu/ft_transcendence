@@ -3,6 +3,23 @@
 import { useState, useEffect } from 'react';
 import type { PhaseProps } from '@/lib/ito/types';
 
+function splitThemeByLength(str: string, chunkSize = 15): string[] {
+  if (!str) return [];
+  const lines: string[] = [];
+  const rawLines = str.split('\n');
+  for (const rawLine of rawLines) {
+    if (rawLine === '') {
+      lines.push('');
+      continue;
+    }
+    const chars = Array.from(rawLine);
+    for (let i = 0; i < chars.length; i += chunkSize) {
+      lines.push(chars.slice(i, i + chunkSize).join(''));
+    }
+  }
+  return lines;
+}
+
 export function InputGenerating({ state, myId, emit }: PhaseProps) {
   const [prompt, setPrompt] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -34,8 +51,9 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
     state.imageGeneratedCount ?? active.filter(p => p.playerPhase === 'DONE').length;
 
   const handleSubmit = () => {
-    if (!prompt.trim() || submitted) return;
-    emit('ito:submitPrompt', { prompt: prompt.trim() });
+    const trimmed = prompt.trim();
+    if (!trimmed || trimmed.length > 100 || submitted) return;
+    emit('ito:submitPrompt', { prompt: trimmed });
     setSubmitted(true);
   };
 
@@ -52,7 +70,7 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
   });
 
   return (
-    <div className="h-full w-full flex flex-col md:flex-row items-center justify-center gap-12 p-8 max-w-4xl mx-auto">
+    <div className="h-full w-full flex flex-col md:flex-row items-center justify-center gap-12 p-8 max-w-4xl mx-auto overflow-y-auto">
       {/* Styles for card animations */}
       <style>{`
         .card-container {
@@ -181,7 +199,11 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
         {/* Theme Panel */}
         <div className="cyber-panel-flat rounded-xl p-4 flex flex-col items-center text-center">
           <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider mb-1 font-cyber">お題</p>
-          <p className="text-white font-bold text-xl font-pixel">{state.myTheme ?? ''}</p>
+          <div className="text-white font-bold text-xl font-pixel break-all">
+            {splitThemeByLength(state.myTheme ?? '', 15).map((line, idx) => (
+              <div key={idx}>{line}</div>
+            ))}
+          </div>
         </div>
 
         {/* Input area */}
@@ -195,18 +217,23 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
                 value={prompt}
                 onChange={e => setPrompt(e.target.value)}
               />
+              <div className="flex justify-between items-center text-xs font-pixel">
+                <span className={prompt.length > 100 ? 'text-red-400 font-bold' : 'text-zinc-500'}>
+                  {prompt.length} / 100 文字
+                </span>
+                {prompt.length > 100 ? (
+                  <span className="text-red-400 font-bold">100文字を超えています</span>
+                ) : prompt.length === 100 ? (
+                  <span className="text-yellow-500">上限文字数に達しました</span>
+                ) : null}
+              </div>
               <button
                 onClick={handleSubmit}
-                disabled={!prompt.trim()}
+                disabled={!prompt.trim() || prompt.length > 100}
                 className="w-full rounded-lg px-4 py-3 font-bold text-sm transition-all cyber-btn-cyan cursor-pointer disabled:opacity-30"
               >
                 送信
               </button>
-            </div>
-          ) : myPhase === 'GENERATING' ? (
-            <div className="cyber-panel-flat rounded-xl p-6 text-center text-zinc-400 space-y-3">
-              <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
-              <p className="text-sm">画像を生成中...</p>
             </div>
           ) : (
             <div className="cyber-panel-flat rounded-xl p-6 text-center text-green-400 space-y-2">
@@ -230,7 +257,6 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
                 <span className={
                   p.status === 'EXCLUDED' ? 'text-zinc-600' :
                   p.playerPhase === 'DONE' ? 'text-green-400' :
-                  p.playerPhase === 'GENERATING' ? 'text-yellow-400' :
                   'text-zinc-500'
                 }>●</span>
                 <span className="text-zinc-300 font-pixel">{p.name}</span>
