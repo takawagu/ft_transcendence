@@ -1,6 +1,16 @@
-import { Controller, Get, Put, Body, UseGuards, Request, ConflictException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Put,
+  Body,
+  UseGuards,
+  Request,
+  ConflictException,
+} from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
+import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '../generated/prisma';
 import { UpdateMeDto } from './dto/update-me.dto';
 import * as bcrypt from 'bcryptjs';
 
@@ -10,7 +20,7 @@ export class UsersController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get('me')
-  async getMe(@Request() req: any) {
+  async getMe(@Request() req: AuthenticatedRequest) {
     return this.prisma.user.findUnique({
       where: { id: req.user.id },
       select: {
@@ -27,7 +37,10 @@ export class UsersController {
   }
 
   @Put('me')
-  async updateMe(@Request() req: any, @Body() body: UpdateMeDto) {
+  async updateMe(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: UpdateMeDto,
+  ) {
     const userId = req.user.id;
     const { username, bio, profileImage, password } = body;
 
@@ -42,7 +55,7 @@ export class UsersController {
       }
     }
 
-    const updateData: any = {};
+    const updateData: Prisma.UserUpdateInput = {};
     if (username !== undefined) updateData.username = username;
     if (bio !== undefined) updateData.bio = bio;
     if (profileImage !== undefined) updateData.profileImage = profileImage;
@@ -62,9 +75,12 @@ export class UsersController {
           profileImage: true,
         },
       });
-    } catch (e: any) {
+    } catch (e) {
       // 上の重複チェックを通っても、同時更新で @unique に衝突しうる
-      if (e?.code === 'P2002') {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
         throw new ConflictException('Username is already taken');
       }
       throw e;

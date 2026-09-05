@@ -17,7 +17,9 @@ function fakeSocket(token?: unknown): Socket {
 
 describe('ItoGateway authentication', () => {
   let gateway: ItoGateway;
-  let roomService: jest.Mocked<Pick<RoomService, 'createRoom' | 'joinRoom' | 'rejoin' | 'excludePlayer'>>;
+  let roomService: jest.Mocked<
+    Pick<RoomService, 'createRoom' | 'joinRoom' | 'rejoin' | 'excludePlayer'>
+  >;
 
   beforeEach(() => {
     roomService = {

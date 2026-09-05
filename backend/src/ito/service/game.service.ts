@@ -93,8 +93,15 @@ export class GameService {
     if (player.playerPhase !== 'INPUT') return;
 
     // Validate prompt length (max 100 characters)
-    if (!payload.prompt || typeof payload.prompt !== 'string' || payload.prompt.trim().length === 0 || payload.prompt.trim().length > 100) {
-      client.emit('ito:error', { message: 'お題の回答は1文字以上100文字以内で入力してください。' });
+    if (
+      !payload.prompt ||
+      typeof payload.prompt !== 'string' ||
+      payload.prompt.trim().length === 0 ||
+      payload.prompt.trim().length > 100
+    ) {
+      client.emit('ito:error', {
+        message: 'お題の回答は1文字以上100文字以内で入力してください。',
+      });
       return;
     }
 
@@ -263,7 +270,10 @@ export class GameService {
     }
 
     if (room.roomPhase === 'SPEAKING') {
-      if (room.turnOrder.length > 0 && room.boardOrder.length >= room.turnOrder.length) {
+      if (
+        room.turnOrder.length > 0 &&
+        room.boardOrder.length >= room.turnOrder.length
+      ) {
         room.roomPhase = 'ORDERING';
         this.broadcast.broadcastPhaseChange(room);
         this.broadcast.broadcastRoomState(room);
@@ -292,7 +302,6 @@ export class GameService {
       }),
     );
   }
-
 
   private transitionToSpeaking(room: ItoRoom) {
     room.roomPhase = 'SPEAKING';

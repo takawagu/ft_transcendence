@@ -42,7 +42,12 @@ function makeRoom(overrides: Partial<ItoRoom>): ItoRoom {
 }
 
 function fakeSocket(id: string): Socket {
-  return { id, join: jest.fn(), leave: jest.fn(), emit: jest.fn() } as unknown as Socket;
+  return {
+    id,
+    join: jest.fn(),
+    leave: jest.fn(),
+    emit: jest.fn(),
+  } as unknown as Socket;
 }
 
 describe('RoomService disconnect handling', () => {
@@ -87,7 +92,9 @@ describe('RoomService disconnect handling', () => {
       turnOrder: [...ids],
       roundHostId: ids[0],
       boardOrder,
-      players: ids.map((id, i) => makePlayer({ playerId: id, isRoomOwner: i === 0 })),
+      players: ids.map((id, i) =>
+        makePlayer({ playerId: id, isRoomOwner: i === 0 }),
+      ),
     });
     store.addRoom(room);
     for (const p of room.players) {
@@ -122,7 +129,10 @@ describe('RoomService disconnect handling', () => {
   it('refuses to exclude a player who already reconnected', async () => {
     const room = seedRoom();
     service.handleDisconnect('sock-b');
-    await service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
+    await service.rejoin(fakeSocket('sock-b2'), {
+      roomCode: 'ABC123',
+      playerId: 'b',
+    });
 
     const host = fakeSocket('sock-a');
     service.excludePlayer(host, { playerId: 'b' });
@@ -148,7 +158,10 @@ describe('RoomService disconnect handling', () => {
   it('resumes once the disconnected player is back', async () => {
     const room = seedRoom();
     service.handleDisconnect('sock-b');
-    await service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
+    await service.rejoin(fakeSocket('sock-b2'), {
+      roomCode: 'ABC123',
+      playerId: 'b',
+    });
 
     // 本人が戻っただけでは自動再開しない（ホストの明示操作が要る）
     expect(room.paused).toBe(true);
@@ -166,8 +179,13 @@ describe('RoomService disconnect handling', () => {
     const ghost = fakeSocket('sock-b2');
     await service.rejoin(ghost, { roomCode: 'ABC123', playerId: 'b' });
 
-    expect(ghost.emit).toHaveBeenCalledWith('ito:gameAborted', expect.anything());
-    expect(room.players.find((p) => p.playerId === 'b')?.status).not.toBe('ACTIVE');
+    expect(ghost.emit).toHaveBeenCalledWith(
+      'ito:gameAborted',
+      expect.anything(),
+    );
+    expect(room.players.find((p) => p.playerId === 'b')?.status).not.toBe(
+      'ACTIVE',
+    );
   });
 
   it('marks a player as awaited without resuming the game', () => {
@@ -176,7 +194,9 @@ describe('RoomService disconnect handling', () => {
 
     service.awaitReturn(fakeSocket('sock-a'), { playerId: 'b' });
 
-    expect(room.players.find((p) => p.playerId === 'b')?.awaitingReturn).toBe(true);
+    expect(room.players.find((p) => p.playerId === 'b')?.awaitingReturn).toBe(
+      true,
+    );
     expect(room.paused).toBe(true);
   });
 
@@ -235,7 +255,9 @@ describe('RoomService disconnect handling', () => {
       const room = makeRoom({
         roomPhase: 'WAITING',
         currentRound: 0,
-        players: ids.map((id, i) => makePlayer({ playerId: id, isRoomOwner: i === 0 })),
+        players: ids.map((id, i) =>
+          makePlayer({ playerId: id, isRoomOwner: i === 0 }),
+        ),
       });
       store.addRoom(room);
       for (const p of room.players) {
@@ -250,10 +272,17 @@ describe('RoomService disconnect handling', () => {
       expect(room.players.map((p) => p.playerId)).toEqual(['a']);
 
       const returning = fakeSocket('sock-b2');
-      await service.rejoin(returning, { roomCode: 'ABC123', playerId: 'b', playerName: 'pb' });
+      await service.rejoin(returning, {
+        roomCode: 'ABC123',
+        playerId: 'b',
+        playerName: 'pb',
+      });
 
       expect(room.players.map((p) => p.playerId)).toEqual(['a', 'b']);
-      expect(returning.emit).not.toHaveBeenCalledWith('ito:error', expect.anything());
+      expect(returning.emit).not.toHaveBeenCalledWith(
+        'ito:error',
+        expect.anything(),
+      );
       expect(store.resolve('sock-b2')?.player.playerId).toBe('b');
     });
 
@@ -276,7 +305,11 @@ describe('RoomService disconnect handling', () => {
       seedRoom(['a', 'c']);
       const ghost = fakeSocket('sock-b2');
 
-      await service.rejoin(ghost, { roomCode: 'ABC123', playerId: 'b', playerName: 'pb' });
+      await service.rejoin(ghost, {
+        roomCode: 'ABC123',
+        playerId: 'b',
+        playerName: 'pb',
+      });
 
       expect(ghost.emit).toHaveBeenCalledWith('ito:error', expect.anything());
       expect(store.resolve('sock-b2')).toBeUndefined();
@@ -293,18 +326,26 @@ describe('RoomService disconnect handling', () => {
       });
 
       expect(room.players.map((p) => p.playerId)).toEqual(['a', 'z']);
-      expect(room.players.find((p) => p.playerId === 'z')?.isRoomOwner).toBe(false);
+      expect(room.players.find((p) => p.playerId === 'z')?.isRoomOwner).toBe(
+        false,
+      );
     });
 
     it('still refuses a duplicate seat for a player already in the lobby', async () => {
       const room = seedLobby();
       const dupe = fakeSocket('sock-dupe');
 
-      await service.rejoin(dupe, { roomCode: 'ABC123', playerId: 'b', playerName: 'pb' });
+      await service.rejoin(dupe, {
+        roomCode: 'ABC123',
+        playerId: 'b',
+        playerName: 'pb',
+      });
 
       // 既に席がある＝rejoin本来の経路。joinRoomの重複チェックには落ちない
       expect(room.players.filter((p) => p.playerId === 'b')).toHaveLength(1);
-      expect(room.players.find((p) => p.playerId === 'b')?.socketId).toBe('sock-dupe');
+      expect(room.players.find((p) => p.playerId === 'b')?.socketId).toBe(
+        'sock-dupe',
+      );
     });
 
     it('falls back to the plain failure when the client sends no name', async () => {
@@ -314,7 +355,10 @@ describe('RoomService disconnect handling', () => {
       const returning = fakeSocket('sock-b2');
       await service.rejoin(returning, { roomCode: 'ABC123', playerId: 'b' });
 
-      expect(returning.emit).toHaveBeenCalledWith('ito:error', expect.anything());
+      expect(returning.emit).toHaveBeenCalledWith(
+        'ito:error',
+        expect.anything(),
+      );
       expect(room.players.map((p) => p.playerId)).toEqual(['a']);
     });
   });
@@ -325,7 +369,10 @@ describe('RoomService disconnect handling', () => {
       // ブロードキャストだけは届き続ける「何も効かないタブ」になっていた。
       const room = seedRoom(['a', 'b']);
 
-      await service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
+      await service.rejoin(fakeSocket('sock-b2'), {
+        roomCode: 'ABC123',
+        playerId: 'b',
+      });
 
       expect(broadcast.dropSocket).toHaveBeenCalledWith('sock-b', room.id);
       expect(store.resolve('sock-b')).toBeUndefined();
@@ -336,7 +383,10 @@ describe('RoomService disconnect handling', () => {
       seedRoom(['a', 'b']);
       service.handleDisconnect('sock-b');
 
-      await service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
+      await service.rejoin(fakeSocket('sock-b2'), {
+        roomCode: 'ABC123',
+        playerId: 'b',
+      });
 
       expect(broadcast.dropSocket).not.toHaveBeenCalled();
     });
@@ -345,7 +395,10 @@ describe('RoomService disconnect handling', () => {
       // 別タブが席を引き継いだだけ。他プレイヤーは離脱を見ていないので通知は嘘になる
       const room = seedRoom(['a', 'b']);
 
-      await service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
+      await service.rejoin(fakeSocket('sock-b2'), {
+        roomCode: 'ABC123',
+        playerId: 'b',
+      });
 
       expect(broadcast.emitToRoom).not.toHaveBeenCalledWith(
         room.id,
@@ -358,19 +411,29 @@ describe('RoomService disconnect handling', () => {
       const room = seedRoom(['a', 'b']);
       service.handleDisconnect('sock-b');
 
-      await service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
-
-      expect(broadcast.emitToRoom).toHaveBeenCalledWith(room.id, 'ito:playerReconnected', {
+      await service.rejoin(fakeSocket('sock-b2'), {
+        roomCode: 'ABC123',
         playerId: 'b',
-        playerName: 'pb',
       });
+
+      expect(broadcast.emitToRoom).toHaveBeenCalledWith(
+        room.id,
+        'ito:playerReconnected',
+        {
+          playerId: 'b',
+          playerName: 'pb',
+        },
+      );
     });
 
     it('does not cut loose the very socket that is rejoining', async () => {
       // 同じソケットからrejoinが二度来ても、自分を部屋から外してはいけない
       seedRoom(['a', 'b']);
 
-      await service.rejoin(fakeSocket('sock-b'), { roomCode: 'ABC123', playerId: 'b' });
+      await service.rejoin(fakeSocket('sock-b'), {
+        roomCode: 'ABC123',
+        playerId: 'b',
+      });
 
       expect(broadcast.dropSocket).not.toHaveBeenCalled();
       expect(store.resolve('sock-b')?.player.playerId).toBe('b');
@@ -410,11 +473,16 @@ describe('RoomService disconnect handling', () => {
       service.handleDisconnect('sock-b');
       service.handleDisconnect('sock-a');
 
-      await service.rejoin(fakeSocket('sock-a2'), { roomCode: 'ABC123', playerId: 'a' });
+      await service.rejoin(fakeSocket('sock-a2'), {
+        roomCode: 'ABC123',
+        playerId: 'a',
+      });
       waitOutGrace();
 
       expect(store.getRoomByCode('ABC123')).toBe(room);
-      expect(room.players.find((p) => p.playerId === 'a')?.status).toBe('ACTIVE');
+      expect(room.players.find((p) => p.playerId === 'a')?.status).toBe(
+        'ACTIVE',
+      );
       // 相手はまだ戻っていないので、ホストが対応するまでポーズは続く
       expect(room.paused).toBe(true);
       expect(awolPlayers(room).map((p) => p.playerId)).toEqual(['b']);
@@ -426,22 +494,28 @@ describe('RoomService disconnect handling', () => {
       service.handleDisconnect('sock-b');
       service.handleDisconnect('sock-a');
 
-      await service.rejoin(fakeSocket('sock-b2'), { roomCode: 'ABC123', playerId: 'b' });
+      await service.rejoin(fakeSocket('sock-b2'), {
+        roomCode: 'ABC123',
+        playerId: 'b',
+      });
 
-      expect(room.players.filter((p) => p.isRoomOwner).map((p) => p.playerId)).toEqual([
-        'b',
-      ]);
+      expect(
+        room.players.filter((p) => p.isRoomOwner).map((p) => p.playerId),
+      ).toEqual(['b']);
     });
 
     it('does not take the host role from a connected host', async () => {
       const room = seedRoom(['a', 'b', 'c']);
       service.handleDisconnect('sock-c');
 
-      await service.rejoin(fakeSocket('sock-c2'), { roomCode: 'ABC123', playerId: 'c' });
+      await service.rejoin(fakeSocket('sock-c2'), {
+        roomCode: 'ABC123',
+        playerId: 'c',
+      });
 
-      expect(room.players.filter((p) => p.isRoomOwner).map((p) => p.playerId)).toEqual([
-        'a',
-      ]);
+      expect(
+        room.players.filter((p) => p.isRoomOwner).map((p) => p.playerId),
+      ).toEqual(['a']);
     });
 
     it('keeps an empty lobby alive so a solo host can reload back into it', async () => {
@@ -494,7 +568,9 @@ describe('RoomService disconnect handling', () => {
       const room = makeRoom({
         roomPhase: 'WAITING',
         currentRound: 0,
-        players: ids.map((id, i) => makePlayer({ playerId: id, isRoomOwner: i === 0 })),
+        players: ids.map((id, i) =>
+          makePlayer({ playerId: id, isRoomOwner: i === 0 }),
+        ),
       });
       store.addRoom(room);
       for (const p of room.players) {
@@ -564,7 +640,9 @@ describe('RoomService disconnect handling', () => {
       // DBが引けない状態で通すと遮断が意味をなさないので、拒否に倒す
       const room = seedLobby();
       friends.areBlockedEitherWay.mockRejectedValue(new Error('db down'));
-      const errorLog = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const errorLog = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
 
       const joiner = fakeSocket('sock-9');
       await service.joinRoom(joiner, {

@@ -1,6 +1,13 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
+import type { AuthUser } from './authenticated-request';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -10,7 +17,10 @@ export class AuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest();
+    // この時点ではまだ user を載せていないので、省略可能なプロパティとして扱う
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { user?: AuthUser }>();
     const authHeader = request.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -37,7 +47,7 @@ export class AuthGuard implements CanActivate {
 
       request.user = user;
       return true;
-    } catch (e) {
+    } catch {
       throw new UnauthorizedException('Invalid or expired token');
     }
   }

@@ -23,7 +23,12 @@ export class RoomService {
     private readonly friends: FriendsService,
   ) {}
 
-  createRoom(client: Socket, playerName: string, playerId: string, totalRounds?: number) {
+  createRoom(
+    client: Socket,
+    playerName: string,
+    playerId: string,
+    totalRounds?: number,
+  ) {
     const roomCode = this.store.generateRoomCode();
     const roomId = `ito_${Date.now()}`;
 
@@ -56,7 +61,7 @@ export class RoomService {
 
     this.store.addRoom(room);
     this.store.linkSocket(client.id, roomId, playerId);
-    client.join(roomId);
+    void client.join(roomId);
 
     this.broadcast.broadcastRoomState(room);
     console.log(`[ITO] room created: ${roomCode} by ${playerName}`);
@@ -78,7 +83,10 @@ export class RoomService {
     } catch (err) {
       // ブロックの有無を確かめられないまま通すと遮断が意味をなさないので、失敗は拒否に倒す。
       // ここで握り潰さないとクライアントは応答を受け取れず「接続中...」のまま固まる。
-      console.error(`[ITO] block check failed for room ${payload.roomCode}:`, err);
+      console.error(
+        `[ITO] block check failed for room ${payload.roomCode}:`,
+        err,
+      );
       client.emit('ito:error', {
         message: 'ルームに参加できませんでした。時間をおいてお試しください',
       });
@@ -123,7 +131,7 @@ export class RoomService {
       hasSubmittedPrompt: false,
     });
     this.store.linkSocket(client.id, room.id, payload.playerId);
-    client.join(room.id);
+    void client.join(room.id);
 
     this.broadcast.broadcastRoomState(room);
     console.log(`[ITO] ${payload.playerName} joined room ${payload.roomCode}`);
@@ -162,7 +170,7 @@ export class RoomService {
 
     room.players = room.players.filter((p) => p.playerId !== player.playerId);
     this.store.unlinkSocket(client.id);
-    client.leave(room.id);
+    void client.leave(room.id);
 
     if (room.players.length === 0) {
       this.store.unlinkRoomSockets(room);
@@ -245,7 +253,9 @@ export class RoomService {
     }
 
     this.broadcast.broadcastRoomState(room);
-    console.log(`[ITO] ${player.name} disconnected, room ${room.roomCode} paused`);
+    console.log(
+      `[ITO] ${player.name} disconnected, room ${room.roomCode} paused`,
+    );
   }
 
   async rejoin(client: Socket, payload: RejoinPayload) {
@@ -302,7 +312,7 @@ export class RoomService {
     player.status = 'ACTIVE';
     player.awaitingReturn = false;
     this.store.linkSocket(client.id, room.id, player.playerId);
-    client.join(room.id);
+    void client.join(room.id);
 
     // 接続中が0人になった部屋が復活したとき、ホストが切断中のままだと
     // ポーズを解ける人が誰も居ない部屋になる。最初に戻った人がホストを引き継ぐ。
@@ -366,7 +376,9 @@ export class RoomService {
 
     if (room.roundHostId === targetId) {
       const activeIds = new Set(
-        room.players.filter((p) => p.status !== 'EXCLUDED').map((p) => p.playerId),
+        room.players
+          .filter((p) => p.status !== 'EXCLUDED')
+          .map((p) => p.playerId),
       );
       room.roundHostId = room.turnOrder.find((id) => activeIds.has(id)) ?? '';
     }

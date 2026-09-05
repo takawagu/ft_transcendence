@@ -11,7 +11,10 @@ export const ROOM_DISPOSE_GRACE_MS = 2 * 60 * 1000;
 @Injectable()
 export class RoomStore {
   private rooms = new Map<string, ItoRoom>();
-  private socketToPlayer = new Map<string, { roomId: string; playerId: string }>();
+  private socketToPlayer = new Map<
+    string,
+    { roomId: string; playerId: string }
+  >();
   private roomCodeToId = new Map<string, string>();
   private disposeTimers = new Map<string, NodeJS.Timeout>();
 
