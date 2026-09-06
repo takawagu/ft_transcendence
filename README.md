@@ -46,9 +46,14 @@ On top of the game itself, the platform implements the account, social and real-
 
 ### Configuration
 
-1. Copy the environment template and adjust it if needed:
+1. Copy the environment template, then fill in `POSTGRES_PASSWORD` and `JWT_SECRET` — both are required (no default) and the app won't start until they're set:
    ```bash
    cp .env.example .env
+   ```
+   ```bash
+   # in .env
+   POSTGRES_PASSWORD="$(openssl rand -base64 32)"
+   JWT_SECRET="$(openssl rand -base64 48)"
    ```
 
 2. Generate a self-signed TLS certificate for Nginx:
@@ -61,9 +66,9 @@ On top of the game itself, the platform implements the account, social and real-
 ```
 
 3. Relevant variables (see `.env.example`):
-   - `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` — database credentials
-   - `JWT_SECRET` / `JWT_EXPIRES_IN` — auth token signing
-   - `HTTP_PORT` / `HTTPS_PORT` — public ports exposed by Nginx (default `8080` / `8443`)
+   - `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` — database credentials; `POSTGRES_PASSWORD` has no default and must be set (see step 1)
+   - `JWT_SECRET` / `JWT_EXPIRES_IN` — auth token signing; `JWT_SECRET` has no default and must be set (see step 1)
+   - `HTTP_PORT` / `HTTPS_PORT` — public ports exposed by Nginx (default `80` / `443`)
    - `FORTYTWO_CLIENT_ID` / `FORTYTWO_CLIENT_SECRET` / `FORTYTWO_CALLBACK_URL` — reserved for a future 42 OAuth integration; **not currently used** (see [Known Limitations](#known-limitations))
 
 ### Running the project
@@ -74,8 +79,10 @@ make        # equivalent to `make up`: builds and starts every service, waits un
 
 Once it's up, the Makefile prints the URL(s) to open:
 
-- From this machine: `https://localhost:8443/`
-- From another device on the same network: `https://<your-LAN-IP>:8443/`
+- From this machine: `https://localhost/`
+- From another device on the same network: `https://<your-LAN-IP>/`
+
+(These assume the default `HTTPS_PORT=443`; if you changed it in `.env`, append `:<HTTPS_PORT>` to the URL.)
 
 Because the certificate is self-signed, your browser will warn you on first visit — accept it (e.g. "Advanced → Continue") to proceed.
 
@@ -243,7 +250,7 @@ erDiagram
 
 ## Modules
 
-> Counted directly against the `ft_transcendence` subject's official module list (`en.subject.pdf` / `ft_transcendence.pdf`), based on what is actually implemented in the code. 14 points are required; this totals **16 points**, i.e. one extra major module's worth of margin if something doesn't validate during evaluation.
+> Counted directly against the `ft_transcendence` subject's official module list (`en.subject.pdf` / `ft_transcendence.pdf`), based on what is actually implemented in the code. 14 points are required; this totals **19 points**, i.e. 5 points of margin if something doesn't validate during evaluation.
 
 | # | Category | Module | Type | Pts | Notes |
 |---|---|---|---|---|---|
@@ -256,13 +263,14 @@ erDiagram
 | 7 | Gaming and UX | A complete web-based game where users play against each other | Major | 2 | **ito**, a real-time card game with clear rules and win/loss conditions per round — card games are explicitly listed as a valid game type in the subject. |
 | 8 | Gaming and UX | Remote players (separate computers, real-time, reconnection logic) | Major | 2 | LAN access via the `Makefile`'s IP auto-detection, plus a full disconnect/pause/rejoin/resync flow — see `docs/reconnect-design.md`. |
 | 9 | Gaming and UX | Multiplayer game (more than two players) | Major | 2 | ito rooms support 3–6 simultaneous players (2 is the floor, not the cap), with synchronized turn order across all clients. |
+| 10 | Gaming and UX | Advanced chat features | Minor | 1 | Builds on the basic chat from module 3: per-conversation read receipts (`ConversationRead` cursor, persisted in Postgres) with unread badge counts synced live across tabs/devices over the presence WebSocket channel (`PRESENCE_EVENTS.DM_READ`), plus input validation (trimming blank-only messages, remaining-character feedback). See `backend/src/messages/messages.service.ts`. |
+| 11 | Devops | Backend as microservices | Major | 2 | The backend is decomposed into independently built/deployed containers — `postgres`, `redis`, `backend` (NestJS API + Socket.IO gateway), `frontend` (Next.js), and `nginx` (TLS termination / reverse proxy) — each with its own Dockerfile, communicating only over the internal `app-network`, orchestrated by `docker-compose.yml`. |
 
-**Total: 16 points** (14 required + 2 bonus, pending full functional validation of every claimed module during evaluation).
+**Total: 19 points** (14 required + 5 bonus, pending full functional validation of every claimed module during evaluation).
 
 ### Considered but not claimed
 
 - **Public API (Web, Major)** — the REST API has enough endpoints, but no API-key auth, rate limiting, or documentation exists, all three of which the module explicitly requires.
-- **Advanced chat features (Gaming and UX, Minor)** — blocking and chat-history persistence exist, but typing indicators and read receipts are explicitly out of scope (`docs/dm-requirements.md` §6), so the module isn't claimed as a whole.
 - **42 OAuth (User Management, Minor) and 2FA (User Management, Minor)** — deliberately descoped; see `docs/login-requirements.md` §1 and §5. The `.env` OAuth variables are reserved for a future implementation.
 - **AI Opponent / LLM system interface (Artificial Intelligence)** — the ito game's per-player "image generation" step is currently a stub (a placeholder image after a simulated delay, see `stubGenerateImage` in `backend/src/ito/service/game.service.ts`), not a real AI integration, so no AI module is claimed.
 
