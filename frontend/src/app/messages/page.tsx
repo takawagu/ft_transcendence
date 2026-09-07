@@ -406,7 +406,9 @@ function MessagesView() {
 
   const handleSend = async () => {
     const content = draft.trim();
-    if (!content || selectedId === null) return;
+    // 上限超過はここでも見る。ボタンは disabled にしてあるが、
+    // Enter キー送信（handleKeyDown）はボタンを経由しないため
+    if (!content || content.length > MESSAGE_MAX_LENGTH || selectedId === null) return;
     if (myTypingTimeoutRef.current) clearTimeout(myTypingTimeoutRef.current);
     sendTyping(selectedId, false);
     setSendError('');
@@ -468,8 +470,14 @@ function MessagesView() {
   }
 
   const selectedFriend = selectedId !== null ? friendMap.get(selectedId) : undefined;
-  // maxLength と同じ数え方（UTF-16のコード単位）で残量を出す
-  const remaining = MESSAGE_MAX_LENGTH - draft.length;
+  /*
+   * 上限判定は「実際に送られる文字列」で行う。SendMessageDto は検証の前に trim するので、
+   * 末尾の改行や空白を数えるとサーバーは通るのにフロントで止まる、という食い違いが出る。
+   * 数え方は UTF-16 のコード単位（JSの String#length、class-validator の @MaxLength と同じ）。
+   */
+  const contentLength = draft.trim().length;
+  const remaining = MESSAGE_MAX_LENGTH - contentLength;
+  const overLimit = remaining < 0;
 
   return (
     <main className="h-screen flex flex-col bg-zinc-950 text-white">
@@ -734,29 +742,34 @@ function MessagesView() {
                     onChange={handleDraftChange}
                     onKeyDown={handleKeyDown}
                     rows={1}
-                    maxLength={MESSAGE_MAX_LENGTH}
                     placeholder="メッセージを入力（Enterで送信 / Shift+Enterで改行）"
-                    className="flex-1 resize-none rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-2.5 text-xs text-white placeholder-zinc-600 outline-none focus:border-indigo-500 transition-all max-h-32"
+                    className={`flex-1 resize-none rounded-xl bg-zinc-950 border px-3 py-2.5 text-xs text-white placeholder-zinc-600 outline-none transition-all max-h-32 ${
+                      overLimit
+                        ? 'border-red-500 focus:border-red-500'
+                        : 'border-zinc-700 focus:border-indigo-500'
+                    }`}
                   />
                   <button
                     onClick={handleSend}
-                    disabled={!draft.trim()}
+                    disabled={!draft.trim() || overLimit}
                     className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 text-xs font-bold text-white transition-all shadow-md cursor-pointer disabled:cursor-not-allowed"
                   >
                     送信
                   </button>
                 </div>
-                {/* maxLength は上限に達すると無言で入力を受け付けなくなるので、
-                    近づいたら残量を出して打ち止めの理由が分かるようにする */}
+                {/* 入力自体は止めず（maxLength を使うと無言で受け付けなくなる）、
+                    近づいたら残量を、超えたら超過量と送信できない旨を出す */}
                 {remaining <= COUNTER_VISIBLE_FROM && (
                   <p
                     className={`mt-1.5 text-right text-[10px] tabular-nums ${
-                      remaining === 0 ? 'text-red-400 font-bold' : 'text-zinc-500'
+                      remaining <= 0 ? 'text-red-400 font-bold' : 'text-zinc-500'
                     }`}
                   >
-                    {remaining === 0
-                      ? `上限の ${MESSAGE_MAX_LENGTH} 文字に達しました`
-                      : `残り ${remaining} 文字`}
+                    {overLimit
+                      ? `${MESSAGE_MAX_LENGTH} 文字を ${-remaining} 文字超えています`
+                      : remaining === 0
+                        ? `上限の ${MESSAGE_MAX_LENGTH} 文字に達しました`
+                        : `残り ${remaining} 文字`}
                   </p>
                 )}
               </div>
