@@ -68,7 +68,7 @@ On top of the game itself, the platform implements the account, social and real-
 3. Relevant variables (see `.env.example`):
    - `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` — database credentials; `POSTGRES_PASSWORD` has no default and must be set (see step 1)
    - `JWT_SECRET` / `JWT_EXPIRES_IN` — auth token signing; `JWT_SECRET` has no default and must be set (see step 1)
-   - `HTTP_PORT` / `HTTPS_PORT` — public ports exposed by Nginx (default `80` / `443`)
+   - `HTTP_PORT` / `HTTPS_PORT` — public ports exposed by Nginx (default `8080` / `8443`)
    - `FORTYTWO_CLIENT_ID` / `FORTYTWO_CLIENT_SECRET` / `FORTYTWO_CALLBACK_URL` — reserved for a future 42 OAuth integration; **not currently used** (see [Known Limitations](#known-limitations))
 
 ### Running the project
