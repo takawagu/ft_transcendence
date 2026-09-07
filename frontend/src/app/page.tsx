@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSession, type User } from '@/lib/session';
+import { errorMessage } from '@/lib/error-message';
 import { usePresence } from '@/lib/presence';
 import { renderAvatar } from '@/lib/avatar';
 import { FriendInfoWindow } from '@/lib/friend-info';
@@ -23,8 +24,56 @@ interface SearchResult extends User {
   relation: 'friend' | 'pending' | 'none';
 }
 
-/** 検索を開始する最小文字数（バックエンドの @MinLength(2) と揃える） */
+/** POST /api/auth/login, POST /api/auth/register */
+interface AuthResponse {
+  token: string;
+  user: User;
+}
+
+/** GET /api/friends/requests */
+interface FriendRequests {
+  incoming: FriendshipRequest[];
+  outgoing: FriendshipRequest[];
+}
+
+/** GET /api/users/me。戦績がまだ無いユーザーは gameRecord が null */
+interface MeResponse extends User {
+  gameRecord: GameRecord | null;
+}
+
+/**
+ * 候補検索を投げる文字数の範囲。SearchUsersDto の @MinLength(2) @MaxLength(30) と揃える。
+ *
+ * 入力欄側に maxLength は付けないこと。同じ入力欄がフレンド申請
+ * (POST /api/friends/request) も兼ねており、そちらは上限導入前に登録された
+ * 長い username を検索不能にしないため意図的に上限なしになっているため
+ * （backend/src/friends/dto/friends.dto.ts のコメント参照）。
+ * ここで範囲外を弾くのは、400になると分かっているリクエストを投げないため。
+ */
 const SEARCH_MIN_LENGTH = 2;
+const SEARCH_MAX_LENGTH = 30;
+
+type AvailabilityStatus = 'idle' | 'checking' | 'available' | 'taken';
+
+/** 重複チェックの応答。value はこの結果がどの入力値に対するものか */
+interface AvailabilityCheck {
+  value: string;
+  /** 通信に失敗した時は判定なしとして 'idle' を入れる */
+  status: Exclude<AvailabilityStatus, 'checking'>;
+}
+
+/**
+ * 入力値と最後に受け取った結果から、表示すべき状態を決める。
+ * 結果がまだ今の入力値に追いついていなければ 'checking'。
+ */
+function availabilityStatus(
+  value: string,
+  check: AvailabilityCheck | null,
+  disabled: boolean,
+): AvailabilityStatus {
+  if (disabled || !value.trim()) return 'idle';
+  return check?.value === value ? check.status : 'checking';
+}
 
 export default function HomePage() {
   const router = useRouter();
@@ -46,15 +95,19 @@ export default function HomePage() {
   const [registerSuccessMsg, setRegisterSuccessMsg] = useState('');
 
   // Real-time registration validation
-  type AvailabilityStatus = 'idle' | 'checking' | 'available' | 'taken';
-  const [usernameStatus, setUsernameStatus] = useState<AvailabilityStatus>('idle');
-  const [emailStatus, setEmailStatus] = useState<AvailabilityStatus>('idle');
+  /**
+   * 重複チェックの結果は「どの入力値に対する答えか」とセットで持つ。
+   * 表示用の状態(AvailabilityStatus)は入力値と突き合わせて導出するので、
+   * 入力のたびに effect から同期的に 'checking' を書き込む必要がなくなる。
+   * 遅れて届いた古い応答も value が一致せず無視される。
+   */
+  const [usernameCheck, setUsernameCheck] = useState<AvailabilityCheck | null>(null);
+  const [emailCheck, setEmailCheck] = useState<AvailabilityCheck | null>(null);
 
   // Title/Form values
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [bio, setBio] = useState('');
 
   // Home states
   const [roomCodeInput, setRoomCodeInput] = useState('');
@@ -64,8 +117,11 @@ export default function HomePage() {
   const [friendQuery, setFriendQuery] = useState('');
   const [friendError, setFriendError] = useState('');
   const [friendSuccess, setFriendSuccess] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
+  /** 最後に受け取った検索結果と、その元になった検索語 */
+  const [searchHits, setSearchHits] = useState<{
+    query: string;
+    results: SearchResult[];
+  } | null>(null);
   const [activeFriendTab, setActiveFriendTab] = useState<'list' | 'requests' | 'blocks'>('list');
   const [roomCreateRounds, setRoomCreateRounds] = useState(3);
   // 部屋作成・参加・ルールのアコーディオン開閉ステート
@@ -93,27 +149,24 @@ export default function HomePage() {
   const [editUsername, setEditUsername] = useState('');
   const [editBio, setEditBio] = useState('');
   const [editProfileImage, setEditProfileImage] = useState('');
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string>('');
   const [editPassword, setEditPassword] = useState('');
   const [editError, setEditError] = useState('');
   const [editSuccess, setEditSuccess] = useState('');
   const [gameRecord, setGameRecord] = useState<GameRecord | null>(null);
 
+  const usernameStatus = availabilityStatus(username, usernameCheck, isLoginTab);
+  const emailStatus = availabilityStatus(email, emailCheck, isLoginTab);
+
   // Real-time username availability check (register tab only)
   useEffect(() => {
-    if (isLoginTab || !username.trim()) {
-      setUsernameStatus('idle');
-      return;
-    }
-    setUsernameStatus('checking');
+    if (isLoginTab || !username.trim()) return;
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(`/api/auth/check-username?username=${encodeURIComponent(username)}`);
-        const data = await res.json();
-        setUsernameStatus(data.taken ? 'taken' : 'available');
+        const data: { taken: boolean } = await res.json();
+        setUsernameCheck({ value: username, status: data.taken ? 'taken' : 'available' });
       } catch {
-        setUsernameStatus('idle');
+        setUsernameCheck({ value: username, status: 'idle' });
       }
     }, 400);
     return () => clearTimeout(timer);
@@ -121,68 +174,91 @@ export default function HomePage() {
 
   // Real-time email availability check (register tab only)
   useEffect(() => {
-    if (isLoginTab || !email.trim()) {
-      setEmailStatus('idle');
-      return;
-    }
-    setEmailStatus('checking');
+    if (isLoginTab || !email.trim()) return;
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(email)}`);
-        const data = await res.json();
-        setEmailStatus(data.taken ? 'taken' : 'available');
+        const data: { taken: boolean } = await res.json();
+        setEmailCheck({ value: email, status: data.taken ? 'taken' : 'available' });
       } catch {
-        setEmailStatus('idle');
+        setEmailCheck({ value: email, status: 'idle' });
       }
     }, 400);
     return () => clearTimeout(timer);
   }, [email, isLoginTab]);
 
   // Fetch Friends, Requests and Blocks
-  const fetchFriendsData = async () => {
+  // 購読 effect の依存に入れるため、token/apiCall が変わらない限り同一の関数にする
+  const fetchFriendsData = useCallback(async () => {
     if (!token) return;
     try {
-      const friendsList = await apiCall('/api/friends');
+      const friendsList = await apiCall<User[]>('/api/friends');
       setFriends(friendsList);
 
-      const reqs = await apiCall('/api/friends/requests');
+      const reqs = await apiCall<FriendRequests>('/api/friends/requests');
       setIncomingRequests(reqs.incoming || []);
       setOutgoingRequests(reqs.outgoing || []);
 
-      const blocks = await apiCall('/api/friends/blocks');
+      const blocks = await apiCall<User[]>('/api/friends/blocks');
       setBlockedUsers(blocks || []);
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
     }
-  };
+  }, [token, apiCall]);
 
   useEffect(() => {
-    if (token) {
-      fetchFriendsData();
-    }
-  }, [token]);
+    // fetchFriendsData 内の setState はすべて await より後（= 同期的には走らない）。
+    // ルールは async 関数の中身を保守的に見て「effect 内の同期 setState」と判定するが、
+    // ここで連鎖レンダリングは起きないため個別に抑制する。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchFriendsData();
+  }, [fetchFriendsData]);
 
-  // フレンド追加フォームの候補検索（既存の重複チェックと同じ400msデバウンス）
+  /*
+   * フレンド追加フォームの候補検索（400msデバウンス）。
+   * 結果は「どの検索語に対する結果か」とセットで持ち、表示は導出する。
+   * こうすると入力のたびに effect から同期的にリストを空にする必要がなく、
+   * 遅れて届いた古い応答も検索語が一致せず捨てられる。
+   */
+  const searchQuery = friendQuery.trim();
+  const searchEnabled =
+    !!token &&
+    searchQuery.length >= SEARCH_MIN_LENGTH &&
+    searchQuery.length <= SEARCH_MAX_LENGTH;
+  const searchSettled = searchEnabled && searchHits?.query === searchQuery;
+  const searchLoading = searchEnabled && !searchSettled;
+  const searchResults = searchSettled ? searchHits.results : [];
+
+  /*
+   * フォーム下部の「申請」ボタンの可否。
+   * POST /api/friends/request は username の完全一致なので、居ない相手に送ると 404 が
+   * コンソールに出る。候補検索が「未フレンドのその人が居る」と答えた時だけ押せる。
+   *
+   * 検索を投げない長さ（1文字 / SEARCH_MAX_LENGTH 超）でも押せないことになるが、
+   * それらの username は存在しない（register は @MaxLength(30)、1文字は検索できないため
+   * そもそも到達手段が無い）ので実害はない。ここを開けると 404 の抜け道になる。
+   *
+   * 検索は大文字小文字を区別しないが申請は区別するので、突き合わせは厳密一致で行う。
+   * 既にフレンド・申請中の相手も 400 になるので同じく止める（候補行に状態が出る）。
+   */
+  const exactMatch = searchResults.find(r => r.username === searchQuery);
+  const canSubmitRequest = exactMatch?.relation === 'none';
+
   useEffect(() => {
     const q = friendQuery.trim();
-    if (!token || q.length < SEARCH_MIN_LENGTH) {
-      setSearchResults([]);
-      setSearchLoading(false);
-      return;
-    }
-    setSearchLoading(true);
+    if (!token || q.length < SEARCH_MIN_LENGTH || q.length > SEARCH_MAX_LENGTH) return;
     const timer = setTimeout(async () => {
       try {
-        const results = await apiCall(`/api/friends/search?q=${encodeURIComponent(q)}`);
-        setSearchResults(results || []);
+        const results = await apiCall<SearchResult[]>(
+          `/api/friends/search?q=${encodeURIComponent(q)}`,
+        );
+        setSearchHits({ query: q, results: results || [] });
       } catch {
-        setSearchResults([]);
-      } finally {
-        setSearchLoading(false);
+        setSearchHits({ query: q, results: [] });
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [friendQuery, token]);
+  }, [friendQuery, token, apiCall]);
 
   /**
    * フレンド関連の通知でフレンド一覧を取り直す。
@@ -191,14 +267,14 @@ export default function HomePage() {
    */
   useEffect(() => {
     if (!token) return;
-    const refresh = () => fetchFriendsData();
+    const refresh = () => void fetchFriendsData();
     const unsubscribeRequest = subscribe('friend:requestReceived', refresh);
     const unsubscribeAccepted = subscribe('friend:accepted', refresh);
     return () => {
       unsubscribeRequest();
       unsubscribeAccepted();
     };
-  }, [token, subscribe]);
+  }, [token, subscribe, fetchFriendsData]);
 
   // Auth handlers
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -209,11 +285,14 @@ export default function HomePage() {
     try {
       if (isLoginTab) {
         // Login
-        const data = await apiCall('/api/auth/login', 'POST', { email, password });
+        const data = await apiCall<AuthResponse>('/api/auth/login', 'POST', {
+          email,
+          password,
+        });
         login(data.token, data.user);
       } else {
         // Register
-        const data = await apiCall('/api/auth/register', 'POST', {
+        const data = await apiCall<AuthResponse>('/api/auth/register', 'POST', {
           email,
           username,
           password,
@@ -224,8 +303,10 @@ export default function HomePage() {
         setRegisterSuccessMsg('🎉 登録が完了しました！');
         setTimeout(() => login(data.token, data.user), 900);
       }
-    } catch (err: any) {
-      setAuthError(err.message || '認証に失敗しました。入力内容を確認してください。');
+    } catch (err) {
+      setAuthError(
+        errorMessage(err, '認証に失敗しました。入力内容を確認してください。'),
+      );
     } finally {
       setLoading(false);
     }
@@ -237,10 +318,13 @@ export default function HomePage() {
     try {
       const email = `dev${num}@example.com`;
       const password = 'password123';
-      const data = await apiCall('/api/auth/login', 'POST', { email, password });
+      const data = await apiCall<AuthResponse>('/api/auth/login', 'POST', {
+        email,
+        password,
+      });
       login(data.token, data.user);
-    } catch (err: any) {
-      setAuthError(err.message || '開発者ログインに失敗しました。');
+    } catch (err) {
+      setAuthError(errorMessage(err, '開発者ログインに失敗しました。'));
     } finally {
       setLoading(false);
     }
@@ -252,7 +336,6 @@ export default function HomePage() {
     setEmail('');
     setUsername('');
     setPassword('');
-    setBio('');
     setRegisterSuccessMsg('');
     setAuthModal(null);
   };
@@ -279,24 +362,26 @@ export default function HomePage() {
     try {
       await apiCall('/api/friends/request', 'POST', { query: username });
       setFriendSuccess('フレンド申請を送信しました！');
+      // 検索語を空にすれば候補は導出側で空になるので、結果を明示的に消す必要はない
       setFriendQuery('');
-      setSearchResults([]);
-      fetchFriendsData();
-    } catch (err: any) {
-      setFriendError(err.message || '申請に失敗しました。');
+      void fetchFriendsData();
+    } catch (err) {
+      setFriendError(errorMessage(err, '申請に失敗しました。'));
     }
   };
 
   const handleAddFriend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!friendQuery.trim()) return;
-    await sendFriendRequest(friendQuery.trim());
+    // 送信ボタンは disabled にしてあるが、入力欄での Enter による送信は
+    // ボタンを経由しないブラウザもあるためここでも見る
+    if (!canSubmitRequest) return;
+    await sendFriendRequest(searchQuery);
   };
 
   const handleAcceptFriend = async (friendshipId: number) => {
     try {
       await apiCall('/api/friends/accept', 'POST', { friendshipId });
-      fetchFriendsData();
+      void fetchFriendsData();
     } catch (e) {
       console.error(e);
     }
@@ -306,7 +391,7 @@ export default function HomePage() {
     try {
       await apiCall('/api/friends/reject', 'POST', { friendshipId });
       if (user) setRejectedUser(user);
-      fetchFriendsData();
+      void fetchFriendsData();
     } catch (e) {
       console.error(e);
     }
@@ -316,7 +401,7 @@ export default function HomePage() {
     try {
       await apiCall('/api/friends/remove', 'POST', { friendId });
       setInfoTarget(null);
-      fetchFriendsData();
+      void fetchFriendsData();
     } catch (e) {
       console.error(e);
     }
@@ -327,7 +412,7 @@ export default function HomePage() {
       await apiCall('/api/friends/block', 'POST', { userId });
       setInfoTarget(null);
       setRejectedUser(null);
-      fetchFriendsData();
+      void fetchFriendsData();
     } catch (e) {
       console.error(e);
     }
@@ -337,7 +422,7 @@ export default function HomePage() {
     if (!confirm('ブロックを解除しますか？\n解除してもフレンド関係は元に戻りません。')) return;
     try {
       await apiCall('/api/friends/unblock', 'POST', { userId });
-      fetchFriendsData();
+      void fetchFriendsData();
     } catch (e) {
       console.error(e);
     }
@@ -358,15 +443,13 @@ export default function HomePage() {
     setEditUsername(user.username);
     setEditBio(user.bio || '');
     setEditProfileImage(user.profileImage || '');
-    setAvatarFile(null);
-    setAvatarPreview(user.profileImage || '');
     setEditPassword('');
     setEditError('');
     setEditSuccess('');
     setGameRecord(null);
     setShowOptionsModal(true);
 
-    apiCall('/api/users/me')
+    apiCall<MeResponse>('/api/users/me')
       .then(data => setGameRecord(data.gameRecord ?? { totalGames: 0, successCount: 0 }))
       .catch(() => setGameRecord({ totalGames: 0, successCount: 0 }));
   };
@@ -404,7 +487,7 @@ export default function HomePage() {
     }
 
     try {
-      const updated = await apiCall('/api/users/me', 'PUT', {
+      const updated = await apiCall<User>('/api/users/me', 'PUT', {
         username: editUsername,
         bio: editBio,
         profileImage: editProfileImage,
@@ -414,8 +497,8 @@ export default function HomePage() {
       updateUser(updated);
       setEditSuccess('プロフィールを更新しました！');
       setTimeout(() => setShowOptionsModal(false), 1000);
-    } catch (err: any) {
-      setEditError(err.message || '更新に失敗しました。');
+    } catch (err) {
+      setEditError(errorMessage(err, '更新に失敗しました。'));
     }
   };
 
@@ -1402,7 +1485,8 @@ export default function HomePage() {
             <div className="p-4 border-t border-zinc-800/80 bg-zinc-900/30">
               <form onSubmit={handleAddFriend} className="space-y-2">
                 <h3 className="text-xs font-semibold text-zinc-300">フレンドを追加</h3>
-                {friendQuery.trim().length >= SEARCH_MIN_LENGTH && (
+                {/* 検索を投げた時だけ出す。投げていないのに「いません」と言わないため */}
+                {searchEnabled && (
                   <div className="rounded-lg bg-zinc-950/60 border border-zinc-800/60 divide-y divide-zinc-800/60 overflow-hidden">
                     {searchLoading ? (
                       <p className="px-3 py-2 text-[10px] text-zinc-600">検索中…</p>
@@ -1449,7 +1533,8 @@ export default function HomePage() {
                   />
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white rounded-lg transition-all cursor-pointer shadow-md"
+                    disabled={!canSubmitRequest}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 text-xs font-bold text-white rounded-lg transition-all cursor-pointer disabled:cursor-not-allowed shadow-md"
                   >
                     申請
                   </button>
@@ -1464,6 +1549,7 @@ export default function HomePage() {
 
       {infoTarget && (
         <FriendInfoWindow
+          key={infoTarget.id}
           friend={infoTarget}
           online={onlineFriendIds.has(infoTarget.id)}
           onClose={() => setInfoTarget(null)}

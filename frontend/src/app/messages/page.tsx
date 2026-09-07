@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession, type User } from '@/lib/session';
+import { errorMessage } from '@/lib/error-message';
 import { usePresence, type DirectMessage } from '@/lib/presence';
 import { renderAvatar } from '@/lib/avatar';
 import { isInviteExpired, joinInvitedRoom } from '@/lib/room-invite';
@@ -37,6 +38,15 @@ interface ConversationRow {
   friend: User;
   lastMessage: Conversation | null;
 }
+
+/**
+ * GET /api/messages/:userId のレスポンス。
+ * 現行のバックエンドは必ずオブジェクトで返すが、配列を返していた頃の形も
+ * 受け取れるようにしてある（呼び出し側の Array.isArray 分岐と対応）。
+ */
+type HistoryResponse =
+  | DirectMessage[]
+  | { messages: DirectMessage[]; partnerLastReadMessageId: number };
 
 function formatTime(iso: string) {
   const date = new Date(iso);
@@ -121,7 +131,28 @@ function MessagesView() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [listLoading, setListLoading] = useState(true);
 
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  /**
+   * ユーザーが明示的に選んだ会話。null は「まだ何も選んでいない」で、
+   * その間だけ ?to= の指定が効く（{ id: null } は「閉じた」を表す）。
+   */
+  const [picked, setPicked] = useState<{ id: number | null } | null>(null);
+
+  /*
+   * 開いている会話。?to=<userId> が指す相手だけを自動で開く。
+   * 指定が無い時は何も開かない（ヘッダーのボタンからは一覧を見せたいため。
+   * 直近の会話を勝手に開くと、狭い画面ではその会話画面に着地してしまう）。
+   *
+   * effect で選択 state を書くのではなく導出する。picked が null の間だけ
+   * ?to= に従い、一度でも選んだ（閉じたのも選択のうち）ら以降は選択が優先される。
+   */
+  const toParam = Number(searchParams.get('to'));
+  const selectedId = picked
+    ? picked.id
+    : !listLoading && toParam && friends.some(f => f.id === toParam)
+      ? toParam
+      : null;
+  const setSelectedId = (id: number | null) => setPicked({ id });
+
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -139,8 +170,6 @@ function MessagesView() {
   const [infoTarget, setInfoTarget] = useState<User | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  /** ?to= による初期選択は最初の一度だけ行う（以降のクリックを上書きしないため） */
-  const initialSelectionDoneRef = useRef(false);
   /** dm:received のハンドラから現在開いている会話を参照するため */
   const selectedIdRef = useRef<number | null>(null);
   /** 末尾が変わった時だけ最下部へ追従するための記録。過去読み足し（先頭への追加）では動かさない */
@@ -173,8 +202,8 @@ function MessagesView() {
     (async () => {
       try {
         const [friendsList, conversationList] = await Promise.all([
-          apiCall('/api/friends'),
-          apiCall('/api/messages/conversations'),
+          apiCall<User[]>('/api/friends'),
+          apiCall<Conversation[]>('/api/messages/conversations'),
         ]);
         if (cancelled) return;
         setFriends(friendsList || []);
@@ -210,21 +239,18 @@ function MessagesView() {
   ];
 
   /*
-   * ?to=<userId> が指す相手だけを自動で開く。
-   * 指定が無い時は何も開かない（ヘッダーのボタンからは一覧を見せたいため。
-   * 直近の会話を勝手に開くと、狭い画面ではその会話画面に着地してしまう）。
+   * 選んだ相手の履歴。
+   * 会話を切り替えた／閉じたときは、前の相手のメッセージ・既読位置・入力中表示を
+   * 引き継がないよう明示的に消す。
+   *
+   * ルールが想定する書き方は「会話ペインを子コンポーネントに切り出して
+   * key={selectedId} で作り直す」だが、この画面では dm:received / dm:read / dm:typing の
+   * 購読も同じコンポーネントに同居しており、それらを丸ごと子へ移す必要がある。
+   * DMの中核の作り直しになるので、ここでは明示的なリセットのままにしている。
    */
   useEffect(() => {
-    if (listLoading || initialSelectionDoneRef.current) return;
-    initialSelectionDoneRef.current = true;
-
-    const to = Number(searchParams.get('to'));
-    if (to && friends.some(f => f.id === to)) setSelectedId(to);
-  }, [listLoading, friends, searchParams]);
-
-  // 選んだ相手の履歴
-  useEffect(() => {
     if (!token || selectedId === null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMessages([]);
       setPartnerLastReadMessageId(0);
       setIsPartnerTyping(false);
@@ -236,24 +262,24 @@ function MessagesView() {
     setIsPartnerTyping(false);
     (async () => {
       try {
-        const res: any = await apiCall(
+        const res = await apiCall<HistoryResponse>(
           `/api/messages/${selectedId}?limit=${HISTORY_PAGE_SIZE}`,
         );
         if (cancelled) return;
         const history: DirectMessage[] = Array.isArray(res) ? res : res.messages;
         setMessages(history || []);
         setHasMore((history?.length ?? 0) === HISTORY_PAGE_SIZE);
-        if (res?.partnerLastReadMessageId !== undefined) {
+        if (!Array.isArray(res) && res.partnerLastReadMessageId !== undefined) {
           setPartnerLastReadMessageId(res.partnerLastReadMessageId);
         }
         // 既読は履歴が取れてから打つ。どこまで読んだかを表すIDが要るため
         const last = history?.[history.length - 1];
         if (last) markConversationRead(selectedId, last.id);
-      } catch (err: any) {
+      } catch (err) {
         if (cancelled) return;
         setMessages([]);
         setHasMore(false);
-        setSendError(err.message || '履歴を取得できませんでした。');
+        setSendError(errorMessage(err, '履歴を取得できませんでした。'));
       } finally {
         if (!cancelled) setHistoryLoading(false);
       }
@@ -344,13 +370,13 @@ function MessagesView() {
     setLoadingMore(true);
     restoreHeightRef.current = el.scrollHeight;
     try {
-      const res: any = await apiCall(
+      const res = await apiCall<HistoryResponse>(
         `/api/messages/${selectedId}?before=${messages[0].id}&limit=${HISTORY_PAGE_SIZE}`,
       );
       const older: DirectMessage[] = Array.isArray(res) ? res : res.messages;
       setMessages(prev => [...(older || []), ...prev]);
       setHasMore((older?.length ?? 0) === HISTORY_PAGE_SIZE);
-      if (res?.partnerLastReadMessageId !== undefined) {
+      if (!Array.isArray(res) && res.partnerLastReadMessageId !== undefined) {
         setPartnerLastReadMessageId(prev => Math.max(prev, res.partnerLastReadMessageId));
       }
     } catch {
@@ -380,13 +406,15 @@ function MessagesView() {
 
   const handleSend = async () => {
     const content = draft.trim();
-    if (!content || selectedId === null) return;
+    // 上限超過はここでも見る。ボタンは disabled にしてあるが、
+    // Enter キー送信（handleKeyDown）はボタンを経由しないため
+    if (!content || content.length > MESSAGE_MAX_LENGTH || selectedId === null) return;
     if (myTypingTimeoutRef.current) clearTimeout(myTypingTimeoutRef.current);
     sendTyping(selectedId, false);
     setSendError('');
     setDraft('');
     try {
-      const message: DirectMessage = await apiCall('/api/messages', 'POST', {
+      const message = await apiCall<DirectMessage>('/api/messages', 'POST', {
         receiverId: selectedId,
         content,
       });
@@ -394,9 +422,9 @@ function MessagesView() {
       setMessages(prev =>
         prev.some(m => m.id === message.id) ? prev : [...prev, message],
       );
-    } catch (err: any) {
+    } catch (err) {
       setDraft(content);
-      setSendError(err.message || '送信に失敗しました。');
+      setSendError(errorMessage(err, '送信に失敗しました。'));
     }
   };
 
@@ -423,8 +451,8 @@ function MessagesView() {
       await apiCall(endpoint, 'POST', body);
       setFriends(prev => prev.filter(f => f.id !== friendId));
       setSelectedId(null);
-    } catch (err: any) {
-      setSendError(err.message || '操作に失敗しました。');
+    } catch (err) {
+      setSendError(errorMessage(err, '操作に失敗しました。'));
     }
   };
 
@@ -442,8 +470,14 @@ function MessagesView() {
   }
 
   const selectedFriend = selectedId !== null ? friendMap.get(selectedId) : undefined;
-  // maxLength と同じ数え方（UTF-16のコード単位）で残量を出す
-  const remaining = MESSAGE_MAX_LENGTH - draft.length;
+  /*
+   * 上限判定は「実際に送られる文字列」で行う。SendMessageDto は検証の前に trim するので、
+   * 末尾の改行や空白を数えるとサーバーは通るのにフロントで止まる、という食い違いが出る。
+   * 数え方は UTF-16 のコード単位（JSの String#length、class-validator の @MaxLength と同じ）。
+   */
+  const contentLength = draft.trim().length;
+  const remaining = MESSAGE_MAX_LENGTH - contentLength;
+  const overLimit = remaining < 0;
 
   return (
     <main className="h-screen flex flex-col bg-zinc-950 text-white">
@@ -708,29 +742,34 @@ function MessagesView() {
                     onChange={handleDraftChange}
                     onKeyDown={handleKeyDown}
                     rows={1}
-                    maxLength={MESSAGE_MAX_LENGTH}
                     placeholder="メッセージを入力（Enterで送信 / Shift+Enterで改行）"
-                    className="flex-1 resize-none rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-2.5 text-xs text-white placeholder-zinc-600 outline-none focus:border-indigo-500 transition-all max-h-32"
+                    className={`flex-1 resize-none rounded-xl bg-zinc-950 border px-3 py-2.5 text-xs text-white placeholder-zinc-600 outline-none transition-all max-h-32 ${
+                      overLimit
+                        ? 'border-red-500 focus:border-red-500'
+                        : 'border-zinc-700 focus:border-indigo-500'
+                    }`}
                   />
                   <button
                     onClick={handleSend}
-                    disabled={!draft.trim()}
+                    disabled={!draft.trim() || overLimit}
                     className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 text-xs font-bold text-white transition-all shadow-md cursor-pointer disabled:cursor-not-allowed"
                   >
                     送信
                   </button>
                 </div>
-                {/* maxLength は上限に達すると無言で入力を受け付けなくなるので、
-                    近づいたら残量を出して打ち止めの理由が分かるようにする */}
+                {/* 入力自体は止めず（maxLength を使うと無言で受け付けなくなる）、
+                    近づいたら残量を、超えたら超過量と送信できない旨を出す */}
                 {remaining <= COUNTER_VISIBLE_FROM && (
                   <p
                     className={`mt-1.5 text-right text-[10px] tabular-nums ${
-                      remaining === 0 ? 'text-red-400 font-bold' : 'text-zinc-500'
+                      remaining <= 0 ? 'text-red-400 font-bold' : 'text-zinc-500'
                     }`}
                   >
-                    {remaining === 0
-                      ? `上限の ${MESSAGE_MAX_LENGTH} 文字に達しました`
-                      : `残り ${remaining} 文字`}
+                    {overLimit
+                      ? `${MESSAGE_MAX_LENGTH} 文字を ${-remaining} 文字超えています`
+                      : remaining === 0
+                        ? `上限の ${MESSAGE_MAX_LENGTH} 文字に達しました`
+                        : `残り ${remaining} 文字`}
                   </p>
                 )}
               </div>
@@ -741,6 +780,7 @@ function MessagesView() {
 
       {infoTarget && (
         <FriendInfoWindow
+          key={infoTarget.id}
           friend={infoTarget}
           online={onlineFriendIds.has(infoTarget.id)}
           onClose={() => setInfoTarget(null)}

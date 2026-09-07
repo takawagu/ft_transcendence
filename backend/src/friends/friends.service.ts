@@ -84,20 +84,41 @@ export class FriendsService {
    * ブロック関係にある相手（どちらの向きでも）は結果に含めない。
    * 既にフレント/申請中の相手は除外せず relation を付けて返す。
    * 除外すると「入力したのに何も出ない」状態になり、理由が分からないため。
+   *
+   * 完全一致の相手が居れば必ず先頭に入れる。部分一致を username 順に SEARCH_LIMIT 件
+   * 取るだけだと、アルファベット順で前に来る相手に押し出されて完全一致が候補から
+   * 漏れうる（"ko" を探して ako/bko/cko で埋まる、など）。フロントは候補に完全一致が
+   * あるかどうかで申請ボタンの可否を決めているので、漏れると実在する相手に申請できない。
+   *
+   * 完全一致だけ大文字小文字を区別するのは、申請 (sendRequest) が username の
+   * 厳密一致で相手を引くため。ここで別人を先頭に据えると申請先とずれる。
    */
   async searchUsers(myId: number, q: string) {
-    const users = await this.prisma.user.findMany({
+    /** ブロック関係と自分自身の除外。完全一致・部分一致で条件を揃える */
+    const visible = {
+      // 相手が自分をブロックしている / 自分が相手をブロックしている
+      blocksMade: { none: { blockedId: myId } },
+      blocksReceived: { none: { blockerId: myId } },
+    };
+
+    const exact = await this.prisma.user.findFirst({
+      where: { username: q, id: { not: myId }, ...visible },
+      select: USER_SELECT,
+    });
+
+    // 合計は SEARCH_LIMIT 件のまま（列挙を助けないという上限の意図を変えない）
+    const partial = await this.prisma.user.findMany({
       where: {
         username: { contains: q, mode: 'insensitive' },
-        id: { not: myId },
-        // 相手が自分をブロックしている / 自分が相手をブロックしている
-        blocksMade: { none: { blockedId: myId } },
-        blocksReceived: { none: { blockerId: myId } },
+        id: { notIn: exact ? [myId, exact.id] : [myId] },
+        ...visible,
       },
       select: USER_SELECT,
       orderBy: { username: 'asc' },
-      take: SEARCH_LIMIT,
+      take: exact ? SEARCH_LIMIT - 1 : SEARCH_LIMIT,
     });
+
+    const users = exact ? [exact, ...partial] : partial;
 
     if (users.length === 0) return [];
 

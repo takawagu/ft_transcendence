@@ -37,6 +37,15 @@ export function renderAvatar(
     );
   }
   return (
+    /*
+     * next/image は使えない。profileImage には
+     *   - ファイル選択から作られる data: URI（FileReader.readAsDataURL）
+     *   - ユーザーが貼った任意のホストのURL
+     * のどちらも入りうるが、前者は最適化対象外、後者は next.config の
+     * remotePatterns に列挙できない（任意ホストを許すと最適化APIが踏み台になる）。
+     * 表示サイズも w-10 相当と小さく、LCP への影響は無視できる。
+     */
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={avatar}
       alt="avatar"

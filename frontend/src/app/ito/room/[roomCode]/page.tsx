@@ -3,7 +3,25 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
-import type { GameState } from '@/lib/ito/types';
+import { useSession, type User } from '@/lib/session';
+import type {
+  CardPlacedPayload,
+  CardsRevealedPayload,
+  ChatMessagePayload,
+  DealtCardPayload,
+  ErrorPayload,
+  GameAbortedPayload,
+  GameState,
+  ImageGeneratedPayload,
+  OrderChangedPayload,
+  PhaseChangePayload,
+  PlayerPhaseChangePayload,
+  PlayerReconnectedPayload,
+  PromptSubmittedPayload,
+  ResyncStatePayload,
+  RoomStatePayload,
+  TurnChangedPayload,
+} from '@/lib/ito/types';
 import { WaitingRoom } from './_phases/WaitingRoom';
 import { ThemeSetting } from './_phases/ThemeSetting';
 import { InputGenerating } from './_phases/InputGenerating';
@@ -46,7 +64,14 @@ export default function RoomPage() {
   const joinedRoomCodeRef = useRef<string | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
-  const [myId, setMyId] = useState('');
+  /**
+   * 自分のプレイヤーID。SessionProvider が localStorage から読んだユーザーから導く。
+   * 下の接続 effect でも同じ localStorage を読んでいるが、あちらは
+   * 「他タブの確認より前に一度だけ」という順序が要るため独立している。
+   * 表示に使うのはこちらだけなので state には持たない（セッション確定前は空文字）。
+   */
+  const { user } = useSession();
+  const myId = user ? String(user.id) : '';
   /**
    * 部屋から出る以外にやることが無くなった理由（解散・中断・入室失敗・席の移動）。
    * トーストと違い、画面を先に進めさせない。
@@ -112,10 +137,11 @@ export default function RoomPage() {
       return;
     }
 
-    const userObj = JSON.parse(storedUser);
+    const userObj = JSON.parse(storedUser) as User;
     const playerName = userObj.username;
+    // 表示用の myId は useSession から導出済み。ここでは他タブ判定と
+    // 自分の再接続通知を弾くのに使うだけなのでローカル変数で足りる
     const playerId = String(userObj.id);
-    setMyId(playerId);
 
     // playerIdはサーバがこのトークンから導出する。以降クライアントは名乗らない。
     // 接続は他タブの確認が済んでから（このeffectの末尾）。繋いでしまってからでは席を奪った後になる
@@ -154,7 +180,7 @@ export default function RoomPage() {
       }
     });
 
-    socket.on('ito:roomState', (data: any) => {
+    socket.on('ito:roomState', (data: RoomStatePayload) => {
       setState(prev => ({
         ...prev,
         roomCode: data.roomCode,
@@ -174,7 +200,7 @@ export default function RoomPage() {
       joinedRoomCodeRef.current = data.roomCode;
     });
 
-    socket.on('ito:resyncState', (data: any) => {
+    socket.on('ito:resyncState', (data: ResyncStatePayload) => {
       setState(prev => ({
         ...prev,
         roomCode: data.roomCode,
@@ -196,7 +222,7 @@ export default function RoomPage() {
       joinedRoomCodeRef.current = data.roomCode;
     });
 
-    socket.on('ito:phaseChange', (data: any) => {
+    socket.on('ito:phaseChange', (data: PhaseChangePayload) => {
       setState(prev => ({
         ...prev,
         roomPhase: data.roomPhase,
@@ -204,11 +230,11 @@ export default function RoomPage() {
       }));
     });
 
-    socket.on('ito:dealtCard', (data: any) => {
+    socket.on('ito:dealtCard', (data: DealtCardPayload) => {
       setState(prev => ({ ...prev, myCardNumber: data.cardNumber, myTheme: data.theme }));
     });
 
-    socket.on('ito:promptSubmitted', (data: any) => {
+    socket.on('ito:promptSubmitted', (data: PromptSubmittedPayload) => {
       setState(prev => ({
         ...prev,
         promptSubmittedCount: data.submittedCount,
@@ -216,7 +242,7 @@ export default function RoomPage() {
       }));
     });
 
-    socket.on('ito:playerPhaseChange', (data: any) => {
+    socket.on('ito:playerPhaseChange', (data: PlayerPhaseChangePayload) => {
       setState(prev => ({
         ...prev,
         players: prev.players.map(p =>
@@ -225,7 +251,7 @@ export default function RoomPage() {
       }));
     });
 
-    socket.on('ito:imageGenerated', (data: any) => {
+    socket.on('ito:imageGenerated', (data: ImageGeneratedPayload) => {
       setState(prev => ({
         ...prev,
         players: prev.players.map(p =>
@@ -236,27 +262,27 @@ export default function RoomPage() {
       }));
     });
 
-    socket.on('ito:cardPlaced', (data: any) => {
+    socket.on('ito:cardPlaced', (data: CardPlacedPayload) => {
       setState(prev => ({ ...prev, boardOrder: data.boardOrder }));
     });
 
-    socket.on('ito:turnChanged', (data: any) => {
+    socket.on('ito:turnChanged', (data: TurnChangedPayload) => {
       setState(prev => ({ ...prev, currentTurnPlayerId: data.currentTurnPlayerId }));
     });
 
-    socket.on('ito:orderChanged', (data: any) => {
+    socket.on('ito:orderChanged', (data: OrderChangedPayload) => {
       setState(prev => ({ ...prev, boardOrder: data.orderedPlayerIds }));
     });
 
-    socket.on('ito:chatMessage', (data: any) => {
+    socket.on('ito:chatMessage', (data: ChatMessagePayload) => {
       setState(prev => ({ ...prev, chatMessages: [...prev.chatMessages, data] }));
     });
 
-    socket.on('ito:cardsRevealed', (data: any) => {
+    socket.on('ito:cardsRevealed', (data: CardsRevealedPayload) => {
       setState(prev => ({ ...prev, revealResult: data }));
     });
 
-    socket.on('ito:error', (data: any) => {
+    socket.on('ito:error', (data: ErrorPayload) => {
       // 一度も入室できていない状態でのエラーは復帰不能。トーストで流すと
       // 画面が「接続中...」のまま固まり、ユーザーには操作不能にしか見えない
       if (!joinedRoomCodeRef.current) {
@@ -281,7 +307,7 @@ export default function RoomPage() {
       leaveWith('別の場所でこの部屋に接続したため、この画面は切断されました');
     });
 
-    socket.on('ito:playerReconnected', (data: any) => {
+    socket.on('ito:playerReconnected', (data: PlayerReconnectedPayload) => {
       // 自分の復帰を自分に知らせても仕方がない。myIdはこの時点ではまだ空なのでplayerIdで比べる
       if (data.playerId === playerId) return;
 
@@ -303,7 +329,7 @@ export default function RoomPage() {
       setState(prev => ({ ...prev, paused: false }));
     });
 
-    socket.on('ito:gameAborted', (data: any) => {
+    socket.on('ito:gameAborted', (data: GameAbortedPayload) => {
       leaveWith(data.reason ?? 'ゲームが中断されました');
     });
 
@@ -348,6 +374,15 @@ export default function RoomPage() {
       channel?.close();
       socket.disconnect();
     };
+    /*
+     * 依存配列を空にしているのは意図的で、この画面の生存期間に接続はちょうど1本。
+     * 再実行すると socket を張り直すことになり、サーバは「後から来た接続が正」として
+     * 席を付け替えるため、自分で自分の席を奪って前の接続を落とす
+     * （上の ito:sessionTakenOver のコメントを参照）。
+     * routeRoomCode / isCreating は部屋作成後に history.replaceState でURLだけ
+     * 書き換えており Next のルーターを経由しないので、ここでは変化しない。
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const phaseProps = { state, myId, emit };

@@ -42,14 +42,6 @@ export function InputGenerating({ state, myId, emit }: PhaseProps) {
   const me = state.players.find(p => p.id === myId);
   const myPhase = me?.playerPhase ?? 'INPUT';
 
-  // サーバ値が無いときのフォールバックも除外者抜きで数える（分子・分母を必ず揃える）
-  const active = state.players.filter(p => p.status !== 'EXCLUDED');
-  const submittedCount =
-    state.promptSubmittedCount ?? active.filter(p => p.hasSubmittedPrompt).length;
-  const totalCount = state.promptTotalCount ?? active.length;
-  const generatedCount =
-    state.imageGeneratedCount ?? active.filter(p => p.playerPhase === 'DONE').length;
-
   const handleSubmit = () => {
     const trimmed = prompt.trim();
     if (!trimmed || trimmed.length > 100 || submitted) return;
