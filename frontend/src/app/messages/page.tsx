@@ -757,12 +757,22 @@ function MessagesView() {
                     送信
                   </button>
                 </div>
-                {/* 入力自体は止めず（maxLength を使うと無言で受け付けなくなる）、
-                    近づいたら残量を、超えたら超過量と送信できない旨を出す */}
+                {/*
+                  入力自体は止めず（maxLength を使うと無言で受け付けなくなる）、
+                  近づいたら残量を、超えたら超過量を出す。
+
+                  色は送信できるかどうかと対応させる（itoのプロンプト入力欄と同じ規約）:
+                  赤太字は送信できない時だけ。ちょうど上限は送信できるので黄色の注意に留める。
+                  ここを赤にすると、送れる状態なのにエラーに見えてしまう。
+                */}
                 {remaining <= COUNTER_VISIBLE_FROM && (
                   <p
                     className={`mt-1.5 text-right text-[10px] tabular-nums ${
-                      remaining <= 0 ? 'text-red-400 font-bold' : 'text-zinc-500'
+                      overLimit
+                        ? 'text-red-400 font-bold'
+                        : remaining === 0
+                          ? 'text-yellow-500'
+                          : 'text-zinc-500'
                     }`}
                   >
                     {overLimit
