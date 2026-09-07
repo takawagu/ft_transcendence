@@ -229,6 +229,21 @@ export default function HomePage() {
   const searchLoading = searchEnabled && !searchSettled;
   const searchResults = searchSettled ? searchHits.results : [];
 
+  /*
+   * フォーム下部の「申請」ボタンの可否。
+   * POST /api/friends/request は username の完全一致なので、居ない相手に送ると 404 が
+   * コンソールに出る。候補検索が「未フレンドのその人が居る」と答えた時だけ押せる。
+   *
+   * 検索を投げない長さ（1文字 / SEARCH_MAX_LENGTH 超）でも押せないことになるが、
+   * それらの username は存在しない（register は @MaxLength(30)、1文字は検索できないため
+   * そもそも到達手段が無い）ので実害はない。ここを開けると 404 の抜け道になる。
+   *
+   * 検索は大文字小文字を区別しないが申請は区別するので、突き合わせは厳密一致で行う。
+   * 既にフレンド・申請中の相手も 400 になるので同じく止める（候補行に状態が出る）。
+   */
+  const exactMatch = searchResults.find(r => r.username === searchQuery);
+  const canSubmitRequest = exactMatch?.relation === 'none';
+
   useEffect(() => {
     const q = friendQuery.trim();
     if (!token || q.length < SEARCH_MIN_LENGTH || q.length > SEARCH_MAX_LENGTH) return;
@@ -357,8 +372,10 @@ export default function HomePage() {
 
   const handleAddFriend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!friendQuery.trim()) return;
-    await sendFriendRequest(friendQuery.trim());
+    // 送信ボタンは disabled にしてあるが、入力欄での Enter による送信は
+    // ボタンを経由しないブラウザもあるためここでも見る
+    if (!canSubmitRequest) return;
+    await sendFriendRequest(searchQuery);
   };
 
   const handleAcceptFriend = async (friendshipId: number) => {
@@ -1516,7 +1533,8 @@ export default function HomePage() {
                   />
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white rounded-lg transition-all cursor-pointer shadow-md"
+                    disabled={!canSubmitRequest}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 text-xs font-bold text-white rounded-lg transition-all cursor-pointer disabled:cursor-not-allowed shadow-md"
                   >
                     申請
                   </button>
