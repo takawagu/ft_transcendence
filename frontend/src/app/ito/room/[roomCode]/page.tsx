@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
+import { useSession, type User } from '@/lib/session';
 import type {
   CardPlacedPayload,
   CardsRevealedPayload,
@@ -63,7 +64,14 @@ export default function RoomPage() {
   const joinedRoomCodeRef = useRef<string | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
-  const [myId, setMyId] = useState('');
+  /**
+   * 自分のプレイヤーID。SessionProvider が localStorage から読んだユーザーから導く。
+   * 下の接続 effect でも同じ localStorage を読んでいるが、あちらは
+   * 「他タブの確認より前に一度だけ」という順序が要るため独立している。
+   * 表示に使うのはこちらだけなので state には持たない（セッション確定前は空文字）。
+   */
+  const { user } = useSession();
+  const myId = user ? String(user.id) : '';
   /**
    * 部屋から出る以外にやることが無くなった理由（解散・中断・入室失敗・席の移動）。
    * トーストと違い、画面を先に進めさせない。
@@ -129,10 +137,11 @@ export default function RoomPage() {
       return;
     }
 
-    const userObj = JSON.parse(storedUser);
+    const userObj = JSON.parse(storedUser) as User;
     const playerName = userObj.username;
+    // 表示用の myId は useSession から導出済み。ここでは他タブ判定と
+    // 自分の再接続通知を弾くのに使うだけなのでローカル変数で足りる
     const playerId = String(userObj.id);
-    setMyId(playerId);
 
     // playerIdはサーバがこのトークンから導出する。以降クライアントは名乗らない。
     // 接続は他タブの確認が済んでから（このeffectの末尾）。繋いでしまってからでは席を奪った後になる
@@ -365,6 +374,15 @@ export default function RoomPage() {
       channel?.close();
       socket.disconnect();
     };
+    /*
+     * 依存配列を空にしているのは意図的で、この画面の生存期間に接続はちょうど1本。
+     * 再実行すると socket を張り直すことになり、サーバは「後から来た接続が正」として
+     * 席を付け替えるため、自分で自分の席を奪って前の接続を落とす
+     * （上の ito:sessionTakenOver のコメントを参照）。
+     * routeRoomCode / isCreating は部屋作成後に history.replaceState でURLだけ
+     * 書き換えており Next のルーターを経由しないので、ここでは変化しない。
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const phaseProps = { state, myId, emit };

@@ -77,7 +77,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   /** apiCall の関数としての同一性を保つため、token は ref 経由で読む */
   const tokenRef = useRef<string | null>(null);
 
+  /*
+   * localStorage はサーバー側に存在しないため、初回レンダリングでは必ず未ログインとして
+   * 描き、ハイドレーション後にこの effect で本当の値へ差し替える（先に読むと
+   * サーバーの出力と食い違ってハイドレーションエラーになる）。
+   * mounted はその差し替えが済んだかどうかで、値が確定するまで各ページは待つ。
+   *
+   * ルールが想定する書き方にするなら localStorage を useSyncExternalStore の
+   * 外部ストアとして購読する形になるが、認証の中核を丸ごと置き換えることになるため
+   * ここでは従来どおりにしている。
+   */
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     const storedToken = localStorage.getItem('ft_token');
     const storedUser = localStorage.getItem('ft_user');

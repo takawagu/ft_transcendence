@@ -131,7 +131,28 @@ function MessagesView() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [listLoading, setListLoading] = useState(true);
 
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  /**
+   * ユーザーが明示的に選んだ会話。null は「まだ何も選んでいない」で、
+   * その間だけ ?to= の指定が効く（{ id: null } は「閉じた」を表す）。
+   */
+  const [picked, setPicked] = useState<{ id: number | null } | null>(null);
+
+  /*
+   * 開いている会話。?to=<userId> が指す相手だけを自動で開く。
+   * 指定が無い時は何も開かない（ヘッダーのボタンからは一覧を見せたいため。
+   * 直近の会話を勝手に開くと、狭い画面ではその会話画面に着地してしまう）。
+   *
+   * effect で選択 state を書くのではなく導出する。picked が null の間だけ
+   * ?to= に従い、一度でも選んだ（閉じたのも選択のうち）ら以降は選択が優先される。
+   */
+  const toParam = Number(searchParams.get('to'));
+  const selectedId = picked
+    ? picked.id
+    : !listLoading && toParam && friends.some(f => f.id === toParam)
+      ? toParam
+      : null;
+  const setSelectedId = (id: number | null) => setPicked({ id });
+
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -149,8 +170,6 @@ function MessagesView() {
   const [infoTarget, setInfoTarget] = useState<User | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  /** ?to= による初期選択は最初の一度だけ行う（以降のクリックを上書きしないため） */
-  const initialSelectionDoneRef = useRef(false);
   /** dm:received のハンドラから現在開いている会話を参照するため */
   const selectedIdRef = useRef<number | null>(null);
   /** 末尾が変わった時だけ最下部へ追従するための記録。過去読み足し（先頭への追加）では動かさない */
@@ -220,21 +239,18 @@ function MessagesView() {
   ];
 
   /*
-   * ?to=<userId> が指す相手だけを自動で開く。
-   * 指定が無い時は何も開かない（ヘッダーのボタンからは一覧を見せたいため。
-   * 直近の会話を勝手に開くと、狭い画面ではその会話画面に着地してしまう）。
+   * 選んだ相手の履歴。
+   * 会話を切り替えた／閉じたときは、前の相手のメッセージ・既読位置・入力中表示を
+   * 引き継がないよう明示的に消す。
+   *
+   * ルールが想定する書き方は「会話ペインを子コンポーネントに切り出して
+   * key={selectedId} で作り直す」だが、この画面では dm:received / dm:read / dm:typing の
+   * 購読も同じコンポーネントに同居しており、それらを丸ごと子へ移す必要がある。
+   * DMの中核の作り直しになるので、ここでは明示的なリセットのままにしている。
    */
   useEffect(() => {
-    if (listLoading || initialSelectionDoneRef.current) return;
-    initialSelectionDoneRef.current = true;
-
-    const to = Number(searchParams.get('to'));
-    if (to && friends.some(f => f.id === to)) setSelectedId(to);
-  }, [listLoading, friends, searchParams]);
-
-  // 選んだ相手の履歴
-  useEffect(() => {
     if (!token || selectedId === null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMessages([]);
       setPartnerLastReadMessageId(0);
       setIsPartnerTyping(false);
@@ -751,6 +767,7 @@ function MessagesView() {
 
       {infoTarget && (
         <FriendInfoWindow
+          key={infoTarget.id}
           friend={infoTarget}
           online={onlineFriendIds.has(infoTarget.id)}
           onClose={() => setInfoTarget(null)}

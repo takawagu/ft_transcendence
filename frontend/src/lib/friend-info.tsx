@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { renderAvatar } from './avatar';
 import type { User } from './session';
 
@@ -19,6 +19,10 @@ interface FriendInfoWindowProps {
  * フレンドのプロフィールウィンドウ。
  * ホーム画面のフレンド一覧と /messages の会話ヘッダーの両方から開く
  * （subject の Advanced chat features「Access to user profiles from chat interface」）。
+ *
+ * 別の相手を開いた時に前の相手の確認画面を引き継がないよう、
+ * 呼び出し側は必ず `key={friend.id}` を付けること。
+ * key が変わればこのコンポーネントの state は React が作り直す。
  */
 export function FriendInfoWindow({
   friend,
@@ -30,11 +34,6 @@ export function FriendInfoWindow({
 }: FriendInfoWindowProps) {
   /** ブロックの確認ステップ。ウィンドウの中だけで完結するので呼び出し側には見せない */
   const [confirmBlock, setConfirmBlock] = useState(false);
-
-  // 別の相手を開いた時に、前の相手の確認画面を引き継がない
-  useEffect(() => {
-    setConfirmBlock(false);
-  }, [friend.id]);
 
   return (
     <div

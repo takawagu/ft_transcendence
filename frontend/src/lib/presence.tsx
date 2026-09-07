@@ -216,6 +216,17 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!token) {
+      /*
+       * ログアウト時に前のセッションの在席・未読を消す。
+       * 同じタブで別のアカウントにログインし直したときに、前のユーザーの
+       * 未読件数が一瞬見えることを防いでいる。
+       *
+       * ルールが想定する書き方は「token を key にしてこの Provider を作り直す」だが、
+       * 配下に children 全体（itoルーム画面を含む）がぶら下がっており、
+       * ハイドレーション直後の token 確定でツリーごと再マウントされてしまう。
+       * それはゲーム用ソケットの張り直しを意味し、自分で自分の席を奪うことになる。
+       */
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOnlineFriendIds(new Set());
       setUnreadCounts(new Map());
       return;
