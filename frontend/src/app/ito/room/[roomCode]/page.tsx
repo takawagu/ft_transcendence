@@ -3,7 +3,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
-import type { GameState } from '@/lib/ito/types';
+import type {
+  CardPlacedPayload,
+  CardsRevealedPayload,
+  ChatMessagePayload,
+  DealtCardPayload,
+  ErrorPayload,
+  GameAbortedPayload,
+  GameState,
+  ImageGeneratedPayload,
+  OrderChangedPayload,
+  PhaseChangePayload,
+  PlayerPhaseChangePayload,
+  PlayerReconnectedPayload,
+  PromptSubmittedPayload,
+  ResyncStatePayload,
+  RoomStatePayload,
+  TurnChangedPayload,
+} from '@/lib/ito/types';
 import { WaitingRoom } from './_phases/WaitingRoom';
 import { ThemeSetting } from './_phases/ThemeSetting';
 import { InputGenerating } from './_phases/InputGenerating';
@@ -154,7 +171,7 @@ export default function RoomPage() {
       }
     });
 
-    socket.on('ito:roomState', (data: any) => {
+    socket.on('ito:roomState', (data: RoomStatePayload) => {
       setState(prev => ({
         ...prev,
         roomCode: data.roomCode,
@@ -174,7 +191,7 @@ export default function RoomPage() {
       joinedRoomCodeRef.current = data.roomCode;
     });
 
-    socket.on('ito:resyncState', (data: any) => {
+    socket.on('ito:resyncState', (data: ResyncStatePayload) => {
       setState(prev => ({
         ...prev,
         roomCode: data.roomCode,
@@ -196,7 +213,7 @@ export default function RoomPage() {
       joinedRoomCodeRef.current = data.roomCode;
     });
 
-    socket.on('ito:phaseChange', (data: any) => {
+    socket.on('ito:phaseChange', (data: PhaseChangePayload) => {
       setState(prev => ({
         ...prev,
         roomPhase: data.roomPhase,
@@ -204,11 +221,11 @@ export default function RoomPage() {
       }));
     });
 
-    socket.on('ito:dealtCard', (data: any) => {
+    socket.on('ito:dealtCard', (data: DealtCardPayload) => {
       setState(prev => ({ ...prev, myCardNumber: data.cardNumber, myTheme: data.theme }));
     });
 
-    socket.on('ito:promptSubmitted', (data: any) => {
+    socket.on('ito:promptSubmitted', (data: PromptSubmittedPayload) => {
       setState(prev => ({
         ...prev,
         promptSubmittedCount: data.submittedCount,
@@ -216,7 +233,7 @@ export default function RoomPage() {
       }));
     });
 
-    socket.on('ito:playerPhaseChange', (data: any) => {
+    socket.on('ito:playerPhaseChange', (data: PlayerPhaseChangePayload) => {
       setState(prev => ({
         ...prev,
         players: prev.players.map(p =>
@@ -225,7 +242,7 @@ export default function RoomPage() {
       }));
     });
 
-    socket.on('ito:imageGenerated', (data: any) => {
+    socket.on('ito:imageGenerated', (data: ImageGeneratedPayload) => {
       setState(prev => ({
         ...prev,
         players: prev.players.map(p =>
@@ -236,27 +253,27 @@ export default function RoomPage() {
       }));
     });
 
-    socket.on('ito:cardPlaced', (data: any) => {
+    socket.on('ito:cardPlaced', (data: CardPlacedPayload) => {
       setState(prev => ({ ...prev, boardOrder: data.boardOrder }));
     });
 
-    socket.on('ito:turnChanged', (data: any) => {
+    socket.on('ito:turnChanged', (data: TurnChangedPayload) => {
       setState(prev => ({ ...prev, currentTurnPlayerId: data.currentTurnPlayerId }));
     });
 
-    socket.on('ito:orderChanged', (data: any) => {
+    socket.on('ito:orderChanged', (data: OrderChangedPayload) => {
       setState(prev => ({ ...prev, boardOrder: data.orderedPlayerIds }));
     });
 
-    socket.on('ito:chatMessage', (data: any) => {
+    socket.on('ito:chatMessage', (data: ChatMessagePayload) => {
       setState(prev => ({ ...prev, chatMessages: [...prev.chatMessages, data] }));
     });
 
-    socket.on('ito:cardsRevealed', (data: any) => {
+    socket.on('ito:cardsRevealed', (data: CardsRevealedPayload) => {
       setState(prev => ({ ...prev, revealResult: data }));
     });
 
-    socket.on('ito:error', (data: any) => {
+    socket.on('ito:error', (data: ErrorPayload) => {
       // 一度も入室できていない状態でのエラーは復帰不能。トーストで流すと
       // 画面が「接続中...」のまま固まり、ユーザーには操作不能にしか見えない
       if (!joinedRoomCodeRef.current) {
@@ -281,7 +298,7 @@ export default function RoomPage() {
       leaveWith('別の場所でこの部屋に接続したため、この画面は切断されました');
     });
 
-    socket.on('ito:playerReconnected', (data: any) => {
+    socket.on('ito:playerReconnected', (data: PlayerReconnectedPayload) => {
       // 自分の復帰を自分に知らせても仕方がない。myIdはこの時点ではまだ空なのでplayerIdで比べる
       if (data.playerId === playerId) return;
 
@@ -303,7 +320,7 @@ export default function RoomPage() {
       setState(prev => ({ ...prev, paused: false }));
     });
 
-    socket.on('ito:gameAborted', (data: any) => {
+    socket.on('ito:gameAborted', (data: GameAbortedPayload) => {
       leaveWith(data.reason ?? 'ゲームが中断されました');
     });
 

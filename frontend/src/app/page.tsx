@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSession, type User } from '@/lib/session';
+import { errorMessage } from '@/lib/error-message';
 import { usePresence } from '@/lib/presence';
 import { renderAvatar } from '@/lib/avatar';
 import { FriendInfoWindow } from '@/lib/friend-info';
@@ -21,6 +22,23 @@ interface FriendshipRequest {
 /** 検索候補。relation は自分から見たその相手との関係 */
 interface SearchResult extends User {
   relation: 'friend' | 'pending' | 'none';
+}
+
+/** POST /api/auth/login, POST /api/auth/register */
+interface AuthResponse {
+  token: string;
+  user: User;
+}
+
+/** GET /api/friends/requests */
+interface FriendRequests {
+  incoming: FriendshipRequest[];
+  outgoing: FriendshipRequest[];
+}
+
+/** GET /api/users/me。戦績がまだ無いユーザーは gameRecord が null */
+interface MeResponse extends User {
+  gameRecord: GameRecord | null;
 }
 
 /** 検索を開始する最小文字数（バックエンドの @MinLength(2) と揃える） */
@@ -54,7 +72,6 @@ export default function HomePage() {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [bio, setBio] = useState('');
 
   // Home states
   const [roomCodeInput, setRoomCodeInput] = useState('');
@@ -93,8 +110,6 @@ export default function HomePage() {
   const [editUsername, setEditUsername] = useState('');
   const [editBio, setEditBio] = useState('');
   const [editProfileImage, setEditProfileImage] = useState('');
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string>('');
   const [editPassword, setEditPassword] = useState('');
   const [editError, setEditError] = useState('');
   const [editSuccess, setEditSuccess] = useState('');
@@ -142,16 +157,16 @@ export default function HomePage() {
   const fetchFriendsData = async () => {
     if (!token) return;
     try {
-      const friendsList = await apiCall('/api/friends');
+      const friendsList = await apiCall<User[]>('/api/friends');
       setFriends(friendsList);
 
-      const reqs = await apiCall('/api/friends/requests');
+      const reqs = await apiCall<FriendRequests>('/api/friends/requests');
       setIncomingRequests(reqs.incoming || []);
       setOutgoingRequests(reqs.outgoing || []);
 
-      const blocks = await apiCall('/api/friends/blocks');
+      const blocks = await apiCall<User[]>('/api/friends/blocks');
       setBlockedUsers(blocks || []);
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
     }
   };
@@ -173,7 +188,9 @@ export default function HomePage() {
     setSearchLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const results = await apiCall(`/api/friends/search?q=${encodeURIComponent(q)}`);
+        const results = await apiCall<SearchResult[]>(
+          `/api/friends/search?q=${encodeURIComponent(q)}`,
+        );
         setSearchResults(results || []);
       } catch {
         setSearchResults([]);
@@ -209,11 +226,14 @@ export default function HomePage() {
     try {
       if (isLoginTab) {
         // Login
-        const data = await apiCall('/api/auth/login', 'POST', { email, password });
+        const data = await apiCall<AuthResponse>('/api/auth/login', 'POST', {
+          email,
+          password,
+        });
         login(data.token, data.user);
       } else {
         // Register
-        const data = await apiCall('/api/auth/register', 'POST', {
+        const data = await apiCall<AuthResponse>('/api/auth/register', 'POST', {
           email,
           username,
           password,
@@ -224,8 +244,10 @@ export default function HomePage() {
         setRegisterSuccessMsg('🎉 登録が完了しました！');
         setTimeout(() => login(data.token, data.user), 900);
       }
-    } catch (err: any) {
-      setAuthError(err.message || '認証に失敗しました。入力内容を確認してください。');
+    } catch (err) {
+      setAuthError(
+        errorMessage(err, '認証に失敗しました。入力内容を確認してください。'),
+      );
     } finally {
       setLoading(false);
     }
@@ -237,10 +259,13 @@ export default function HomePage() {
     try {
       const email = `dev${num}@example.com`;
       const password = 'password123';
-      const data = await apiCall('/api/auth/login', 'POST', { email, password });
+      const data = await apiCall<AuthResponse>('/api/auth/login', 'POST', {
+        email,
+        password,
+      });
       login(data.token, data.user);
-    } catch (err: any) {
-      setAuthError(err.message || '開発者ログインに失敗しました。');
+    } catch (err) {
+      setAuthError(errorMessage(err, '開発者ログインに失敗しました。'));
     } finally {
       setLoading(false);
     }
@@ -252,7 +277,6 @@ export default function HomePage() {
     setEmail('');
     setUsername('');
     setPassword('');
-    setBio('');
     setRegisterSuccessMsg('');
     setAuthModal(null);
   };
@@ -282,8 +306,8 @@ export default function HomePage() {
       setFriendQuery('');
       setSearchResults([]);
       fetchFriendsData();
-    } catch (err: any) {
-      setFriendError(err.message || '申請に失敗しました。');
+    } catch (err) {
+      setFriendError(errorMessage(err, '申請に失敗しました。'));
     }
   };
 
@@ -358,15 +382,13 @@ export default function HomePage() {
     setEditUsername(user.username);
     setEditBio(user.bio || '');
     setEditProfileImage(user.profileImage || '');
-    setAvatarFile(null);
-    setAvatarPreview(user.profileImage || '');
     setEditPassword('');
     setEditError('');
     setEditSuccess('');
     setGameRecord(null);
     setShowOptionsModal(true);
 
-    apiCall('/api/users/me')
+    apiCall<MeResponse>('/api/users/me')
       .then(data => setGameRecord(data.gameRecord ?? { totalGames: 0, successCount: 0 }))
       .catch(() => setGameRecord({ totalGames: 0, successCount: 0 }));
   };
@@ -404,7 +426,7 @@ export default function HomePage() {
     }
 
     try {
-      const updated = await apiCall('/api/users/me', 'PUT', {
+      const updated = await apiCall<User>('/api/users/me', 'PUT', {
         username: editUsername,
         bio: editBio,
         profileImage: editProfileImage,
@@ -414,8 +436,8 @@ export default function HomePage() {
       updateUser(updated);
       setEditSuccess('プロフィールを更新しました！');
       setTimeout(() => setShowOptionsModal(false), 1000);
-    } catch (err: any) {
-      setEditError(err.message || '更新に失敗しました。');
+    } catch (err) {
+      setEditError(errorMessage(err, '更新に失敗しました。'));
     }
   };
 

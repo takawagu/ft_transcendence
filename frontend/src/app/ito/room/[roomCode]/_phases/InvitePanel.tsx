@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useSession, type User } from '@/lib/session';
+import { errorMessage } from '@/lib/error-message';
 import { usePresence } from '@/lib/presence';
 import { renderAvatar } from '@/lib/avatar';
 import type { PlayerInGameInfo } from '@/lib/ito/types';
@@ -42,12 +43,12 @@ export function InvitePanel({
     let cancelled = false;
     (async () => {
       try {
-        const list: User[] = await apiCall('/api/friends');
+        const list = await apiCall<User[]>('/api/friends');
         if (!cancelled) setFriends(list || []);
-      } catch (err: any) {
+      } catch (err) {
         if (!cancelled) {
           setFriends([]);
-          setError(err.message || 'フレンドを取得できませんでした。');
+          setError(errorMessage(err, 'フレンドを取得できませんでした。'));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -78,9 +79,9 @@ export function InvitePanel({
         roomCode,
       });
       onInvited(friendId);
-    } catch (err: any) {
+    } catch (err) {
       // ito:error トーストではなくパネル内に出す。これはRESTの失敗であってitoのイベントではない
-      setError(err.message || '招待を送れませんでした。');
+      setError(errorMessage(err, '招待を送れませんでした。'));
     } finally {
       setSendingId(null);
     }

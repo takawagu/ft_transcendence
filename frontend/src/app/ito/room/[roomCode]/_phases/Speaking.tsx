@@ -12,7 +12,6 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
   const alreadyPlaced = state.boardOrder.includes(myId);
   const playerMap = new Map(state.players.map(p => [p.id, p]));
   const currentPlayer = playerMap.get(state.currentTurnPlayerId ?? '');
-  const myPlayer = state.players.find(p => p.id === myId);
   // 除外済みは数えない。ただし既に場にカードが出ている人は場の枚数に含まれ続ける
   const boardTotal = state.players.filter(
     p => p.status !== 'EXCLUDED' || state.boardOrder.includes(p.id)
@@ -201,12 +200,6 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
     setDragOverPosition(null);
   };
 
-  const handleHandClick = () => {
-    if (canInteract && draftPosition === null) {
-      setDraftPosition(state.boardOrder.length);
-    }
-  };
-
   return (
     <div className="h-full w-full flex flex-col justify-start items-center gap-4 md:gap-8 p-3 sm:p-4 md:p-6 max-w-5xl mx-auto overflow-y-auto">
 
@@ -273,7 +266,6 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                 className="flex items-center justify-center gap-1.5 flex-wrap py-4 bg-zinc-800/20 rounded-xl px-4 min-h-[180px] border border-zinc-800/40 relative"
               >
                 {boardWithDraft.map((pid, i) => {
-                  const p = playerMap.get(pid);
                   const isDraftCard = draftPosition !== null && pid === myId;
                   return (
                     <div key={`${pid}-${i}`} className="flex items-center gap-1.5">

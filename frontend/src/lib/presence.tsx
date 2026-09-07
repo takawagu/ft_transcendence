@@ -63,7 +63,12 @@ const PRESENCE_EVENT_NAMES: PresenceEventName[] = [
   'dm:typing',
 ];
 
-type Handler = (payload: any) => void;
+/**
+ * 購読者一覧に保管するときの型。
+ * イベント名と payload の対応は subscribe のシグネチャが担保するので、
+ * 保管側は「どれかのイベントの payload を受け取る関数」とだけ分かっていればよい。
+ */
+type Handler = (payload: PresenceEventPayloads[PresenceEventName]) => void;
 
 interface PresenceContextValue {
   /** オンライン中のフレンドのID。未ログイン時は空 */
@@ -161,8 +166,8 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
     const clearedDuringFetch = new Set<number>();
     clearedWhileFetchingRef.current = clearedDuringFetch;
 
-    apiCall('/api/messages/unread')
-      .then((rows: { userId: number; count: number }[]) => {
+    apiCall<{ userId: number; count: number }[]>('/api/messages/unread')
+      .then(rows => {
         if (cancelled) return;
         setUnreadCounts(
           new Map(
@@ -275,7 +280,7 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
 
     // 全イベントを購読者へ中継する。何に反応するかは各ページ側の判断に委ねる
     for (const event of PRESENCE_EVENT_NAMES) {
-      socket.on(event, (payload: unknown) => {
+      socket.on(event, (payload: PresenceEventPayloads[PresenceEventName]) => {
         handlersRef.current.get(event)?.forEach(handler => handler(payload));
       });
     }

@@ -46,7 +46,12 @@ interface SessionContextValue {
   logout: () => void;
   /** プロフィール更新など、トークンはそのままでユーザー情報だけ差し替える時に使う */
   updateUser: (user: User) => void;
-  apiCall: (endpoint: string, method?: string, body?: any) => Promise<any>;
+  /**
+   * レスポンスの形は呼び出し側にしか分からないので、型引数で受け取る。
+   * 省略時は unknown なので、中身を読むなら `apiCall<User[]>('/api/friends')` のように
+   * 呼び出し側で明示すること（誤った形を書いた場合はそこが唯一の嘘になる）。
+   */
+  apiCall: <T = unknown>(endpoint: string, method?: string, body?: unknown) => Promise<T>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -106,7 +111,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const apiCall = useCallback(
-    async (endpoint: string, method = 'GET', body?: any) => {
+    async <T = unknown,>(endpoint: string, method = 'GET', body?: unknown): Promise<T> => {
       const activeToken = tokenRef.current ?? localStorage.getItem('ft_token');
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
@@ -165,13 +170,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           if (res.status === 401) {
             logout();
           }
-          const errorData = await res.json().catch(() => ({}));
+          // NestJS の ValidationPipe は message を配列で返す（項目ごとのエラー）
+          const errorData: { message?: string | string[] } = await res
+            .json()
+            .catch(() => ({}));
           const message = Array.isArray(errorData.message)
             ? errorData.message.join(' / ')
             : errorData.message;
           throw new Error(message || 'エラーが発生しました');
         }
-        return res.json();
+        return (await res.json()) as T;
       }
 
       setApiWaiting(false);

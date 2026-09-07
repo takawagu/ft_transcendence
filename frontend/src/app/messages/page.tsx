@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession, type User } from '@/lib/session';
+import { errorMessage } from '@/lib/error-message';
 import { usePresence, type DirectMessage } from '@/lib/presence';
 import { renderAvatar } from '@/lib/avatar';
 import { isInviteExpired, joinInvitedRoom } from '@/lib/room-invite';
@@ -37,6 +38,15 @@ interface ConversationRow {
   friend: User;
   lastMessage: Conversation | null;
 }
+
+/**
+ * GET /api/messages/:userId のレスポンス。
+ * 現行のバックエンドは必ずオブジェクトで返すが、配列を返していた頃の形も
+ * 受け取れるようにしてある（呼び出し側の Array.isArray 分岐と対応）。
+ */
+type HistoryResponse =
+  | DirectMessage[]
+  | { messages: DirectMessage[]; partnerLastReadMessageId: number };
 
 function formatTime(iso: string) {
   const date = new Date(iso);
@@ -173,8 +183,8 @@ function MessagesView() {
     (async () => {
       try {
         const [friendsList, conversationList] = await Promise.all([
-          apiCall('/api/friends'),
-          apiCall('/api/messages/conversations'),
+          apiCall<User[]>('/api/friends'),
+          apiCall<Conversation[]>('/api/messages/conversations'),
         ]);
         if (cancelled) return;
         setFriends(friendsList || []);
@@ -236,24 +246,24 @@ function MessagesView() {
     setIsPartnerTyping(false);
     (async () => {
       try {
-        const res: any = await apiCall(
+        const res = await apiCall<HistoryResponse>(
           `/api/messages/${selectedId}?limit=${HISTORY_PAGE_SIZE}`,
         );
         if (cancelled) return;
         const history: DirectMessage[] = Array.isArray(res) ? res : res.messages;
         setMessages(history || []);
         setHasMore((history?.length ?? 0) === HISTORY_PAGE_SIZE);
-        if (res?.partnerLastReadMessageId !== undefined) {
+        if (!Array.isArray(res) && res.partnerLastReadMessageId !== undefined) {
           setPartnerLastReadMessageId(res.partnerLastReadMessageId);
         }
         // 既読は履歴が取れてから打つ。どこまで読んだかを表すIDが要るため
         const last = history?.[history.length - 1];
         if (last) markConversationRead(selectedId, last.id);
-      } catch (err: any) {
+      } catch (err) {
         if (cancelled) return;
         setMessages([]);
         setHasMore(false);
-        setSendError(err.message || '履歴を取得できませんでした。');
+        setSendError(errorMessage(err, '履歴を取得できませんでした。'));
       } finally {
         if (!cancelled) setHistoryLoading(false);
       }
@@ -344,13 +354,13 @@ function MessagesView() {
     setLoadingMore(true);
     restoreHeightRef.current = el.scrollHeight;
     try {
-      const res: any = await apiCall(
+      const res = await apiCall<HistoryResponse>(
         `/api/messages/${selectedId}?before=${messages[0].id}&limit=${HISTORY_PAGE_SIZE}`,
       );
       const older: DirectMessage[] = Array.isArray(res) ? res : res.messages;
       setMessages(prev => [...(older || []), ...prev]);
       setHasMore((older?.length ?? 0) === HISTORY_PAGE_SIZE);
-      if (res?.partnerLastReadMessageId !== undefined) {
+      if (!Array.isArray(res) && res.partnerLastReadMessageId !== undefined) {
         setPartnerLastReadMessageId(prev => Math.max(prev, res.partnerLastReadMessageId));
       }
     } catch {
@@ -386,7 +396,7 @@ function MessagesView() {
     setSendError('');
     setDraft('');
     try {
-      const message: DirectMessage = await apiCall('/api/messages', 'POST', {
+      const message = await apiCall<DirectMessage>('/api/messages', 'POST', {
         receiverId: selectedId,
         content,
       });
@@ -394,9 +404,9 @@ function MessagesView() {
       setMessages(prev =>
         prev.some(m => m.id === message.id) ? prev : [...prev, message],
       );
-    } catch (err: any) {
+    } catch (err) {
       setDraft(content);
-      setSendError(err.message || '送信に失敗しました。');
+      setSendError(errorMessage(err, '送信に失敗しました。'));
     }
   };
 
@@ -423,8 +433,8 @@ function MessagesView() {
       await apiCall(endpoint, 'POST', body);
       setFriends(prev => prev.filter(f => f.id !== friendId));
       setSelectedId(null);
-    } catch (err: any) {
-      setSendError(err.message || '操作に失敗しました。');
+    } catch (err) {
+      setSendError(errorMessage(err, '操作に失敗しました。'));
     }
   };
 

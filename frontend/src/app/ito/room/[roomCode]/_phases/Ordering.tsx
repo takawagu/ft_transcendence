@@ -9,16 +9,6 @@ const CHAT_MESSAGE_MAX_LENGTH = 200;
 /** 残り何文字から文字数表示を出すか。常に出すと狭いチャット欄の邪魔になる */
 const COUNTER_VISIBLE_FROM = 30;
 
-const DragHandleIcon = () => (
-  <svg
-    className="w-4 h-4 text-zinc-500 cursor-grab active:cursor-grabbing hover:text-zinc-300 transition-colors"
-    fill="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path d="M8.5 6a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm5 0a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm5 0a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm-10 6a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm5 0a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm5 0a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm-10 6a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm5 0a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm5 0a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
-  </svg>
-);
-
 export function Ordering({ state, myId, emit }: PhaseProps) {
   const [chatInput, setChatInput] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
