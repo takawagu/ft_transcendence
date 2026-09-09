@@ -1,0 +1,21 @@
+# チームメンバーの名義ゆれを 42 のログイン名に統一する。
+# 反映確認: git shortlog -sn --all --no-merges
+
+# takawagu — 個人 PC と各校舎クラスタのマシンでコミットしている
+takawagu <kawaguchitakuro415@gmail.com>
+takawagu <kawaguchitakuro415@gmail.com> <takawagu@c2r1s1.42tokyo.jp>
+takawagu <kawaguchitakuro415@gmail.com> <takawagu@c2r4s2.42tokyo.jp>
+takawagu <kawaguchitakuro415@gmail.com> <takawagu@c5r1s3.42tokyo.jp>
+takawagu <kawaguchitakuro415@gmail.com> <takawagu@c5r3s6.42tokyo.jp>
+takawagu <kawaguchitakuro415@gmail.com> <takawagu@c6r1s8.42tokyo.jp>
+
+# skimura — "kimura shunta" と "koro" は同一人物
+skimura <shunta37k@gmail.com>
+skimura <shunta37k@gmail.com> <koropan@koro.local>
+
+# squinn — "quinn-sasha" と "SashaKenta"
+squinn <quinnsashakenta@gmail.com>
+squinn <quinnsashakenta@gmail.com> <s.kuin.24.5.1435@4nonome.com>
+
+# tmura — user.name 未設定でメールアドレスがそのまま名前になっていた
+tmura <beraskes@gmail.com>
