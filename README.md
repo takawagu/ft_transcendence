@@ -239,7 +239,7 @@ erDiagram
 | Blocking | Block/unblock a user; blocking clears any existing friendship | `takawagu` |
 | Online presence | Live online/offline status and friend-request notifications over a dedicated WebSocket namespace | `takawagu` |
 | Direct messages | 1:1 chat between friends, message history, persisted unread counts, "mark as read" cursor, input length limit/counter | `takawagu` |
-| ito game engine | Room lifecycle, phase state machine, card dealing, turn order, round scoring | `takawagu` (initial prototype), `skimura` (gameplay iteration) |
+| ito game engine | Room lifecycle, phase state machine, card dealing, turn order, round scoring | `takawagu` (engine design and implementation throughout, incl. unit tests), `skimura` (gameplay tuning: round transitions, validation, scope changes) |
 | ito game UI | Drag-and-drop card placement and reordering, in-room chat widget, board/player layout | `skimura` |
 | Disconnect / reconnect handling | Host-controlled pause menu on disconnect (wait / exclude / abort), host handover if the room host drops, full state resync (hand, theme, chat, board, turn order) on rejoin | `takawagu`, `skimura` |
 | Personal game stats | Per-user total games played and rounds won | `takawagu` |
@@ -278,7 +278,7 @@ erDiagram
 
 ### `takawagu` — Tech Lead / Backend Developer
 
-Set up the original project scaffolding and game-core prototype, then built out the backend: authentication (registration, login, JWT, validation hardening), the friends and blocking system, the presence WebSocket namespace, and the direct-message system end to end (schema, API, unread/read-cursor logic). Also owns the Docker Compose / Nginx / Makefile deployment setup, including LAN-IP auto-detection and HTTPS termination, and led the design and implementation of the disconnect/reconnect flow (host-driven pause menu, host handover, full state resync).
+Set up the original project scaffolding and owns the ito game engine end to end (`backend/src/ito`: room lifecycle, phase state machine, card dealing, turn order, round scoring, and the accompanying unit tests), as well as the rest of the backend: authentication (registration, login, JWT, validation hardening), the friends and blocking system, the presence WebSocket namespace, and the direct-message system end to end (schema, API, unread/read-cursor logic). Also owns the Docker Compose / Nginx / Makefile deployment setup, including LAN-IP auto-detection and HTTPS termination, and led the design and implementation of the disconnect/reconnect flow (host-driven pause menu, host handover, full state resync).
 
 **Challenges faced**: the initial disconnect handling removed a player from the room outright with no reconnect path, which meant a dropped connection could end a game outright — this was rebuilt into a pause/rejoin flow driven by the room host, with careful handling of edge cases like the host being the one who disconnects (see `docs/disconnect-array-bugs.md` and `docs/reconnect-design.md`). Also caught and fixed a validation-pipe gap on the profile-update endpoint where an untyped `@Body()` silently skipped DTO validation, allowing the registration password-length rule to be bypassed after account creation.
 
