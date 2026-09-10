@@ -308,7 +308,6 @@ export default function HomePage() {
         // Register
         if (!isValidEmail(email)) {
           setAuthError('有効なメールアドレスを入力してください。');
-          setLoading(false);
           return;
         }
         const data = await apiCall<AuthResponse>('/api/auth/register', 'POST', {
