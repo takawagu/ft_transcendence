@@ -423,7 +423,7 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                   </div>
                 ) : (
                   <p className="text-[10px] text-indigo-400 mt-1 font-pixel animate-pulse">
-                    クリックかドラック&ドロップで配置してください
+                    クリックまたはドラッグ&ドロップで配置してください
                   </p>
                 )}
               </div>
