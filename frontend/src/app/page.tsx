@@ -312,7 +312,7 @@ export default function HomePage() {
           return;
         }
         const data = await apiCall<AuthResponse>('/api/auth/register', 'POST', {
-          email,
+          email: email.trim(),
           username,
           password,
           bio: '',
