@@ -89,7 +89,14 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
     
     return (
       <div 
-        onClick={isMe ? toggleShowNumber : () => setInspectPlayerId(pid)}
+        onClick={
+          isMe
+            ? toggleShowNumber
+            : e => {
+                e.stopPropagation();
+                setInspectPlayerId(pid);
+              }
+        }
         className={`w-full h-full rounded-lg border border-cyan-500/30 bg-gradient-to-br from-[#0c1020] to-[#151c3c] flex flex-col items-center justify-between p-3 select-none relative shadow-md shadow-black/40 ${isMe ? 'cursor-pointer' : 'cursor-zoom-in'}`}
       >
         <div className="text-xs text-cyan-400 font-cyber font-bold tracking-wider uppercase truncate w-full">
@@ -263,7 +270,17 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                 onDragOver={handleDragOverBoard}
                 onDragLeave={handleBoardDragLeave}
                 onDrop={handleDropBoard}
-                className="flex items-center justify-center gap-1.5 flex-wrap py-4 bg-zinc-800/20 rounded-xl px-4 min-h-[180px] border border-zinc-800/40 relative"
+                onClick={e => {
+                  if (canInteract && draftPosition === null) {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const clickX = e.clientX - rect.left;
+                    const isLeftHalf = clickX < rect.width / 2;
+                    handleDraftPlace(isLeftHalf ? 0 : state.boardOrder.length);
+                  }
+                }}
+                className={`flex items-center justify-center gap-1.5 flex-wrap py-4 bg-zinc-800/20 rounded-xl px-4 min-h-[180px] border border-zinc-800/40 relative ${
+                  canInteract && draftPosition === null ? 'cursor-pointer hover:bg-zinc-800/30' : ''
+                }`}
               >
                 {boardWithDraft.map((pid, i) => {
                   const isDraftCard = draftPosition !== null && pid === myId;
@@ -406,7 +423,7 @@ export function Speaking({ state, myId, emit }: PhaseProps) {
                   </div>
                 ) : (
                   <p className="text-[10px] text-indigo-400 mt-1 font-pixel animate-pulse">
-                    カードをボードへ配置してください
+                    クリックまたはドラッグ&ドロップで配置してください
                   </p>
                 )}
               </div>

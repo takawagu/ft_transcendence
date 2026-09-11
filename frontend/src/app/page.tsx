@@ -53,13 +53,18 @@ interface MeResponse extends User {
 const SEARCH_MIN_LENGTH = 2;
 const SEARCH_MAX_LENGTH = 30;
 
-type AvailabilityStatus = 'idle' | 'checking' | 'available' | 'taken';
+type AvailabilityStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
+
+const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/;
+function isValidEmail(val: string): boolean {
+  return EMAIL_REGEX.test(val.trim());
+}
 
 /** 重複チェックの応答。value はこの結果がどの入力値に対するものか */
 interface AvailabilityCheck {
   value: string;
   /** 通信に失敗した時は判定なしとして 'idle' を入れる */
-  status: Exclude<AvailabilityStatus, 'checking'>;
+  status: Exclude<AvailabilityStatus, 'checking' | 'invalid'>;
 }
 
 /**
@@ -155,7 +160,12 @@ export default function HomePage() {
   const [gameRecord, setGameRecord] = useState<GameRecord | null>(null);
 
   const usernameStatus = availabilityStatus(username, usernameCheck, isLoginTab);
-  const emailStatus = availabilityStatus(email, emailCheck, isLoginTab);
+  const emailStatus =
+    isLoginTab || !email.trim()
+      ? 'idle'
+      : !isValidEmail(email)
+      ? 'invalid'
+      : availabilityStatus(email, emailCheck, isLoginTab);
 
   // Real-time username availability check (register tab only)
   useEffect(() => {
@@ -174,10 +184,14 @@ export default function HomePage() {
 
   // Real-time email availability check (register tab only)
   useEffect(() => {
-    if (isLoginTab || !email.trim()) return;
+    if (isLoginTab || !email.trim() || !isValidEmail(email)) return;
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(email)}`);
+        const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(email.trim())}`);
+        if (!res.ok) {
+          setEmailCheck({ value: email, status: 'idle' });
+          return;
+        }
         const data: { taken: boolean } = await res.json();
         setEmailCheck({ value: email, status: data.taken ? 'taken' : 'available' });
       } catch {
@@ -292,8 +306,12 @@ export default function HomePage() {
         login(data.token, data.user);
       } else {
         // Register
+        if (!isValidEmail(email)) {
+          setAuthError('有効なメールアドレスを入力してください。');
+          return;
+        }
         const data = await apiCall<AuthResponse>('/api/auth/register', 'POST', {
-          email,
+          email: email.trim(),
           username,
           password,
           bio: '',
@@ -707,10 +725,11 @@ export default function HomePage() {
                       />
                       {!isLoginTab && emailStatus !== 'idle' && (
                         <p className={`mt-1 text-xs ${
-                          emailStatus === 'taken' ? 'text-red-400' :
+                          emailStatus === 'taken' || emailStatus === 'invalid' ? 'text-red-400' :
                           emailStatus === 'available' ? 'text-emerald-400' : 'text-zinc-500'
                         }`}>
                           {emailStatus === 'checking' && '確認中...'}
+                          {emailStatus === 'invalid' && 'メールアドレスの形式が正しくありません'}
                           {emailStatus === 'taken' && 'そのメールアドレスはすでに使われています'}
                           {emailStatus === 'available' && '使用可能です'}
                         </p>
@@ -782,6 +801,7 @@ export default function HomePage() {
                           usernameStatus === 'checking' ||
                           emailStatus === 'taken' ||
                           emailStatus === 'checking' ||
+                          emailStatus === 'invalid' ||
                           password.length < 8
                         ))
                       }
