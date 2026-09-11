@@ -5,6 +5,7 @@ import {
   PRESENCE_EVENTS,
   PresenceChangedPayload,
   PresenceSnapshotPayload,
+  DmClearUnreadPayload,
 } from './presence.events';
 
 /**
@@ -83,9 +84,9 @@ export class PresenceService {
   }
 
   /**
-   * ブロック実行時に、双方の画面から相手を即座にオフライン化させる。
-   * Friendship行が消えるだけでは、接続中のクライアントの onlineFriendIds に
-   * 相手が残ったままリロードするまでオンライン表示が続いてしまう。
+   * ブロック実行時に、双方の画面から相手を即座にオフライン化し、未読バッジを消去する。
+   * Friendship行が消えるだけでは、接続中のクライアントの onlineFriendIds や
+   * unreadCounts に相手が残ったままリロードするまで表示が続いてしまう。
    */
   notifyBlocked(blockerId: number, blockedId: number): void {
     this.emitToUser(blockerId, PRESENCE_EVENTS.CHANGED, {
@@ -97,6 +98,14 @@ export class PresenceService {
       userId: blockerId,
       online: false,
     } satisfies PresenceChangedPayload);
+
+    this.emitToUser(blockerId, PRESENCE_EVENTS.DM_CLEAR_UNREAD, {
+      userId: blockedId,
+    } satisfies DmClearUnreadPayload);
+
+    this.emitToUser(blockedId, PRESENCE_EVENTS.DM_CLEAR_UNREAD, {
+      userId: blockerId,
+    } satisfies DmClearUnreadPayload);
   }
 
   /**

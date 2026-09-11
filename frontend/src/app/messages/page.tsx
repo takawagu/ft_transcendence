@@ -244,7 +244,7 @@ function MessagesView() {
    * 引き継がないよう明示的に消す。
    *
    * ルールが想定する書き方は「会話ペインを子コンポーネントに切り出して
-   * key={selectedId} で作り直す」だが、この画面では dm:received / dm:read / dm:typing の
+   * key={selectedId} で作り直す」だが、この画面では dm:received / dm:readReceipt / dm:typing の
    * 購読も同じコンポーネントに同居しており、それらを丸ごと子へ移す必要がある。
    * DMの中核の作り直しになるので、ここでは明示的なリセットのままにしている。
    */
@@ -289,7 +289,7 @@ function MessagesView() {
     };
   }, [token, selectedId, apiCall, markConversationRead]);
 
-  // リアルタイム受信 (dm:received, dm:read, dm:typing)
+  // リアルタイム受信 (dm:received, dm:readReceipt, dm:typing)
   useEffect(() => {
     if (!token) return;
     const unsubReceived = subscribe('dm:received', ({ message, user: partner }) => {
@@ -304,15 +304,17 @@ function MessagesView() {
       ]);
 
       if (selectedIdRef.current !== partner.id) return;
-      // 開いている会話に届いた分はその場で既読にする
-      markConversationRead(partner.id, message.id);
+      // 開いている会話に相手から届いた分はその場で既読にする
+      if (message.senderId === partner.id) {
+        markConversationRead(partner.id, message.id);
+      }
       // 自分の送信は POST の応答で既に足しているので、idで重複を弾く
       setMessages(prev =>
         prev.some(m => m.id === message.id) ? prev : [...prev, message],
       );
     });
 
-    const unsubRead = subscribe('dm:read', ({ userId, lastReadMessageId }) => {
+    const unsubRead = subscribe('dm:readReceipt', ({ userId, lastReadMessageId }) => {
       // 相手がこちらのメッセージを読んだ時、既読カーソルを更新
       if (selectedIdRef.current === userId) {
         setPartnerLastReadMessageId(prev => Math.max(prev, lastReadMessageId));

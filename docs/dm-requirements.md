@@ -183,7 +183,9 @@ DM 専用の名前空間は新設しない。既にオンライン状態とフ�
 | 方向 | イベント | ペイロード | タイミング |
 |---|---|---|---|
 | S→C | `dm:received` | `{ message, user }` | メッセージが作成された時 |
-| S→C | `dm:read` | `{ userId, lastReadMessageId }` | 会話を既読にした時（**本人の全タブへのみ**） |
+| S→C | `dm:read` | `{ userId, lastReadMessageId }` | 会話を既読にした時（**本人の全タブへのみ**、未読バッジ同期） |
+| S→C | `dm:readReceipt` | `{ userId, lastReadMessageId }` | 相手がメッセージを読んだ時（**送信者へ**、既読表示更新） |
+| S→C | `dm:clearUnread` | `{ userId }` | ブロックやフレンド解除時（**双方へ**、未読バッジ消去） |
 
 - `message` は作成された `DirectMessage`、`user` は**相手**の公開情報（`{ id, username, bio, profileImage }`）
 - **受信者と送信者の両方へ送る。** 送信者にも送るのは、同じアカウントで開いている別タブの画面を同期させるため（`PresenceService.emitToUser` は該当ユーザーの全ソケットへ配信する）

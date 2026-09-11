@@ -34,8 +34,14 @@ export const PRESENCE_EVENTS = {
   /** 会話を既読にした時。本人の全タブへ送り、未読バッジを揃える */
   DM_READ: 'dm:read',
 
+  /** 相手が自分のメッセージを既読にした時。送信者へ送り、既読表示を更新する */
+  DM_READ_RECEIPT: 'dm:readReceipt',
+
   /** メッセージ入力中状態の変化 */
   DM_TYPING: 'dm:typing',
+
+  /** ブロックやフレンド解除等により未読バッジを消去させる時 */
+  DM_CLEAR_UNREAD: 'dm:clearUnread',
 } as const;
 
 /**
@@ -90,8 +96,19 @@ export interface DmReadPayload {
   lastReadMessageId: number;
 }
 
+export interface DmReadReceiptPayload {
+  /** メッセージを読んだ相手（相手目線での自分） */
+  userId: number;
+  lastReadMessageId: number;
+}
+
 export interface DmTypingPayload {
   /** 入力状態が変化した相手 */
   userId: number;
   isTyping: boolean;
+}
+
+export interface DmClearUnreadPayload {
+  /** 未読バッジを消去する相手 */
+  userId: number;
 }

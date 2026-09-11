@@ -283,6 +283,9 @@ export class FriendsService {
 
     await this.prisma.friendship.delete({ where: { id: friendship.id } });
 
+    // フレンド解除時も相手をオフライン化し、未読バッジを消去する
+    this.presence.notifyBlocked(myId, friendId);
+
     return { success: true };
   }
 
