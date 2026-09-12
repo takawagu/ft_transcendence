@@ -45,10 +45,14 @@ export interface PresenceEventPayloads {
   'friend:accepted': { user: User };
   /** user は会話の相手。受信者には送信者、送信者には受信者が入る */
   'dm:received': { message: DirectMessage; user: User };
-  /** 自分が別タブで会話を既読にした時、または相手がメッセージを読んだ時 */
+  /** 自分が別タブで会話を既読にした時（未読バッジの同期用） */
   'dm:read': { userId: number; lastReadMessageId: number };
+  /** 相手がメッセージを既読にした時（既読表示の更新用） */
+  'dm:readReceipt': { userId: number; lastReadMessageId: number };
   /** 相手の入力状態が変化した時 */
   'dm:typing': { userId: number; isTyping: boolean };
+  /** ブロックやフレンド解除等で未読バッジを消去する時 */
+  'dm:clearUnread': { userId: number };
 }
 
 export type PresenceEventName = keyof PresenceEventPayloads;
@@ -60,7 +64,9 @@ const PRESENCE_EVENT_NAMES: PresenceEventName[] = [
   'friend:accepted',
   'dm:received',
   'dm:read',
+  'dm:readReceipt',
   'dm:typing',
+  'dm:clearUnread',
 ];
 
 /**
@@ -286,6 +292,11 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
 
     // 別タブで既読にした分をこのタブにも反映する
     socket.on('dm:read', (p: PresenceEventPayloads['dm:read']) => {
+      clearUnreadLocally(p.userId);
+    });
+
+    // ブロックやフレンド解除等で未読バッジを消去する
+    socket.on('dm:clearUnread', (p: PresenceEventPayloads['dm:clearUnread']) => {
       clearUnreadLocally(p.userId);
     });
 

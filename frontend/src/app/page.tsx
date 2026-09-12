@@ -1027,7 +1027,7 @@ export default function HomePage() {
                     部屋を作成
                   </h2>
                   <p className="text-xs text-zinc-400 leading-relaxed">
-                    ホストになって部屋を作成し、コードを共有しよう！
+                    部屋を作成し、フレンドを招待したり、招待コードを共有しよう！
                   </p>
                 </div>
               </div>

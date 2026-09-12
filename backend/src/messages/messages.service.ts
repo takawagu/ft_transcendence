@@ -85,11 +85,17 @@ export class MessagesService {
    * 相手ごとの未読件数。
    * 既読カーソル（ConversationRead）より新しい受信メッセージを数える。
    * カーソルが無い相手は1件も読んでいないので COALESCE で 0 として扱う。
+   * ブロックされた相手やフレンド解除された相手の未読は出さないよう、
+   * 現在フレンド（Friendship.status = 'ACCEPTED'）の相手のみに絞る。
    */
   async getUnreadCounts(myId: number) {
     const rows = await this.prisma.$queryRaw<UnreadRow[]>`
       SELECT dm."senderId" AS partner, count(*) AS unread
       FROM "DirectMessage" dm
+      INNER JOIN "Friendship" f
+        ON f.status = 'ACCEPTED'
+       AND ((f."applicantId" = ${myId} AND f."approverId" = dm."senderId")
+         OR (f."applicantId" = dm."senderId" AND f."approverId" = ${myId}))
       LEFT JOIN "ConversationRead" cr
         ON cr."userId" = ${myId} AND cr."partnerId" = dm."senderId"
       WHERE dm."receiverId" = ${myId}
@@ -133,7 +139,7 @@ export class MessagesService {
     });
 
     // 相手（メッセージ送信者）へも既読をリアルタイムに通知
-    this.presence.emitToUser(partnerId, PRESENCE_EVENTS.DM_READ, {
+    this.presence.emitToUser(partnerId, PRESENCE_EVENTS.DM_READ_RECEIPT, {
       userId: myId,
       lastReadMessageId,
     });
